@@ -1,1 +1,9 @@
-
+telethon
+gTTS
+googletrans==4.0.0-rc1
+wikipedia
+pytz
+httpx
+beautifulsoup4
+duckduckgo-search
+Flask
