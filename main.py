@@ -22,6 +22,7 @@ ALL_MODULES = [
     "plugins.core", # كمثال، ابدأ بهذه الإضافة فقط
     "plugins.utils",
     "plugins.admin",
+    "plugins.events"
     # ... وهكذا
 ]
 
