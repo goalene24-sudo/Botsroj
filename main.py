@@ -7,13 +7,15 @@ import config
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-LOGGER.info(">> يتم الآن تحميل الوحدات... <<")
-for module in ALL_MODULES:
-    try:
-        importlib.import_module(module)
-        LOGGER.info(f"  - تم تحميل الوحدة: {module}")
-    except Exception as e:
-        LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
+# ---!!! خطوة تشخيصية: تم تعطيل تحميل الإضافات مؤقتاً !!!---
+LOGGER.info(">> [تشخيص] تم تخطي تحميل الوحدات (plugins) لاختبار تسجيل الدخول الأساسي. <<")
+# for module in ALL_MODULES:
+#     try:
+#         importlib.import_module(module)
+#         LOGGER.info(f"  - تم تحميل الوحدة: {module}")
+#     except Exception as e:
+#         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
+# -----------------------------------------------------------------
 
 async def main_startup():
     await client.start(bot_token=config.BOT_TOKEN)
