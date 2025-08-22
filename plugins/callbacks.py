@@ -112,10 +112,7 @@ async def callback_handler(event):
             return await event.edit(text, buttons=buttons)
         
         if text_to_show:
-            if query_data == "shop_menu":
-                await event.edit(text_to_show, buttons=None)
-            else:
-                await event.edit(text_to_show, buttons=buttons_to_show)
+            await event.edit(text_to_show, buttons=buttons_to_show)
 
     else:
         await handle_interactive_callback(event)
