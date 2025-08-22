@@ -24,6 +24,8 @@ ALL_MODULES = [
     "plugins.admin",
     "plugins.events"
     "plugins.callbacks"
+    "plugins.interactive_callbacks"
+    "plugins.protection"
     # ... وهكذا
 ]
 
