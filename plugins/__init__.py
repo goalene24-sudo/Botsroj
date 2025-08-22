@@ -1,4 +1,3 @@
-# plugins/__init__.py
 ALL_MODULES = [
     "plugins.utils",
     "plugins.core",
