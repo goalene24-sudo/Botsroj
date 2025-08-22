@@ -18,6 +18,17 @@ for module in ALL_MODULES:
         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
 
 async def main_startup():
+    # ---!!! خطوة تشخيصية مؤقتة لطباعة التوكن !!!---
+    LOGGER.info("---!!! بداية الخطوة التشخيصية !!!---")
+    token_value = config.BOT_TOKEN
+    token_type = type(token_value)
+    token_length = len(token_value) if token_value is not None else 0
+    LOGGER.info(f"===> Token read from config: '{token_value}'")
+    LOGGER.info(f"===> Token type: {token_type}")
+    LOGGER.info(f"===> Token length: {token_length}")
+    LOGGER.info("---!!! نهاية الخطوة التشخيصية !!!---")
+    # ---------------------------------------------------
+
     await client.start(bot_token=config.BOT_TOKEN)
     me = await client.get_me()
     LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
