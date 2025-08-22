@@ -20,8 +20,8 @@ except Exception as e:
 # ابدأ بقائمة فارغة أو بإضافة واحدة فقط للاختبار
 ALL_MODULES = [
     "plugins.core", # كمثال، ابدأ بهذه الإضافة فقط
-    # "plugins.utils",
-    # "plugins.admin",
+    "plugins.utils",
+    "plugins.admin",
     # ... وهكذا
 ]
 
