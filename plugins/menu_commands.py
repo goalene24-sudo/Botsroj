@@ -12,39 +12,39 @@ async def fun_menu_command(event):
     fun_text = FUN_MENU_TEXT
     if GEMINI_ENABLED:
         fun_text += "\n\n**الذكي مال المجموعة:**\n**`اسأل + سؤالك`**"
-    await event.reply(fun_text, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(fun_text)
 
 @client.on(events.NewMessage(pattern="^ملفي الشخصي$"))
 async def profile_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(PROFILE_MENU_TEXT, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(PROFILE_MENU_TEXT)
 
 @client.on(events.NewMessage(pattern="^الاجتماعية$"))
 async def social_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(SOCIAL_MENU_TEXT, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(SOCIAL_MENU_TEXT)
 
 @client.on(events.NewMessage(pattern="^المتجر$"))
 async def shop_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(SHOP_MENU_TEXT) # تم حذف الأزرار من هنا
+    await event.reply(SHOP_MENU_TEXT)
 
 @client.on(events.NewMessage(pattern="^(الادوات|أدوات|ادوات المجموعة)$"))
 async def tools_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(TOOLS_MENU_TEXT, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(TOOLS_MENU_TEXT)
 
 @client.on(events.NewMessage(pattern="^(الخدمات|دينيه)$"))
 async def services_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(SERVICES_MENU_TEXT, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(SERVICES_MENU_TEXT)
 
 @client.on(events.NewMessage(pattern="^الردود$"))
 async def replies_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(REPLIES_MENU_TEXT, buttons=MAIN_MENU_BUTTONS)
+    await event.reply(REPLIES_MENU_TEXT)
 
-# --- الأمر الجديد الخاص بقائمة الحماية ---
+# --- الأمر الخاص بقائمة الحماية (يبقى كما هو بأزراره الخاصة) ---
 @client.on(events.NewMessage(pattern="^الحماية$"))
 async def protection_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
