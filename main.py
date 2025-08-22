@@ -1,36 +1,16 @@
 import logging
 import importlib
 import sys
-from telethon import TelegramClient
-import config # نحن نستخدم ملف الإعدادات الصحيح الخاص بك
+from bot import client
+from plugins import ALL_MODULES
+import config
 
 # --- الإعدادات الأساسية ---
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-# --- تهيئة العميل (Client) ---
-# هذا الكود مأخوذ من test.py الذي نجح 100%
-try:
-    client = TelegramClient(None, config.API_ID, config.API_HASH)
-except Exception as e:
-    LOGGER.critical(f"!! خطأ فادح عند تهيئة العميل: {e}", exc_info=True)
-    sys.exit(1)
-
-# --- قائمة الإضافات (Plugins) ---
-# ابدأ بقائمة فارغة أو بإضافة واحدة فقط للاختبار
-ALL_MODULES = [
-    "plugins.core", # كمثال، ابدأ بهذه الإضافة فقط
-    "plugins.utils",
-    "plugins.admin",
-    "plugins.events"
-    "plugins.callbacks"
-    "plugins.interactive_callbacks"
-    "plugins.protection"
-    # ... وهكذا
-]
-
-# --- تحميل الإضافات ---
-LOGGER.info(">> يتم الآن تحميل الوحدات... <<")
+# --- تحميل كل الإضافات ---
+LOGGER.info(">> يتم الآن تحميل كل الوحدات... <<")
 for module in ALL_MODULES:
     try:
         importlib.import_module(module)
@@ -49,6 +29,7 @@ async def main():
         await client.run_until_disconnected()
     except Exception as e:
         LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
+        sys.exit(1)
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
