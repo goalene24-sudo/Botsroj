@@ -1,7 +1,5 @@
-# main.py
 import logging
 import importlib
-import time
 from bot import client
 from plugins import ALL_MODULES
 import config
@@ -24,7 +22,7 @@ async def main_startup():
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    time.sleep(1)
     with client:
+        # تم تصحيح الخطأ الإملائي هنا
         client.loop.run_until_complete(main_startup())
         
