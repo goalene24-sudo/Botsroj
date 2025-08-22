@@ -1,4 +1,3 @@
-# plugins/shop.py
 import time
 from telethon import events
 from bot import client
@@ -38,22 +37,6 @@ SHOP_ITEMS = {
         "duration_days": 1
     }
 }
-
-@client.on(events.NewMessage(pattern="^المتجر$"))
-async def shop_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): return
-    
-    shop_text = "🛒 **متجر سُـرُوچ** 🛒\n\nأهلاً بك في المتجر! هنا يمكنك إنفاق نقاطك لشراء امتيازات رائعة.\n\n"
-    
-    for item_name, details in SHOP_ITEMS.items():
-        shop_text += f"▫️ **{item_name.title()}**\n"
-        shop_text += f"   - **السعر:** `{details['price']}` نقطة\n"
-        shop_text += f"   - **الوصف:** {details['description']}\n\n"
-        
-    shop_text += "**للشراء:** `شراء [اسم الغرض]`\n**للقب المخصص:** `ضع لقبي [اللقب]`"
-    shop_text += "\n\n**🏦 أوامر البنك:** `ايداع`, `سحب`, `رصيدي بالبنك`"
-    
-    await event.reply(shop_text)
 
 @client.on(events.NewMessage(pattern=r"^شراء (.+)"))
 async def buy_item_handler(event):
