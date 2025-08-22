@@ -1,29 +1,51 @@
 import logging
 import importlib
-from bot import client
-from plugins import ALL_MODULES
-import config
+import sys
+from telethon import TelegramClient
+import config # نحن نستخدم ملف الإعدادات الصحيح الخاص بك
 
+# --- الإعدادات الأساسية ---
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-# ---!!! خطوة تشخيصية: تم تعطيل تحميل الإضافات مؤقتاً !!!---
-LOGGER.info(">> [تشخيص] تم تخطي تحميل الوحدات (plugins) لاختبار تسجيل الدخول الأساسي. <<")
-# for module in ALL_MODULES:
-#     try:
-#         importlib.import_module(module)
-#         LOGGER.info(f"  - تم تحميل الوحدة: {module}")
-#     except Exception as e:
-#         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
-# -----------------------------------------------------------------
+# --- تهيئة العميل (Client) ---
+# هذا الكود مأخوذ من test.py الذي نجح 100%
+try:
+    client = TelegramClient(None, config.API_ID, config.API_HASH)
+except Exception as e:
+    LOGGER.critical(f"!! خطأ فادح عند تهيئة العميل: {e}", exc_info=True)
+    sys.exit(1)
 
-async def main_startup():
-    await client.start(bot_token=config.BOT_TOKEN)
-    me = await client.get_me()
-    LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
-    LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
-    await client.run_until_disconnected()
+# --- قائمة الإضافات (Plugins) ---
+# ابدأ بقائمة فارغة أو بإضافة واحدة فقط للاختبار
+ALL_MODULES = [
+    "plugins.core", # كمثال، ابدأ بهذه الإضافة فقط
+    # "plugins.utils",
+    # "plugins.admin",
+    # ... وهكذا
+]
 
-if __name__ == '__main__':
-    with client:
-        client.loop.run_until_complete(main_startup())
+# --- تحميل الإضافات ---
+LOGGER.info(">> يتم الآن تحميل الوحدات... <<")
+for module in ALL_MODULES:
+    try:
+        importlib.import_module(module)
+        LOGGER.info(f"  - تم تحميل الوحدة: {module}")
+    except Exception as e:
+        LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
+
+
+# --- دالة التشغيل الرئيسية ---
+async def main():
+    try:
+        await client.start(bot_token=config.BOT_TOKEN)
+        me = await client.get_me()
+        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
+        LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
+        await client.run_until_disconnected()
+    except Exception as e:
+        LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
+
+# --- بدء تشغيل البوت ---
+if __name__ == "__main__":
+    client.loop.run_until_complete(main())
