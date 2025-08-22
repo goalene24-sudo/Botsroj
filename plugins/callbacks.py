@@ -1,4 +1,3 @@
-# plugins/callbacks.py
 from telethon import events, Button
 from datetime import datetime
 from bot import client, StartTime
@@ -7,13 +6,13 @@ from .utils import (
     GEMINI_ENABLED, MAIN_MENU_MESSAGE, MAIN_MENU_BUTTONS,
     build_protection_menu
 )
-from .shop import SHOP_ITEMS
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
 from .menu_texts import (
     FUN_MENU_TEXT, PROFILE_MENU_TEXT, SOCIAL_MENU_TEXT, TOOLS_MENU_TEXT,
-    SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, ADMIN_COMMANDS_INFO_TEXT
+    SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, ADMIN_COMMANDS_INFO_TEXT,
+    SHOP_MENU_TEXT
 )
 
 def get_uptime_string(start_time):
@@ -40,10 +39,6 @@ async def callback_handler(event):
     ]
 
     if query_data in main_menus:
-        # --- (التعديل الرئيسي هنا) ---
-        # بدلاً من عرض زر "عودة"، سنعرض دائماً الأزرار الرئيسية
-        # ما عدا في بعض الحالات الخاصة مثل قائمة الحماية
-        
         text_to_show = None
         buttons_to_show = MAIN_MENU_BUTTONS
 
@@ -68,25 +63,11 @@ async def callback_handler(event):
             text_to_show = REPLIES_MENU_TEXT
 
         elif query_data == "shop_menu":
-            shop_text = "**🛒 متجر سُـرُوچ** 🛒\n\n**أهلاً بك في المتجر! هنا يمكنك إنفاق نقاطك لشراء امتيازات رائعة.**\n\n"
-            for item_name, details in SHOP_ITEMS.items():
-                shop_text += f"**▫️ {item_name.title()}:** (`{details['price']}` **نقطة**)\n"
-            
-            shop_text += "\n**--- تعليمات ---**"
-            shop_text += "\n**للشراء:** `شراء [اسم الغرض]`"
-            if "تخصيص لقب" in SHOP_ITEMS:
-                shop_text += "\n**لوضع اللقب:** `ضع لقبي [اللقب]`"
-            
-            shop_text += "\n\n**🏦 بنك المجموعة:**"
-            shop_text += "\n**- `ايداع [مبلغ]`:** لإيداع نقاطك."
-            shop_text += "\n**- `سحب [مبلغ]`:** لسحب نقاطك."
-            shop_text += "\n**- `رصيدي بالبنك`:** لمعرفة رصيدك والأرباح."
-            text_to_show = shop_text
+            text_to_show = SHOP_MENU_TEXT
 
         elif query_data == "back_to_main":
             text_to_show = MAIN_MENU_MESSAGE
         
-        # --- حالات خاصة تحتفظ بزر العودة الخاص بها ---
         elif query_data == "about_menu":
             await event.answer("جاري حساب الإحصائيات...", alert=False)
             total_groups, all_users = 0, set()
@@ -130,9 +111,11 @@ async def callback_handler(event):
                 buttons.append([Button.inline(value["button"], data=f"hisn:{key}")])
             return await event.edit(text, buttons=buttons)
         
-        # --- التنفيذ ---
         if text_to_show:
-            await event.edit(text_to_show, buttons=buttons_to_show)
+            if query_data == "shop_menu":
+                await event.edit(text_to_show, buttons=None)
+            else:
+                await event.edit(text_to_show, buttons=buttons_to_show)
 
     else:
         await handle_interactive_callback(event)
