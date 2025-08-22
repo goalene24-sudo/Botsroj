@@ -23,6 +23,7 @@ ALL_MODULES = [
     "plugins.utils",
     "plugins.admin",
     "plugins.events"
+    "plugins.callbacks"
     # ... وهكذا
 ]
 
