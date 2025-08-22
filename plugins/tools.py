@@ -1,9 +1,8 @@
-# plugins/tools.py
 import os
 import pytz
 from gtts import gTTS
 from datetime import datetime
-from telethon import events
+from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 from .utils import check_activation, db
@@ -171,3 +170,29 @@ async def age_calculator_handler(event):
         )
     except Exception as e:
         await event.reply(f"**صارت مشكلة وما گدرت أحسب عمرك.\n`{e}`**")
+
+# --- Developer Info Command ---
+@client.on(events.NewMessage(pattern="^المطور$"))
+async def developer_info_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    
+    dev_photo = "https://i.ibb.co/SVSWcVv/FB-IMG-1755905302491.jpg"
+    dev_name = "وِهےـِمِے"
+    dev_user = "@tit_50"
+    dev_bio = "أڪبـر عِبـارة مُـريحـة مـا أحـزن اللـه عبـداً إِلا ليُـسعـدﮪ💙"
+    dev_button_text = "𝓜𝓨 𝓟𝓡𝓞𝓕𝓘𝓛𝓔"
+    dev_button_url = "https://t.me/tit_50"
+    
+    caption_text = f"""- main developer information :
+
+🔹 ⋄ name : {dev_name}
+🔹 ⋄ user : {dev_user}
+🔹 ⋄ bio : {dev_bio}"""
+    
+    dev_button = Button.url(dev_button_text, dev_button_url)
+    
+    await event.reply(
+        file=dev_photo,
+        message=caption_text,
+        buttons=[[dev_button]]
+    )
