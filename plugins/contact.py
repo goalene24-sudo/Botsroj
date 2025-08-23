@@ -40,8 +40,5 @@ async def reply_to_user(event):
             # إرسال رسالتك (الرد) إلى المستخدم الأصلي
             await client.send_message(user_id, event.message)
             
-            # (اختياري) يمكنك جعل البوت يضع علامة (👍) على ردك لتأكيد إرساله
-            await event.react('👍')
         except Exception as e:
             await event.reply(f"⚠️ لم أتمكن من إرسال الرد إلى المستخدم. قد يكون قد قام بحظر البوت.\n\n**الخطأ:** `{e}`")
-
