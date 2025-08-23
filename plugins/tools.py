@@ -176,7 +176,7 @@ async def age_calculator_handler(event):
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    dev_photo = "https://i.ibb.co/SVSWcVv/FB-IMG-1755905302491.jpg"
+    dev_photo = "AgACAgIAAxkBAAECIiVoqQXrC5dkiNf1wS7M_vAsHhLcgQACPfoxG-qTSUmzXlpjoRxDwQEAAwIAA3gAAzYE"
     dev_name = "وِهےـِمِے"
     dev_user = "@tit_50"
     dev_bio = "أڪبـر عِبـارة مُـريحـة مـا أحـزن اللـه عبـداً إِلا ليُـسعـدﮪ💙"
