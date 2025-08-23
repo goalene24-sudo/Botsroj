@@ -4,7 +4,6 @@ from gtts import gTTS
 from datetime import datetime
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
-from telethon.utils import pack_bot_file_id
 from bot import client
 from .utils import check_activation, db
 
@@ -27,23 +26,6 @@ DAYS_AR = {
     "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس",
     "Friday": "الجمعة"
 }
-
-# --- Temporary Command to get File ID ---
-@client.on(events.NewMessage(pattern=r"^\.get_id$"))
-async def get_id_handler(event):
-    if not event.is_reply:
-        return await event.reply("الرجاء الرد على صورة للحصول على المعرف الخاص بها.")
-    
-    replied = await event.get_reply_message()
-    if not replied.media or not replied.photo:
-        return await event.reply("يجب الرد على صورة.")
-        
-    try:
-        file_id = pack_bot_file_id(replied.media.photo)
-        await event.reply(f"**معرف الملف (File ID) الصحيح هو:**\n\n`{file_id}`\n\n**انسخ هذا المعرف وأرسله للمطور.**")
-    except Exception as e:
-        await event.reply(f"حدث خطأ: {e}")
-
 
 @client.on(events.NewMessage(pattern="^معلومات المجموعة$"))
 async def group_info_handler(event):
@@ -190,11 +172,12 @@ async def age_calculator_handler(event):
         await event.reply(f"**صارت مشكلة وما گدرت أحسب عمرك.\n`{e}`**")
 
 # --- Developer Info Command ---
-@client.on(events.NewMessage(pattern=r"^\.المطور$"))
+@client.on(events.NewMessage(pattern=r"^المطور$"))
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    dev_photo = "AgACAgIAAxkBAAECIiVoqQXrC5dkiNf1wS7M_vAsHhLcgQACPfoxG-qTSUmzXlpjoRxDwQEAAwIAA3gAAzYE" # معرف خاطئ مؤقتاً
+    # --- معلومات المطور ---
+    DEV_USER_ID = 196351880
     dev_name = "وِهےـِمِے"
     dev_user = "@tit_50"
     dev_bio = "أڪبـر عِبـارة مُـريحـة مـا أحـزن اللـه عبـداً إِلا ليُـسعـدﮪ💙"
@@ -209,8 +192,20 @@ async def developer_info_handler(event):
     
     dev_button = Button.url(dev_button_text, dev_button_url)
     
-    await event.reply(
-        file=dev_photo,
-        message=caption_text,
-        buttons=[[dev_button]]
-    )
+    try:
+        # جلب الصورة الشخصية للمطور بشكل ديناميكي
+        dev_photos = await client.get_profile_photos(DEV_USER_ID, limit=1)
+        if not dev_photos:
+            # في حال لم تكن هناك صورة، يتم إرسال النص فقط
+            await event.reply(caption_text, buttons=[[dev_button]])
+            return
+        
+        # إرسال الصورة مع النص والزر
+        await event.reply(
+            file=dev_photos[0],
+            message=caption_text,
+            buttons=[[dev_button]]
+        )
+    except Exception as e:
+        # في حال حدوث أي خطأ آخر، يتم إرسال النص فقط مع رسالة الخطأ
+        await event.reply(f"{caption_text}\n\n⚠️ **تعذر جلب الصورة:** `{e}`", buttons=[[dev_button]])
