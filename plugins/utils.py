@@ -64,7 +64,7 @@ RIDDLES = [
     ("ما هو الشيء الذي إذا لمسته صاح؟", "الجرس"),
     ("حامل ومحمول، نصفه ناشف ونصفه مبلول، فما هو؟", "السفينة"),
     ("تراه في الدقيقة مرتين وفي القرن مرة واحدة؟", "حرف القاف"),
-    ("ما هو الشيء الذي له رقبة وليس له رأس؟", "الزجاجة"),
+    ("ما هو الشيء الذي له رقبة وليس له رأس؟", "الجاجة"),
     ("ما هو الشيء الذي ينبض بلا قلب؟", "الساعة"),
     ("ما هو الشيء الذي ترميه كلما احتجت إليه؟", "شبكة الصيد"),
     ("ما هو الشيء الذي يوصلك من بيتك إلى عملك دون أن يتحرك؟", "الطريق"),
@@ -106,10 +106,17 @@ def get_uptime_string(start_time):
     if minutes > 0: uptime_str += f"{minutes} دقيقة"
     return uptime_str.strip().strip('و ') or "بضع ثواني"
 
-MAIN_MENU_MESSAGE = "هلا والله! 👋 آني سُـرُوچ، مساعدك الرقمي بالمجموعة.\n\nشتريد تسوي؟ هاي الأوامر جوه ايدك، بس اختار وتدلل! 😉👇"
+MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
+⚜️ **قائمة أوامر سُرُوچ الرئيسية** ⚜️
+- - - - - - - - - - - - - - - - - -
+
+هلا والله! 👋 آني سُـرُوچ، مساعدك الرقمي بالمجموعة.
+
+اختر أحد الأقسام من القائمة أدناه: 👇"""
+
 MAIN_MENU_BUTTONS = [
     [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
-    [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي الشخصي 👤", data="profile_menu")],
+    [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
     [Button.inline("م6 الحماية 🛡️", data="protection_menu"), Button.inline("م5 الادوات 🛠️", data="tools_menu")],
     [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
     [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
