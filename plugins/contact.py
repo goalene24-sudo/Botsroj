@@ -4,7 +4,7 @@ import config
 from .utils import db, save_db
 
 # هذا الجزء يستقبل الرسائل من المستخدمين ويوجهها إليك
-@client.on(events.NewMessage(is_private=True, func=lambda e: e.sender_id not in config.SUDO_USERS))
+@client.on(events.NewMessage(func=lambda e: e.is_private and e.sender_id not in config.SUDO_USERS))
 async def forward_to_owner(event):
     try:
         # إعادة توجيه الرسالة إلى أول مطور في القائمة (أنت)
@@ -26,7 +26,7 @@ async def forward_to_owner(event):
 
 
 # هذا الجزء الجديد يستقبل ردودك ويوجهها للمستخدمين
-@client.on(events.NewMessage(is_private=True, from_users=config.SUDO_USERS, func=lambda e: e.is_reply))
+@client.on(events.NewMessage(func=lambda e: e.is_private and e.sender_id in config.SUDO_USERS and e.is_reply))
 async def reply_to_user(event):
     # الحصول على معرف الرسالة التي ترد عليها
     replied_to_id = str(event.reply_to_msg_id)
