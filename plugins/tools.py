@@ -31,7 +31,7 @@ DAYS_AR = {
 # --- Temporary Command to get File ID ---
 @client.on(events.NewMessage(pattern=r"^\.get_id$"))
 async def get_id_handler(event):
-    if not event.reply_to_message:
+    if not event.is_reply:
         return await event.reply("الرجاء الرد على صورة للحصول على المعرف الخاص بها.")
     
     replied = await event.get_reply_message()
