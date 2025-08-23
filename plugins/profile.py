@@ -4,7 +4,7 @@ import random
 from datetime import datetime, timedelta
 from telethon import events
 from bot import client
-from .utils import check_activation, db, add_points, save_db
+from .utils import check_activation, db, add_points, save_db, get_user_rank, is_group_owner
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
 async def my_stats_handler(event):
@@ -311,3 +311,25 @@ async def delete_best_friend_handler(event):
         await event.reply(f"**🗑️ تم حذف {bff_name} من قائمة أصدقائك المفضلين.**")
     else:
         await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
+
+@client.on(events.NewMessage(pattern=r"^\.?رتبتي$"))
+async def my_rank_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    
+    rank_en = await get_user_rank(event)
+    
+    # التحقق بشكل خاص إذا كان المستخدم هو مالك المجموعة
+    if await is_group_owner(event.chat_id, event.sender_id):
+        rank_en = "owner"
+
+    rank_map = {
+        "developer": "المطور 👨‍💻",
+        "owner": "مالك المجموعة 👑",
+        "bot_admin": "ادمن في البوت 🤖",
+        "group_admin": "مشرف في المجموعة 🛡️",
+        "member": "عضو فقط 👤"
+    }
+    
+    rank_ar = rank_map.get(rank_en, "عضو فقط 👤")
+    
+    await event.reply(f"**🔰 رتبتك في هذه المجموعة هي:** {rank_ar}")
