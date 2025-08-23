@@ -1,10 +1,9 @@
 from telethon import events, Button
-from datetime import datetime
 from bot import client, StartTime
 from .utils import (
     db, save_db, is_admin, has_bot_permission,
     GEMINI_ENABLED, MAIN_MENU_MESSAGE, MAIN_MENU_BUTTONS,
-    build_protection_menu
+    build_protection_menu, get_uptime_string
 )
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
@@ -14,18 +13,6 @@ from .menu_texts import (
     SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, ADMIN_COMMANDS_INFO_TEXT,
     SHOP_MENU_TEXT
 )
-
-def get_uptime_string(start_time):
-    uptime_delta = datetime.now() - start_time
-    days = uptime_delta.days
-    hours, rem = divmod(uptime_delta.seconds, 3600)
-    minutes, seconds = divmod(rem, 60)
-    uptime_str = ""
-    if days > 0: uptime_str += f"{days} يوم و "
-    if hours > 0: uptime_str += f"{hours} ساعة و "
-    if minutes > 0: uptime_str += f"{minutes} دقيقة"
-    return uptime_str.strip().strip('و ') or "بضع ثواني"
-
 
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
