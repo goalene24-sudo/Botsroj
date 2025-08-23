@@ -1,4 +1,3 @@
-# plugins/__init__.py
 ALL_MODULES = [
     "plugins.utils",
     "plugins.core",
@@ -25,4 +24,5 @@ ALL_MODULES = [
     "plugins.game_data",
     "plugins.ai",
     "plugins.menu_commands",
+    "plugins.contact",
 ]
