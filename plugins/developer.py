@@ -1,9 +1,8 @@
-# plugins/developer.py
 import random
 import time
 from telethon import events
 from telethon.tl.types import ChannelParticipantsAdmins
-from telethon.errors.rpcerrorlist import UserNotParticipantError
+from telethon.errors.rpcerrorlist import UserNotParticipantError, ChatWriteForbiddenError
 from bot import client
 import config
 from .utils import db, is_admin, add_points, save_db
@@ -99,3 +98,26 @@ async def lottery_draw_handler(event):
 
     except Exception as e:
         await event.reply(f"**حدث خطأ أثناء إجراء السحب:**\n`{e}`")
+
+@client.on(events.NewMessage(pattern=r"^ارسل (-?\d+) (.+)"))
+async def send_to_group_handler(event):
+    # التأكد من أن الأمر أُرسل من قبل المطور فقط وفي الخاص
+    if not event.is_private or event.sender_id not in config.SUDO_USERS:
+        return
+
+    try:
+        chat_id_to_send = int(event.pattern_match.group(1))
+        message_to_send = event.pattern_match.group(2)
+
+        # محاولة إرسال الرسالة
+        await client.send_message(chat_id_to_send, message_to_send)
+        
+        # إرسال تأكيد للمطور
+        await event.reply(f"✅ **تم إرسال رسالتك بنجاح إلى المجموعة:** `{chat_id_to_send}`")
+
+    except (ValueError, TypeError):
+        await event.reply("❌ **خطأ في الصيغة.**\n\n**الاستخدام الصحيح:**\n`ارسل [معرف المجموعة] [الرسالة]`\n\n**مثال:**\n`ارسل -100123456789 مرحبا`")
+    except ChatWriteForbiddenError:
+        await event.reply(f"❌ **فشل الإرسال.**\n\nلا أملك صلاحية الكتابة في المجموعة `{chat_id_to_send}`. تأكد من أنني مشرف هناك.")
+    except Exception as e:
+        await event.reply(f"❌ **حدث خطأ غير متوقع:**\n\n`{e}`")
