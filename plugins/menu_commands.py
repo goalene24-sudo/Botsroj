@@ -1,13 +1,13 @@
 from telethon import events, Button
-from bot import client
-from .utils import check_activation, MAIN_MENU_BUTTONS, GEMINI_ENABLED, has_bot_permission, build_protection_menu
+from bot import client, StartTime
+from .utils import (
+    check_activation, db, is_admin, get_uptime_string, 
+    GEMINI_ENABLED, has_bot_permission, build_protection_menu
+)
 from .menu_texts import (
     FUN_MENU_TEXT, PROFILE_MENU_TEXT, SOCIAL_MENU_TEXT, TOOLS_MENU_TEXT,
     SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, SHOP_MENU_TEXT
 )
-from .callbacks import get_uptime_string
-from bot import StartTime
-from .utils import db, is_admin
 
 @client.on(events.NewMessage(pattern=r"^(?i)\.?(م1|الالعاب|التسلية)$"))
 async def fun_menu_command(event):
