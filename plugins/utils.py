@@ -2,6 +2,7 @@ import json
 from telethon import Button
 import config
 from bot import client
+from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
@@ -94,13 +95,24 @@ def save_db(data):
 
 db = load_db()
 
+def get_uptime_string(start_time):
+    uptime_delta = datetime.now() - start_time
+    days = uptime_delta.days
+    hours, rem = divmod(uptime_delta.seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    uptime_str = ""
+    if days > 0: uptime_str += f"{days} يوم و "
+    if hours > 0: uptime_str += f"{hours} ساعة و "
+    if minutes > 0: uptime_str += f"{minutes} دقيقة"
+    return uptime_str.strip().strip('و ') or "بضع ثواني"
+
 MAIN_MENU_MESSAGE = "هلا والله! 👋 آني سُـرُوچ، مساعدك الرقمي بالمجموعة.\n\nشتريد تسوي؟ هاي الأوامر جوه ايدك، بس اختار وتدلل! 😉👇"
 MAIN_MENU_BUTTONS = [
     [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
     [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي الشخصي 👤", data="profile_menu")],
-    [Button.inline("م6 الحماية 🛡️", data="protection_menu"), Button.inline("м5 الادوات 🛠️", data="tools_menu")],
-    [Button.inline("м8 الردود 💬", data="replies_menu"), Button.inline("м7 الدينيه 🕌", data="services_menu")],
-    [Button.inline("м9 حول البوت ℹ️", data="about_menu")]
+    [Button.inline("م6 الحماية 🛡️", data="protection_menu"), Button.inline("م5 الادوات 🛠️", data="tools_menu")],
+    [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
+    [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
 ]
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
