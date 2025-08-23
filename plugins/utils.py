@@ -1,4 +1,3 @@
-# plugins/utils.py
 import json
 from telethon import Button
 import config
@@ -97,12 +96,11 @@ db = load_db()
 
 MAIN_MENU_MESSAGE = "هلا والله! 👋 آني سُـرُوچ، مساعدك الرقمي بالمجموعة.\n\nشتريد تسوي؟ هاي الأوامر جوه ايدك، بس اختار وتدلل! 😉👇"
 MAIN_MENU_BUTTONS = [
-    [Button.inline("🎮 التسلية والألعاب 🕹️", data="fun_menu")],
-    [Button.inline("💞 الاجتماعية والتفاعل 🫂", data="social_menu")],
-    [Button.inline("👤 ملفي الشخصي", data="profile_menu"), Button.inline("🛒 المتجر", data="shop_menu")],
-    [Button.inline("🛡️ الحماية", data="protection_menu"), Button.inline("🛠️ أدوات المجموعة", data="tools_menu")],
-    [Button.inline("🕌 الخدمات الدينية", data="services_menu"), Button.inline("💬 الردود", data="replies_menu")],
-    [Button.inline("ℹ️ حول البوت", data="about_menu")]
+    [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
+    [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي الشخصي 👤", data="profile_menu")],
+    [Button.inline("م6 الحماية 🛡️", data="protection_menu"), Button.inline("м5 الادوات 🛠️", data="tools_menu")],
+    [Button.inline("м8 الردود 💬", data="replies_menu"), Button.inline("м7 الدينيه 🕌", data="services_menu")],
+    [Button.inline("м9 حول البوت ℹ️", data="about_menu")]
 ]
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
@@ -184,7 +182,8 @@ def build_xo_keyboard(board):
     return buttons
 
 def check_xo_winner(board):
-    lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
+    lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4
+,6)]
     for line in lines:
         if board[line[0]] == board[line[1]] == board[line[2]] != '-':
             return board[line[0]]
