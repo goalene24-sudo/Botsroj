@@ -172,7 +172,7 @@ async def age_calculator_handler(event):
         await event.reply(f"**صارت مشكلة وما گدرت أحسب عمرك.\n`{e}`**")
 
 # --- Developer Info Command ---
-@client.on(events.NewMessage(pattern="^المطور$"))
+@client.on(events.NewMessage(pattern=r"^\.المطور$"))
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
