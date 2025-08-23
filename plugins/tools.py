@@ -4,6 +4,7 @@ from gtts import gTTS
 from datetime import datetime
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
+from telethon.utils import pack_bot_file_id
 from bot import client
 from .utils import check_activation, db
 
@@ -26,6 +27,23 @@ DAYS_AR = {
     "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس",
     "Friday": "الجمعة"
 }
+
+# --- Temporary Command to get File ID ---
+@client.on(events.NewMessage(pattern=r"^\.get_id$"))
+async def get_id_handler(event):
+    if not event.reply_to_message:
+        return await event.reply("الرجاء الرد على صورة للحصول على المعرف الخاص بها.")
+    
+    replied = await event.get_reply_message()
+    if not replied.media or not replied.photo:
+        return await event.reply("يجب الرد على صورة.")
+        
+    try:
+        file_id = pack_bot_file_id(replied.media.photo)
+        await event.reply(f"**معرف الملف (File ID) الصحيح هو:**\n\n`{file_id}`\n\n**انسخ هذا المعرف وأرسله للمطور.**")
+    except Exception as e:
+        await event.reply(f"حدث خطأ: {e}")
+
 
 @client.on(events.NewMessage(pattern="^معلومات المجموعة$"))
 async def group_info_handler(event):
@@ -176,7 +194,7 @@ async def age_calculator_handler(event):
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    dev_photo = "AgACAgIAAxkBAAECIiVoqQXrC5dkiNf1wS7M_vAsHhLcgQACPfoxG-qTSUmzXlpjoRxDwQEAAwIAA3gAAzYE"
+    dev_photo = "AgACAgIAAxkBAAECIiVoqQXrC5dkiNf1wS7M_vAsHhLcgQACPfoxG-qTSUmzXlpjoRxDwQEAAwIAA3gAAzYE" # معرف خاطئ مؤقتاً
     dev_name = "وِهےـِمِے"
     dev_user = "@tit_50"
     dev_bio = "أڪبـر عِبـارة مُـريحـة مـا أحـزن اللـه عبـداً إِلا ليُـسعـدﮪ💙"
