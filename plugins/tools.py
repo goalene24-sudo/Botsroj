@@ -184,11 +184,11 @@ async def developer_info_handler(event):
     dev_button_text = "𝓜𝓨 𝓟𝓡𝓞𝓕𝓘𝓛𝓔"
     dev_button_url = "https://t.me/tit_50"
     
-    caption_text = f"""- main developer information :
+    caption_text = f"""- 𝖒𝖆𝖎𝖓 𝖉𝖊𝖛𝖊𝖑𝖔𝖕𝖊𝖗 𝖎𝖓𝖋𝖔𝖗𝖒𝖆𝖙𝖎𝖔𝖓 :
 
-🔹 ⋄ name : {dev_name}
-🔹 ⋄ user : {dev_user}
-🔹 ⋄ bio : {dev_bio}"""
+🔹 ⋄ 𝖓𝖆𝖒𝖊 : {dev_name}
+🔹 ⋄ 𝖚𝖘𝖊𝖗 : {dev_user}
+🔹 ⋄ 𝖇𝖎𝖔 : {dev_bio}"""
     
     dev_button = Button.url(dev_button_text, dev_button_url)
     
