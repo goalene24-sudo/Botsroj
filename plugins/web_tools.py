@@ -1,6 +1,7 @@
 # plugins/web_tools.py
 import httpx
 import wikipedia
+import random
 from telethon import events
 from bot import client
 from .utils import check_activation
@@ -9,12 +10,13 @@ from urllib.parse import quote_plus
 from bs4 import BeautifulSoup
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
+from duckduckgo_search import DDGS
 
 # --- قواميس مساعدة ---
 WEATHER_TRANSLATIONS = {
-    "Clear": "صحو ☀️", "Sunny": "مشمس ☀️", "Partly cloudy": "غائم جزئياً 🌤️", 
+    "Clear": "صحو ☀️", "Sunny": "مشمس ☀️", "Partly cloudy": "غائم جزئياً 🌤️",
     "Cloudy": "غائم ☁️", "Overcast": "ملبد بالغيوم 🌥️", "Mist": "ضباب خفيف 🌫️",
-    "Patchy rain possible": "احتمال أمطار خفيفة متفرقة 🌦️", "Fog": "ضباب 🌫️", 
+    "Patchy rain possible": "احتمال أمطار خفيفة متفرقة 🌦️", "Fog": "ضباب 🌫️",
     "Light rain": "مطر خفيف 🌧️", "Heavy rain": "مطر غزير 🌧️",
     "Thundery outbreaks possible": "احتمال عواصف رعدية ⛈️",
 }
@@ -144,29 +146,32 @@ async def image_search_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
 
-    search_term_ar = event.pattern_match.group(1).strip()
-    if not search_term_ar:
-        return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `صورة فتاة`**")
+    search_term = event.pattern_match.group(1).strip()
+    if not search_term:
+        return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `صورة قطة`**")
 
-    loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term_ar}'**")
+    loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
 
     try:
-        translator = Translator()
-        search_term_en = translator.translate(search_term_ar, dest='en').text
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.images(search_term, max_results=25)]
         
-        encoded_term = quote_plus(search_term_en)
-        image_url = f"https://source.unsplash.com/random?{encoded_term}"
+        if not results:
+            return await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term}'.\nحاول بكلمات بحث مختلفة.**")
+        
+        image_to_send = random.choice(results)
+        image_url = image_to_send['image']
         
         await client.send_file(
             event.chat_id,
             file=image_url,
-            caption=f"**🖼️ | نتيجة البحث عن:** `{search_term_ar}`",
+            caption=f"**🖼️ | نتيجة البحث عن:** `{search_term}`",
             reply_to=event.id
         )
         await loading_msg.delete()
 
-    except Exception:
-        await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term_ar}'.\nحاول بكلمات بحث مختلفة.**")
+    except Exception as e:
+        await loading_msg.edit(f"**عذراً، حدث خطأ أثناء البحث عن الصورة.\n`{e}`**")
 
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def define_handler(event):
