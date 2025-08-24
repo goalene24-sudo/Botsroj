@@ -29,4 +29,5 @@ ALL_MODULES = [
     "plugins.millionaire_data",
     "plugins.millionaire",
     "plugins.owner",
+    "plugins.media_search",
 ]
