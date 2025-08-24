@@ -67,8 +67,20 @@ async def wyr_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     question_data = random.choice(WOULD_YOU_RATHER_QUESTIONS)
     q, o1, o2 = question_data["q"], question_data["o1"], question_data["o2"]
-    buttons = [[Button.inline(f"{o1} (0)", data=f"wyr:1"), Button.inline(f"{o2} (0)", data=f"wyr:2")]]
-    game_msg = await event.reply(f"**🤔 لو خيروك:**\n\n**{q}**", buttons=buttons)
+    
+    # تنسيق الرسالة والأزرار الجديد
+    message_text = f"""- - - - - - - - - - - - - - - - -
+🤔 **لعبة لو خيروك** 🤔
+- - - - - - - - - - - - - - - - -
+
+**{q}**"""
+    
+    buttons = [
+        [Button.inline(f"{o1} (0)", data=f"wyr:1")],
+        [Button.inline(f"{o2} (0)", data=f"wyr:2")]
+    ]
+    
+    game_msg = await event.reply(message_text, buttons=buttons)
     WYR_GAMES[game_msg.id] = {"q": q, "o1": o1, "o2": o2, "v1": 0, "v2": 0, "users": set()}
 
 @client.on(events.NewMessage(pattern=r"^حللني$"))
@@ -325,11 +337,10 @@ async def wyr_callback_handler(event):
     else: # choice == 2
         game["v2"] += 1
 
+    # تنسيق الأزرار الجديد
     new_buttons = [
-        [
-            Button.inline(f'{game["o1"]} ({game["v1"]})', data="wyr:1"),
-            Button.inline(f'{game["o2"]} ({game["v2"]})', data="wyr:2")
-        ]
+        [Button.inline(f'{game["o1"]} ({game["v1"]})', data="wyr:1")],
+        [Button.inline(f'{game["o2"]} ({game["v2"]})', data="wyr:2")]
     ]
 
     try:
