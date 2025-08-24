@@ -1,4 +1,3 @@
-# plugins/profile.py
 import time
 import random
 from datetime import datetime, timedelta
@@ -332,4 +331,4 @@ async def my_rank_handler(event):
     
     rank_ar = rank_map.get(rank_en, "عضو فقط 👤")
     
-    await event.reply(f"⌔︙رتبتك هي : {rank_ar}")
+    await event.reply(f"⌔︙**رتبتك هي :** {rank_ar}")
