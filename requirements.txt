@@ -3,7 +3,7 @@ gTTS
 googletrans==4.0.0-rc1
 wikipedia
 pytz
-httpx
+httpx==0.23.0
 beautifulsoup4
 duckduckgo-search
 Flask
