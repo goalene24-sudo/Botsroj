@@ -141,38 +141,6 @@ async def calculate_handler(event):
     except Exception as e:
         await loading_msg.edit(f"**صارت مشكلة وما گدرت أحسب.\n`{e}`**")
 
-@client.on(events.NewMessage(pattern=r"^صورة (.+)"))
-async def image_search_handler(event):
-    if event.is_private or not await check_activation(event.chat_id):
-        return
-
-    search_term = event.pattern_match.group(1).strip()
-    if not search_term:
-        return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `صورة قطة`**")
-
-    loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
-
-    try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.images(search_term, max_results=25)]
-        
-        if not results:
-            return await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term}'.\nحاول بكلمات بحث مختلفة.**")
-        
-        image_to_send = random.choice(results)
-        image_url = image_to_send['image']
-        
-        await client.send_file(
-            event.chat_id,
-            file=image_url,
-            caption=f"**🖼️ | نتيجة البحث عن:** `{search_term}`",
-            reply_to=event.id
-        )
-        await loading_msg.delete()
-
-    except Exception as e:
-        await loading_msg.edit(f"**عذراً، حدث خطأ أثناء البحث عن الصورة.\n`{e}`**")
-
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def define_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
