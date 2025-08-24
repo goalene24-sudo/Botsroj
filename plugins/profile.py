@@ -318,8 +318,8 @@ async def my_rank_handler(event):
     
     rank_en = await get_user_rank(event)
     
-    # التحقق بشكل خاص إذا كان المستخدم هو مالك المجموعة
-    if await is_group_owner(event.chat_id, event.sender_id):
+    # التحقق من رتبة المالك فقط إذا لم يكن المستخدم هو المطور
+    if rank_en != "developer" and await is_group_owner(event.chat_id, event.sender_id):
         rank_en = "owner"
 
     rank_map = {
@@ -332,4 +332,4 @@ async def my_rank_handler(event):
     
     rank_ar = rank_map.get(rank_en, "عضو فقط 👤")
     
-    await event.reply(f"**🔰 رتبتك في هذه المجموعة هي:** {rank_ar}")
+    await event.reply(f"⌔︙رتبتك هي : {rank_ar}")
