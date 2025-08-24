@@ -3,10 +3,9 @@ gTTS
 googletrans==4.0.0-rc1
 wikipedia
 pytz
-httpx==0.23.0
+httpx
 beautifulsoup4
 duckduckgo-search
 Flask
 google-generativeai
 yt-dlp
-youtube-search-python
