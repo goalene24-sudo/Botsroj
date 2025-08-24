@@ -51,7 +51,7 @@ async def delete_rules_handler(event):
 @client.on(events.NewMessage(pattern=r"^تثبيت (\d+)\s*([ديس])$"))
 async def temporary_pin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): 
+    if not await has_bot_permission(event):
         return await event.reply("**هاي الشغلة بس للمشرفين والأدمنية.**")
     reply = await event.get_reply_message()
     if not reply:
@@ -161,5 +161,30 @@ async def bot_admin_handler(event):
 
 @client.on(events.NewMessage(pattern=r"^(تاك للكل|@all)(?: ([\s\S]*))?$"))
 async def tag_all_handler(event):
-    # ... الكود هنا يبقى كما هو ...
-    pass
+    if event.is_private or not await check_activation(event.chat_id): return
+    if not await has_bot_permission(event):
+        return await event.reply("**هذا الأمر للمشرفين فقط.**")
+    
+    msg = await event.reply("**📣 جاري تحضير المنشن...**")
+    
+    text = event.pattern_match.group(2) or ""
+    users_text = f"**{text}**\n\n"
+    
+    try:
+        participants = await client.get_participants(event.chat_id)
+        for user in participants:
+            if not user.bot:
+                mention = f"• [{user.first_name}](tg://user?id={user.id})\n"
+                if len(users_text + mention) > 4000:
+                    await client.send_message(event.chat_id, users_text)
+                    users_text = ""
+                    await asyncio.sleep(1) 
+                users_text += mention
+        
+        if users_text.strip():
+            await client.send_message(event.chat_id, users_text)
+        
+        await msg.delete()
+        
+    except Exception as e:
+        await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`")
