@@ -7,9 +7,10 @@ from telethon import events, Button
 from bot import client
 from .utils import check_activation, add_points, RPS_GAMES, XO_GAMES, build_xo_keyboard, check_xo_winner, is_admin, db, save_db
 from .quiz_data import QUIZ_QUESTIONS
+from .millionaire import start_game as start_millionaire_game # <-- (جديد) استيراد اللعبة
 
 # --- متغيرات خاصة بالألعاب ---
-MAHIBES_GAMES = {} # <-- (جديد)
+MAHIBES_GAMES = {}
 CURRENT_QUIZZES = {}
 LUCK_BOX_MESSAGES = [
     "فتحت الصندوق و لگيت بي ورقة مكتوب عليها 'حاول مرة أخرى'... بس الخط حلو!",
@@ -22,10 +23,10 @@ async def luck_box_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     chat_id, user_id = event.chat_id, event.sender_id
     chat_id_str, user_id_str = str(chat_id), str(user_id)
-    COOLDOWN = 10 * 60 * 60 
+    COOLDOWN = 10 * 60 * 60
     current_time = int(time.time())
     last_claim = db.get(chat_id_str, {}).get("luck_box", {}).get(user_id_str, 0)
-    
+
     if current_time - last_claim < COOLDOWN:
         remaining_seconds = COOLDOWN - (current_time - last_claim)
         remaining_time_str = str(timedelta(seconds=int(remaining_seconds))).split('.')[0]
@@ -104,7 +105,6 @@ async def start_quiz_handler(event):
     keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     await event.reply(f"**يابه سؤال عالطاير 🚁... جاوب صح وشوفنا شطارتك:\n\n{question}**", buttons=keyboard)
 
-# --- (جديد) لعبة المحيبس ---
 @client.on(events.NewMessage(pattern="^محيبس$"))
 async def start_mahbis_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -131,3 +131,9 @@ async def start_mahbis_game_handler(event):
     if chat_id in MAHIBES_GAMES and MAHIBES_GAMES[chat_id]["winner_pos"] == winner_pos:
         del MAHIBES_GAMES[chat_id]
         await event.respond("**انتهى الوقت! ⏰ محد لزم المحيبس.**")
+
+# --- (جديد) أمر بدء لعبة من سيربح المليون ---
+@client.on(events.NewMessage(pattern="^من سيربح المليون$"))
+async def millionaire_start_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    await start_millionaire_game(event)
