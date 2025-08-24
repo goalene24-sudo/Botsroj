@@ -8,3 +8,5 @@ beautifulsoup4
 duckduckgo-search
 Flask
 google-generativeai
+yt-dlp
+youtube-search-python
