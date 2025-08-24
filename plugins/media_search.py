@@ -6,7 +6,6 @@ from telethon import events
 from bot import client
 from .utils import check_activation
 from duckduckgo_search import DDGS
-from youtubesearchpython import VideosSearch
 import yt_dlp
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
@@ -54,51 +53,46 @@ async def youtube_search_handler(event):
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
 
     try:
-        videos_search = VideosSearch(search_term, limit=1)
-        results = videos_search.result()
-        if not results['result']:
-            return await msg.edit(f"**عذراً، لم أجد أي نتائج لـ `{search_term}`.**")
+        # البحث باستخدام yt-dlp
+        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch', 'extract_flat': 'in_playlist'}
+        with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
+            info = ydl.extract_info(search_term, download=False)
+            if not info.get('entries'):
+                return await msg.edit(f"**عذراً، لم أجد أي نتائج لـ `{search_term}`.**")
+            
+            video = info['entries'][0]
+            video_url = video.get('webpage_url')
+            video_title = video.get('title')
 
-        video_url = results['result'][0]['link']
-        video_title = results['result'][0]['title']
-        
-        await msg.edit(f"**✅ | تم العثور على الأغنية.**\n**🎵 | العنوان:** `{video_title}`\n\n**📥 | جاري التحميل الآن...**")
+        await msg.edit(f"**✅ | تم العثور على المقطع.**\n**🎵 | العنوان:** `{video_title}`\n\n**📥 | جاري التحميل الآن (قد يستغرق بعض الوقت)...**")
 
         # التأكد من وجود مجلد للتحميلات
         if not os.path.isdir('downloads'):
             os.makedirs('downloads')
 
-        output_path = f"downloads/{video_title}.mp3"
+        output_path = f"downloads/{random.randint(1, 10000)}.mp3"
         
-        # إعدادات التحميل
-        ydl_opts = {
+        # إعدادات التحميل كملف صوتي
+        ydl_opts_download = {
             'format': 'bestaudio/best',
             'outtmpl': output_path,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             'quiet': True,
         }
 
-        # التحميل
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.download([video_url])
         
         await msg.edit("**📤 | جاري الرفع الآن...**")
 
-        # إرسال الملف الصوتي
         await client.send_file(
             event.chat_id,
             file=output_path,
             caption=f"**🎵 | تم تحميل:** `{video_title}`",
-            reply_to=event.id,
-            attributes=[] 
+            reply_to=event.id
         )
         
         await msg.delete()
-        # حذف الملف بعد رفعه لتوفير المساحة
         if os.path.exists(output_path):
             os.remove(output_path)
 
