@@ -9,14 +9,14 @@ from duckduckgo_search import DDGS
 from youtubesearchpython import VideosSearch
 import yt_dlp
 
-@client.on(events.NewMessage(pattern=r"^\.صورة (.+)"))
+@client.on(events.NewMessage(pattern=r"^صورة (.+)"))
 async def image_search_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
 
     search_term = event.pattern_match.group(1).strip()
     if not search_term:
-        return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `.صورة قطة`**")
+        return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `صورة قطة`**")
 
     loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
 
@@ -42,14 +42,14 @@ async def image_search_handler(event):
         await loading_msg.edit(f"**عذراً، حدث خطأ أثناء البحث عن الصورة.\n`{e}`**")
 
 
-@client.on(events.NewMessage(pattern=r"^\.يوت (.+)"))
+@client.on(events.NewMessage(pattern=r"^يوت (.+)"))
 async def youtube_search_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
 
     search_term = event.pattern_match.group(1).strip()
     if not search_term:
-        return await event.reply("**شنو الفيديو اللي أدور عليه؟ اكتب شي ويه الأمر.**\n**مثال: `.يوت اغنية انت ايه`**")
+        return await event.reply("**شنو الفيديو اللي أدور عليه؟ اكتب شي ويه الأمر.**\n**مثال: `يوت اغنية انت ايه`**")
 
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
 
@@ -64,6 +64,10 @@ async def youtube_search_handler(event):
         
         await msg.edit(f"**✅ | تم العثور على الأغنية.**\n**🎵 | العنوان:** `{video_title}`\n\n**📥 | جاري التحميل الآن...**")
 
+        # التأكد من وجود مجلد للتحميلات
+        if not os.path.isdir('downloads'):
+            os.makedirs('downloads')
+
         output_path = f"downloads/{video_title}.mp3"
         
         # إعدادات التحميل
@@ -75,6 +79,7 @@ async def youtube_search_handler(event):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
+            'quiet': True,
         }
 
         # التحميل
@@ -89,7 +94,7 @@ async def youtube_search_handler(event):
             file=output_path,
             caption=f"**🎵 | تم تحميل:** `{video_title}`",
             reply_to=event.id,
-            attributes=[] # لإرساله كملف صوتي وليس بصمة
+            attributes=[] 
         )
         
         await msg.delete()
