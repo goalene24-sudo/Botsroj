@@ -28,4 +28,5 @@ ALL_MODULES = [
     "plugins.contact",
     "plugins.millionaire_data",
     "plugins.millionaire",
+    "plugins.owner",
 ]
