@@ -70,14 +70,11 @@ async def youtube_search_handler(event):
 
         await msg.edit(f"**✅ | تم العثور على المقطع.**\n**🎵 | العنوان:** `{video_title}`\n\n**📥 | جاري التحميل الآن (قد يستغرق بعض الوقت)...**")
 
-        # التأكد من وجود مجلد للتحميلات
         if not os.path.isdir('downloads'):
             os.makedirs('downloads')
 
-        # استخدام اسم ملف ثابت
         output_path = "downloads/audio.mp3"
         
-        # إعدادات التحميل كملف صوتي
         ydl_opts_download = {
             'format': 'bestaudio/best',
             'outtmpl': output_path,
@@ -89,9 +86,12 @@ async def youtube_search_handler(event):
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.download([video_url])
         
-        # التحقق من وجود الملف بعد التحميل
+        # --- (الجزء التشخيصي الجديد) ---
         if not os.path.exists(output_path):
-            return await msg.edit("**❌ | فشلت عملية معالجة الملف بعد تحميله.**")
+            # إذا لم يتم العثور على الملف، اطبع محتويات المجلد
+            files_in_dir = os.listdir('downloads')
+            dir_contents = ", ".join(files_in_dir) if files_in_dir else "فارغ"
+            return await msg.edit(f"**❌ | فشلت عملية معالجة الملف بعد تحميله.**\n\n**محتويات مجلد التحميل:**\n`{dir_contents}`")
 
         await msg.edit("**📤 | جاري الرفع الآن...**")
 
