@@ -1,9 +1,10 @@
+# plugins/profile.py
 import time
 import random
 from datetime import datetime, timedelta
 from telethon import events
 from bot import client
-from .utils import check_activation, db, add_points, save_db, get_user_rank, is_group_owner
+from .utils import check_activation, db, add_points, save_db, get_user_rank
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
 async def my_stats_handler(event):
@@ -315,7 +316,7 @@ async def delete_best_friend_handler(event):
 async def my_rank_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    rank_en = await get_user_rank(event)
+    rank_en = await get_user_rank(event.sender_id, event)
     
     # التحقق من رتبة المالك فقط إذا لم يكن المستخدم هو المطور
     if rank_en != "developer" and await is_group_owner(event.chat_id, event.sender_id):
