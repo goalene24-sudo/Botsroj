@@ -1,3 +1,4 @@
+# plugins/callbacks.py
 from telethon import events, Button
 from bot import client, StartTime
 from .utils import (
@@ -10,7 +11,7 @@ from .services import SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
 from .menu_texts import (
     FUN_MENU_TEXT, PROFILE_MENU_TEXT, SOCIAL_MENU_TEXT, TOOLS_MENU_TEXT,
-    SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, ADMIN_COMMANDS_INFO_TEXT,
+    SERVICES_MENU_TEXT, REPLIES_MENU_TEXT,
     SHOP_MENU_TEXT
 )
 
@@ -18,10 +19,11 @@ from .menu_texts import (
 async def callback_handler(event):
     query_data = event.data.decode('utf-8')
     
+    # القائمة الآن لا تحتاج إلى admin_cmds_info
     main_menus = [
         "fun_menu", "profile_menu", "shop_menu", "tools_menu",
         "services_menu", "replies_menu", "about_menu", "back_to_main",
-        "protection_menu", "admin_cmds_info", "seerah_main", "hisn_main",
+        "protection_menu", "seerah_main", "hisn_main",
         "social_menu"
     ]
 
@@ -80,9 +82,6 @@ async def callback_handler(event):
         elif query_data == "protection_menu":
             if not await has_bot_permission(event): return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
             return await event.edit("**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**", buttons=await build_protection_menu(event.chat_id))
-
-        elif query_data == "admin_cmds_info":
-            return await event.edit(ADMIN_COMMANDS_INFO_TEXT, buttons=[[Button.inline("🔙 رجوع لقائمة الحماية", data="protection_menu")]])
         
         elif query_data == "seerah_main":
             text = "**صلى الله على محمد ﷺ**\n\n**اختر مرحلة من السيرة النبوية الشريفة لعرضها:**"
@@ -101,5 +100,5 @@ async def callback_handler(event):
         if text_to_show:
             await event.edit(text_to_show, buttons=buttons_to_show)
 
-    else:
+    elif not event.data.decode().startswith("admin_hub:"):
         await handle_interactive_callback(event)
