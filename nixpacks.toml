@@ -1,0 +1,13 @@
+# nixpacks.toml
+
+[phases.setup]
+# قائمة الحزم التي سيتم تثبيتها من apt
+aptPkgs = ["ffmpeg"]
+
+[phases.install]
+# الأمر الخاص بتثبيت مكتبات بايثون
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+# الأمر الرئيسي لتشغيل البوت
+cmd = "python main.py"
