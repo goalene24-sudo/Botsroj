@@ -110,7 +110,8 @@ async def consolidated_admin_handler(event):
     
     me = await client.get_me()
     user_to_manage = await reply.get_sender()
-    if user_to_manage.id == me.id: return # لا تطبق الإجراء على البوت نفسه
+    if user_to_manage.id == me.id:
+        return await event.reply("**لا يمكنك استخدام هذا الأمر على البوت نفسه.**")
     
     target_rank = await get_user_rank(user_to_manage.id, event)
     
@@ -165,7 +166,8 @@ async def timed_mute_handler(event):
     
     me = await client.get_me()
     user_to_mute = await reply.get_sender()
-    if user_to_mute.id == me.id: return
+    if user_to_mute.id == me.id:
+        return await event.reply("**لا يمكنك استخدام هذا الأمر على البوت نفسه.**")
     
     target_rank = await get_user_rank(user_to_mute.id, event)
     if target_rank >= actor_rank:
