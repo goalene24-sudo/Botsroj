@@ -7,9 +7,9 @@ from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
 from .utils import (
-    db, save_db, is_admin, check_activation,
+    db, save_db, check_activation,
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS, add_points,
-    FLOOD_TRACKER, get_user_rank
+    FLOOD_TRACKER, get_user_rank, Ranks
 )
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
@@ -58,8 +58,9 @@ async def general_message_handler(event):
     if is_command:
         return
 
-    rank = await get_user_rank(event)
-    is_admin_or_dev = rank in ["developer", "bot_admin", "group_admin"]
+    # --- (تم التعديل) استخدام نظام الرتب الجديد ---
+    rank_int = await get_user_rank(event.sender_id, event)
+    is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
 
     # النظام الذكي لاحتساب النقاط
     if "users" not in db.get(chat_id_str, {}): db[chat_id_str]["users"] = {}
@@ -99,9 +100,20 @@ async def general_message_handler(event):
     
     save_db(db)
     
+    # --- (تم التعديل) نظام الردود التلقائية ليتوافق مع الرتب الجديدة ---
+    rank_map_to_str = {
+        Ranks.DEVELOPER: "developer",
+        Ranks.OWNER: "developer", 
+        Ranks.CREATOR: "group_admin",
+        Ranks.BOT_ADMIN: "bot_admin",
+        Ranks.GROUP_ADMIN: "group_admin",
+        Ranks.MEMBER: "member"
+    }
+    rank_str = rank_map_to_str.get(rank_int, "member")
+
     if not event.is_reply:
         if event.text == "سروج":
-            if rank == "developer": reply = db.get(chat_id_str, {}).get("dev_reply", "أمرني مطوري الغالي 👑")
+            if rank_str == "developer": reply = db.get(chat_id_str, {}).get("dev_reply", "أمرني مطوري الغالي 👑")
             else: reply = db.get(chat_id_str, {}).get("call_reply", "عيوني! بس مو مثل عيون المطور 😉")
             await event.reply(f"**{reply}**")
             return
@@ -109,18 +121,18 @@ async def general_message_handler(event):
         custom_replies = db.get(chat_id_str, {}).get("custom_replies", {})
         if event.text in custom_replies:
             reply_text = custom_replies[event.text]
-            if rank == "developer": final_reply = f"**لك يا مطوري 🫡:**\n**{reply_text}**"
+            if rank_str == "developer": final_reply = f"**لك يا مطوري 🫡:**\n**{reply_text}**"
             else: final_reply = f"**{reply_text}**"
             await event.reply(final_reply)
         elif event.text in DEFAULT_REPLIES:
             reply_options_for_trigger = DEFAULT_REPLIES[event.text]
-            replies_for_rank = reply_options_for_trigger.get(rank, reply_options_for_trigger.get("member"))
+            replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
             if replies_for_rank:
                 chosen_reply = random.choice(replies_for_rank)
-                final_reply = chosen_reply.replace("@USER", "@tit_50")
+                final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
                 await event.reply(f'**{final_reply}**')
 
-    if is_admin_or_dev:
+    if is_admin_or_higher:
         return
     
     filtered_words = db.get(chat_id_str, {}).get("filtered_words", [])
