@@ -5,7 +5,7 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import check_activation
-from duckduckgo_search import DDGS
+from ddgs.sync import DDGS
 import yt_dlp
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
@@ -54,13 +54,21 @@ async def youtube_search_handler(event):
 
     try:
         # البحث باستخدام yt-dlp
-        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch', 'extract_flat': 'in_playlist'}
+        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch1', 'extract_flat': 'in_playlist'}
         with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
             info = ydl.extract_info(search_term, download=False)
-            if not info.get('entries'):
-                return await msg.edit(f"**عذراً، لم أجد أي نتائج لـ `{search_term}`.**")
             
-            video = info['entries'][0]
+            video = None
+            if info and 'entries' in info:
+                # البحث عن أول نتيجة صالحة (تحتوي على رابط)
+                for entry in info['entries']:
+                    if entry and 'webpage_url' in entry:
+                        video = entry
+                        break
+            
+            if not video:
+                return await msg.edit(f"**عذراً، لم أجد أي نتائج لـ `{search_term}`.**")
+
             video_url = video.get('webpage_url')
             video_title = video.get('title')
 
