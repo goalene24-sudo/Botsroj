@@ -5,7 +5,7 @@ from datetime import timedelta
 from telethon import events
 from bot import client
 import config
-from .utils import check_activation, is_group_owner, has_bot_permission, db, save_db, get_user_rank, Ranks
+from .utils import check_activation, has_bot_permission, db, save_db, get_user_rank, Ranks
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
@@ -194,7 +194,7 @@ async def tag_all_handler(event):
         await msg.delete()
         
     except Exception as e:
-        await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`")
+        await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`**")
 
 # --- (جديد) أوامر إدارة المنشئين ---
 @client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين)$"))
@@ -255,7 +255,7 @@ async def creator_admin_handler(event):
         for user_id in creator_ids:
             try:
                 user = await client.get_entity(user_id)
-                list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
+                list_text += f"- [{user.first_name}](tg://user?id={user.id})\n"
             except Exception:
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
