@@ -8,6 +8,10 @@ from .utils import check_activation
 from ddgs.sync import DDGS
 import yt_dlp
 
+@client.on(events.NewMessage(pattern="^testsearch$"))
+async def test_search_handler(event):
+    await event.reply("**✅ | ملف media_search.py يعمل!**")
+
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
 async def image_search_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
