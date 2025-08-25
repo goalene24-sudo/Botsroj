@@ -5,7 +5,7 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import check_activation
-from duckduckgo_search import DDGS
+from ddgs.sync import DDGS
 import yt_dlp
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
@@ -53,10 +53,9 @@ async def youtube_search_handler(event):
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
 
     try:
-        # البحث باستخدام yt-dlp بالطريقة المباشرة
-        ydl_opts_search = {'quiet': True, 'extract_flat': 'in_playlist'}
+        # البحث باستخدام yt-dlp
+        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch1', 'extract_flat': 'in_playlist'}
         with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
-            # نستخدم "ytsearch1:" للبحث عن نتيجة واحدة فقط
             info = ydl.extract_info(f"ytsearch1:{search_term}", download=False)
             
             video = None
@@ -75,7 +74,8 @@ async def youtube_search_handler(event):
         if not os.path.isdir('downloads'):
             os.makedirs('downloads')
 
-        output_path = f"downloads/{random.randint(1, 10000)}.mp3"
+        # استخدام اسم ملف ثابت
+        output_path = "downloads/audio.mp3"
         
         # إعدادات التحميل كملف صوتي
         ydl_opts_download = {
@@ -83,11 +83,16 @@ async def youtube_search_handler(event):
             'outtmpl': output_path,
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             'quiet': True,
+            'noplaylist': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.download([video_url])
         
+        # التحقق من وجود الملف بعد التحميل
+        if not os.path.exists(output_path):
+            return await msg.edit("**❌ | فشلت عملية معالجة الملف بعد تحميله.**")
+
         await msg.edit("**📤 | جاري الرفع الآن...**")
 
         await client.send_file(
