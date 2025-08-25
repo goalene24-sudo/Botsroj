@@ -146,7 +146,6 @@ async def is_admin(chat_id, user_id):
     return False
 
 async def get_user_rank(user_id, event):
-    """دالة جديدة ومحسنة لتحديد رتبة المستخدم بشكل هرمي."""
     chat_id = event.chat_id
     chat_id_str = str(chat_id)
     
@@ -180,12 +179,10 @@ async def get_user_rank(user_id, event):
     return Ranks.MEMBER
 
 async def has_bot_permission(event):
-    """دالة قديمة للتحقق بشكل عام إذا كان المستخدم مشرفاً أو أعلى."""
     rank = await get_user_rank(event.sender_id, event)
     return rank >= Ranks.GROUP_ADMIN
 
 async def check_activation(chat_id):
-    """دالة للتحقق إذا كان البوت مفعلاً في المجموعة."""
     chat_id_str = str(chat_id)
     is_paused = db.get(chat_id_str, {}).get("is_paused", False)
     if is_paused:
@@ -209,7 +206,6 @@ async def build_protection_menu(chat_id):
         row.append(button)
         if len(row) == 2: buttons.append(row); row = []
     if row: buttons.append(row)
-    # تم تغيير هذا الزر ليعود إلى قائمة الإدارة الجديدة بدلاً من القائمة الرئيسية
     buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
     return buttons
 
