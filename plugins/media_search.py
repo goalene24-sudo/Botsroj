@@ -53,23 +53,20 @@ async def youtube_search_handler(event):
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
 
     try:
-        # البحث باستخدام yt-dlp
-        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch1', 'extract_flat': 'in_playlist'}
+        # البحث باستخدام yt-dlp بالطريقة المباشرة
+        ydl_opts_search = {'quiet': True, 'extract_flat': 'in_playlist'}
         with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
-            info = ydl.extract_info(search_term, download=False)
+            # نستخدم "ytsearch1:" للبحث عن نتيجة واحدة فقط
+            info = ydl.extract_info(f"ytsearch1:{search_term}", download=False)
             
             video = None
-            if info and 'entries' in info:
-                # البحث عن أول نتيجة صالحة (تحتوي على رابط)
-                for entry in info['entries']:
-                    if entry and 'webpage_url' in entry:
-                        video = entry
-                        break
+            if info and 'entries' in info and info['entries']:
+                video = info['entries'][0]
             
             if not video:
                 return await msg.edit(f"**عذراً، لم أجد أي نتائج لـ `{search_term}`.**")
 
-            video_url = video.get('webpage_url')
+            video_url = video.get('webpage_url') or f"https://www.youtube.com/watch?v={video.get('id')}"
             video_title = video.get('title')
 
         await msg.edit(f"**✅ | تم العثور على المقطع.**\n**🎵 | العنوان:** `{video_title}`\n\n**📥 | جاري التحميل الآن (قد يستغرق بعض الوقت)...**")
