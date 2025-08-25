@@ -5,12 +5,8 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import check_activation
-from ddgs.sync import DDGS
+from duckduckgo_search import DDGS
 import yt_dlp
-
-@client.on(events.NewMessage(pattern="^testsearch$"))
-async def test_search_handler(event):
-    await event.reply("**✅ | ملف media_search.py يعمل!**")
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
 async def image_search_handler(event):
