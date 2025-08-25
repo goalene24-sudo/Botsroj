@@ -10,7 +10,6 @@ from urllib.parse import quote_plus
 from bs4 import BeautifulSoup
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
-from duckduckgo_search import DDGS
 
 # --- قواميس مساعدة ---
 WEATHER_TRANSLATIONS = {
