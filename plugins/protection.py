@@ -1,14 +1,13 @@
-# plugins/protection.py
 import asyncio
 import re
 from datetime import datetime, timedelta
 from telethon import events, Button
 from bot import client
-from .utils import check_activation, is_admin, has_bot_permission, db, save_db, get_user_rank
+from .utils import check_activation, db, save_db, get_user_rank, Ranks
 
 # --- إعدادات نظام التحذيرات ---
 MAX_WARNS = 3
-MUTE_DURATION_ON_MAX_WARNS = 1440 
+MUTE_DURATION_ON_MAX_WARNS = 1440
 
 # --- دوال مساعدة لنظام التحذيرات ---
 def add_user_warn(chat_id, user_id):
@@ -31,7 +30,8 @@ def reset_user_warns(chat_id, user_id):
 @client.on(events.NewMessage(pattern=r"^اضف كلمة ممنوعة(?: (.*))?$"))
 async def add_filtered_word(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين والأدمنية.**")
+    actor_rank = await get_user_rank(event.sender_id, event)
+    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
 
     word = event.pattern_match.group(1)
     if not word:
@@ -53,7 +53,8 @@ async def add_filtered_word(event):
 @client.on(events.NewMessage(pattern=r"^حذف كلمة ممنوعة(?: (.*))?$"))
 async def remove_filtered_word(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين والأدمنية.**")
+    actor_rank = await get_user_rank(event.sender_id, event)
+    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
 
     word_to_remove = event.pattern_match.group(1)
     if not word_to_remove:
@@ -80,7 +81,8 @@ async def remove_filtered_word(event):
 @client.on(events.NewMessage(pattern="^الكلمات الممنوعة$"))
 async def list_filtered_words(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين والأدمنية.**")
+    actor_rank = await get_user_rank(event.sender_id, event)
+    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
     
     chat_id_str = str(event.chat_id)
     words = db.get(chat_id_str, {}).get("filtered_words", [])
@@ -94,22 +96,25 @@ async def list_filtered_words(event):
     
     await event.reply(message)
 
-# --- (تم التعديل هنا) المعالج الموحد لأوامر الإدارة مع حماية المشرفين ---
+# --- المعالج الموحد لأوامر الإدارة مع حماية هرمية ---
 @client.on(events.NewMessage(pattern=r"^(حظر|الغاء الحظر|كتم|الغاء الكتم|تحذير|حذف التحذيرات)$"))
 async def consolidated_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين والأدمنية يمعود. 😒**")
+    
+    actor_rank = await get_user_rank(event.sender_id, event)
+    if actor_rank < Ranks.GROUP_ADMIN:
+        return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق. 😒**")
+
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو؟ لازم تسوي رپلَي على رسالة الشخص.**")
     
     user_to_manage = await reply.get_sender()
-    # إنشاء حدث وهمي لتمريره لدالة تحديد الرتبة
-    fake_event_for_target = type('FakeEvent', (), {'sender_id': user_to_manage.id, 'chat_id': event.chat_id})()
-    target_rank = await get_user_rank(fake_event_for_target)
+    if user_to_manage.id == client.me.id: return # لا تطبق الإجراء على البوت نفسه
     
-    # التحقق من رتبة الشخص المستهدف
-    if target_rank in ["developer", "bot_admin", "group_admin"]:
-        return await event.reply("**ما أگدر أطبق هذا الإجراء على مطور أو أدمن أو مشرف آخر!**")
+    target_rank = await get_user_rank(user_to_manage.id, event)
+    
+    if target_rank >= actor_rank:
+        return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
 
     action = event.raw_text
     try:
@@ -117,7 +122,7 @@ async def consolidated_admin_handler(event):
             await client.edit_permissions(event.chat_id, user_to_manage, view_messages=False)
             await event.reply(f"**🚫 طار [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
         elif action == "الغاء الحظر":
-            await client.edit_permissions(event.chat_id, user_to_manage, view_messages=True) # السماح برؤية الرسائل مجدداً
+            await client.edit_permissions(event.chat_id, user_to_manage, view_messages=True)
             await event.reply(f"**✅ يلا رجعنا [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
         elif action == "كتم":
             buttons = [
@@ -127,7 +132,7 @@ async def consolidated_admin_handler(event):
             ]
             await event.reply(f"**🤫 تريد تكتم [{user_to_manage.first_name}](tg://user?id={user_to_manage.id})؟ اختار المدة:**", buttons=buttons)
         elif action == "الغاء الكتم":
-            await client.edit_permissions(event.chat_id, user_to_manage, send_messages=True) # السماح بإرسال الرسائل مجدداً
+            await client.edit_permissions(event.chat_id, user_to_manage, send_messages=True)
             await event.reply(f"**🗣️ يلا احچي [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
         elif action == "تحذير":
             new_warn_count = add_user_warn(event.chat_id, user_to_manage.id)
@@ -149,18 +154,20 @@ async def consolidated_admin_handler(event):
 @client.on(events.NewMessage(pattern=r"^كتم (\d+)\s*([ديس])$"))
 async def timed_mute_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين والأدمنية يمعود. 😒**")
+    
+    actor_rank = await get_user_rank(event.sender_id, event)
+    if actor_rank < Ranks.GROUP_ADMIN:
+        return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق. 😒**")
+
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو؟ لازم تسوي رپلَي على رسالة الشخص.**")
     
     user_to_mute = await reply.get_sender()
-    # إنشاء حدث وهمي لتمريره لدالة تحديد الرتبة
-    fake_event_for_target = type('FakeEvent', (), {'sender_id': user_to_mute.id, 'chat_id': event.chat_id})()
-    target_rank = await get_user_rank(fake_event_for_target)
+    if user_to_mute.id == client.me.id: return
     
-    # التحقق من رتبة الشخص المستهدف
-    if target_rank in ["developer", "bot_admin", "group_admin"]:
-        return await event.reply("**ما أگدر أطبق هذا الإجراء على مطور أو أدمن أو مشرف آخر!**")
+    target_rank = await get_user_rank(user_to_mute.id, event)
+    if target_rank >= actor_rank:
+        return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
         
     try:
         time_value = int(event.pattern_match.group(1))
