@@ -4,7 +4,7 @@ import random
 from datetime import datetime, timedelta
 from telethon import events
 from bot import client
-from .utils import check_activation, db, add_points, save_db, get_user_rank
+from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
 async def my_stats_handler(event):
@@ -24,7 +24,6 @@ async def my_stats_handler(event):
     inventory = user_data.get("inventory", {})
     title = None
 
-    # التحقق من وجود لقب مخصص أولاً
     custom_title_item = inventory.get("تخصيص لقب")
     if custom_title_item:
         purchase_time = custom_title_item.get("purchase_time", 0)
@@ -32,7 +31,6 @@ async def my_stats_handler(event):
         if time.time() - purchase_time < duration_seconds:
             title = user_data.get("custom_title")
 
-    # إذا لم يكن هناك لقب مخصص، تحقق من وجود لقب VIP
     if not title:
         vip_item = inventory.get("لقب vip")
         if vip_item:
@@ -316,20 +314,17 @@ async def delete_best_friend_handler(event):
 async def my_rank_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    rank_en = await get_user_rank(event.sender_id, event)
-    
-    # التحقق من رتبة المالك فقط إذا لم يكن المستخدم هو المطور
-    if rank_en != "developer" and await is_group_owner(event.chat_id, event.sender_id):
-        rank_en = "owner"
+    rank_int = await get_user_rank(event.sender_id, event)
 
     rank_map = {
-        "developer": "المطور 👨‍💻",
-        "owner": "مالك المجموعة 👑",
-        "bot_admin": "ادمن في البوت 🤖",
-        "group_admin": "مشرف في المجموعة 🛡️",
-        "member": "عضو فقط 👤"
+        Ranks.DEVELOPER: "المطور 👨‍💻",
+        Ranks.OWNER: "مالك المجموعة 👑",
+        Ranks.CREATOR: "منشئ في البوت ⚜️",
+        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
+        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
+        Ranks.MEMBER: "عضو فقط 👤"
     }
     
-    rank_ar = rank_map.get(rank_en, "عضو فقط 👤")
+    rank_ar = rank_map.get(rank_int, "عضو فقط 👤")
     
     await event.reply(f"⌔︙**رتبتك هي :** {rank_ar}")
