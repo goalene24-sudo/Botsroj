@@ -5,7 +5,7 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import check_activation
-from ddgs.sync import DDGS
+from duckduckgo_search import DDGS
 import yt_dlp
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
