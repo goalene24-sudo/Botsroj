@@ -5,7 +5,7 @@ from datetime import timedelta
 from telethon import events
 from bot import client
 import config
-from .utils import check_activation, is_group_owner, has_bot_permission, db, save_db, get_user_rank
+from .utils import check_activation, is_group_owner, has_bot_permission, db, save_db, get_user_rank, Ranks
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
@@ -115,39 +115,46 @@ async def promote_demote_handler(event):
 async def bot_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     action, chat_id_str = event.raw_text, str(event.chat_id)
-    is_owner_or_sudo = await is_group_owner(event.chat_id, event.sender_id) or event.sender_id in config.SUDO_USERS
     
-    if action == "مسح كل الادمنيه":
-        if not is_owner_or_sudo:
-            return await event.reply("**فقط المالك والمطور يستطيعون استخدام هذا الأمر.**")
-        if db.get(chat_id_str, {}).get("bot_admins"):
-            db[chat_id_str]["bot_admins"] = []
-            save_db(db)
-            await event.reply("**✅ تم مسح قائمة الأدمنية لهذه المجموعة بنجاح. يمكنك الآن إضافة الأدمنية الصحيحين.**")
-        else:
-            await event.reply("**القائمة فارغة أصلاً.**")
-        return
+    actor_rank = await get_user_rank(event.sender_id, event)
 
-    if action in ["رفع ادمن", "تنزيل ادمن"]:
-        if not is_owner_or_sudo:
-            return await event.reply("**فقط المالك والمطور يستطيعون رفع وتنزيل أدمنية في البوت.**")
+    if action in ["رفع ادمن", "تنزيل ادمن", "مسح كل الادمنيه"]:
+        if actor_rank < Ranks.CREATOR: # الصلاحية الآن للمنشئ فما فوق
+            return await event.reply("**فقط المنشئين والمالك والمطور يستطيعون استخدام هذا الأمر.**")
+        
+        if action == "مسح كل الادمنيه":
+            if db.get(chat_id_str, {}).get("bot_admins"):
+                db[chat_id_str]["bot_admins"] = []
+                save_db(db)
+                await event.reply("**✅ تم مسح قائمة الأدمنية لهذه المجموعة بنجاح.**")
+            else:
+                await event.reply("**القائمة فارغة أصلاً.**")
+            return
+
         reply = await event.get_reply_message()
         if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
         user_to_manage = await reply.get_sender()
+        user_to_manage_id = user_to_manage.id
+        
+        target_rank = await get_user_rank(user_to_manage_id, event)
+        if target_rank >= actor_rank:
+            return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
+
         if chat_id_str not in db: db[chat_id_str] = {}
         if "bot_admins" not in db[chat_id_str]: db[chat_id_str]["bot_admins"] = []
+
         if action == "رفع ادمن":
-            if user_to_manage.id in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو أصلاً أدمن بالبوت.**")
-            db[chat_id_str]["bot_admins"].append(user_to_manage.id)
-            await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) أدمن في البوت.**")
+            if user_to_manage_id in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو أصلاً أدمن بالبوت.**")
+            db[chat_id_str]["bot_admins"].append(user_to_manage_id)
+            await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) أدمن في البوت.**")
         else: # تنزيل ادمن
-            if user_to_manage.id not in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو مو أدمن بالبوت أصلاً.**")
-            db[chat_id_str]["bot_admins"].remove(user_to_manage.id)
-            await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من أدمنية البوت.**")
+            if user_to_manage_id not in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو مو أدمن بالبوت أصلاً.**")
+            db[chat_id_str]["bot_admins"].remove(user_to_manage_id)
+            await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) من أدمنية البوت.**")
         save_db(db)
     
     elif action == "الادمنيه":
-        if not await has_bot_permission(event): return
+        if await get_user_rank(event.sender_id, event) < Ranks.GROUP_ADMIN: return
         bot_admins_ids = db.get(chat_id_str, {}).get("bot_admins", [])
         if not bot_admins_ids: return await event.reply("**ماكو أي أدمن بالبوت حالياً بهاي المجموعة.**")
         admin_list_text = "**⚜️ قائمة الأدمنية في البوت:**\n\n"
@@ -188,3 +195,67 @@ async def tag_all_handler(event):
         
     except Exception as e:
         await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`")
+
+# --- (جديد) أوامر إدارة المنشئين ---
+@client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين)$"))
+async def creator_admin_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    
+    action = event.raw_text
+    chat_id_str = str(event.chat_id)
+    
+    actor_rank = await get_user_rank(event.sender_id, event)
+    
+    if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
+        if actor_rank < Ranks.OWNER:
+            return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
+        
+        if action == "مسح المنشئين":
+            if db.get(chat_id_str, {}).get("creators"):
+                db[chat_id_str]["creators"] = []
+                save_db(db)
+                await event.reply("**✅ تم مسح قائمة المنشئين لهذه المجموعة بنجاح.**")
+            else:
+                await event.reply("**القائمة فارغة أصلاً.**")
+            return
+
+        reply = await event.get_reply_message()
+        if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
+        
+        user_to_manage = await reply.get_sender()
+        user_to_manage_id = user_to_manage.id
+        
+        target_rank = await get_user_rank(user_to_manage_id, event)
+        if target_rank >= actor_rank:
+            return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
+        
+        if chat_id_str not in db: db[chat_id_str] = {}
+        if "creators" not in db[chat_id_str]: db[chat_id_str]["creators"] = []
+        
+        if action == "رفع منشئ":
+            if user_to_manage_id in db[chat_id_str]["creators"]:
+                return await event.reply("**هذا الشخص هو أصلاً منشئ.**")
+            db[chat_id_str]["creators"].append(user_to_manage_id)
+            await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى منشئ في البوت.**")
+        else: # تنزيل منشئ
+            if user_to_manage_id not in db[chat_id_str]["creators"]:
+                return await event.reply("**هذا الشخص هو ليس منشئاً أصلاً.**")
+            db[chat_id_str]["creators"].remove(user_to_manage_id)
+            await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) من المنشئين.**")
+        save_db(db)
+
+    elif action == "المنشئين":
+        if actor_rank < Ranks.GROUP_ADMIN: return
+        
+        creator_ids = db.get(chat_id_str, {}).get("creators", [])
+        if not creator_ids:
+            return await event.reply("**لا يوجد أي منشئين في البوت حالياً بهذه المجموعة.**")
+            
+        list_text = "**⚜️ قائمة المنشئين في البوت:**\n\n"
+        for user_id in creator_ids:
+            try:
+                user = await client.get_entity(user_id)
+                list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
+            except Exception:
+                list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
+        await event.reply(list_text)
