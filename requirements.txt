@@ -5,7 +5,7 @@ wikipedia
 pytz
 httpx
 beautifulsoup4
-ddgs
+duckduckgo-search
 Flask
 google-generativeai
 yt-dlp
