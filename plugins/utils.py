@@ -7,6 +7,15 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
+# --- (جديد) تعريف مستويات الرتب ---
+class Ranks:
+    MEMBER = 0
+    GROUP_ADMIN = 1
+    BOT_ADMIN = 2
+    CREATOR = 3
+    OWNER = 4
+    DEVELOPER = 5
+
 try:
     import google.generativeai as genai
     genai.configure(api_key=config.GEMINI_API_KEY)
@@ -144,33 +153,51 @@ async def is_admin(chat_id, user_id):
         except Exception: return False
     return False
 
-async def get_user_rank(event):
-    sender_id = event.sender_id
+async def get_user_rank(user_id, event):
+    """دالة جديدة ومحسنة لتحديد رتبة المستخدم بشكل هرمي."""
     chat_id = event.chat_id
     chat_id_str = str(chat_id)
     
-    if sender_id in config.SUDO_USERS:
-        return "developer"
+    # 1. المطور (أعلى رتبة)
+    if user_id in config.SUDO_USERS:
+        return Ranks.DEVELOPER
     
+    # 2. مالك المجموعة
+    try:
+        async for p in client.iter_participants(chat_id, filter=ChannelParticipantsAdmins):
+            if p.id == user_id and isinstance(p.participant, ChannelParticipantCreator):
+                return Ranks.OWNER
+    except Exception:
+        pass # تجاهل الأخطاء في حال عدم القدرة على جلب المشاركين
+    
+    # 3. المنشئ (رتبة مخصصة في البوت)
+    creators = db.get(chat_id_str, {}).get("creators", [])
+    if user_id in creators:
+        return Ranks.CREATOR
+
+    # 4. الأدمن (رتبة مخصصة في البوت)
     bot_admins = db.get(chat_id_str, {}).get("bot_admins", [])
-    if sender_id in bot_admins:
-        return "bot_admin"
+    if user_id in bot_admins:
+        return Ranks.BOT_ADMIN
     
-    if await is_admin(chat_id, sender_id):
-        return "group_admin"
-    
-    return "member"
+    # 5. مشرف المجموعة (من تيليجرام)
+    try:
+        participant = await client.get_permissions(chat_id, user_id)
+        if participant.is_admin or participant.is_creator:
+            return Ranks.GROUP_ADMIN
+    except (UserNotParticipantError, ChatAdminRequiredError):
+        pass # المستخدم ليس في المجموعة أو لا يمكن جلب صلاحياته
+    except Exception:
+        pass
+
+    # 6. العضو العادي
+    return Ranks.MEMBER
+
 
 async def has_bot_permission(event):
-    rank = await get_user_rank(event)
-    return rank in ["developer", "bot_admin", "group_admin"]
-
-async def check_activation(chat_id):
-    chat_id_str = str(chat_id)
-    is_paused = db.get(chat_id_str, {}).get("is_paused", False)
-    if is_paused:
-        return False
-    return True
+    """دالة قديمة للتحقق بشكل عام إذا كان المستخدم مشرفاً أو أعلى."""
+    rank = await get_user_rank(event.sender_id, event)
+    return rank >= Ranks.GROUP_ADMIN
 
 def add_points(chat_id, user_id, points_to_add):
     chat_id_str, user_id_str = str(chat_id), str(user_id)
