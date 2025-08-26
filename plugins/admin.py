@@ -273,3 +273,35 @@ async def creator_admin_handler(event):
             except Exception:
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
+
+# --- (جديد) أمر تحديد حجم الكلايش ---
+@client.on(events.NewMessage(pattern=r"^ضع حجم الكلايش (\d+)$"))
+async def set_long_text_size(event):
+    """
+    Sets the character count threshold for a message to be considered "long_text".
+    """
+    if not await check_activation(event.chat_id): 
+        return
+
+    # Check for admin permissions
+    rank = await get_user_rank(event.sender_id, event)
+    if rank < Ranks.GROUP_ADMIN:
+        return await event.reply("**هذا الأمر متاح للمشرفين فما فوق.**")
+
+    try:
+        size = int(event.pattern_match.group(1))
+    except (ValueError, IndexError):
+        return await event.reply("⚠️ يرجى تحديد رقم صحيح.")
+
+    # Validate the size to be within a reasonable range
+    if not (50 <= size <= 2000):
+        return await event.reply("⚠️ حجم الكلايش يجب أن يكون بين 50 و 2000 حرف.")
+
+    chat_id_str = str(event.chat_id)
+    if chat_id_str not in db: 
+        db[chat_id_str] = {}
+
+    db[chat_id_str]["long_text_size"] = size
+    save_db(db)
+    
+    await event.reply(f"✅ **تم تحديث الإعدادات بنجاح.**\nسيتم اعتبار أي رسالة أطول من **{size}** حرف 'كليشة'.")
