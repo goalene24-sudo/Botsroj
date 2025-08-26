@@ -6,6 +6,7 @@ ALL_MODULES = [
     "plugins.callbacks",
     "plugins.interactive_callbacks",
     "plugins.protection",
+    "plugins.cleaning",
     "plugins.admin",
     "plugins.fun",
     "plugins.games",
