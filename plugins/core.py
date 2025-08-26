@@ -6,7 +6,8 @@ from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 import config
 from .utils import (
-    db, save_db, is_admin, check_activation, MAIN_MENU_MESSAGE, MAIN_MENU_BUTTONS
+    db, save_db, is_admin, check_activation, MAIN_MENU_MESSAGE, MAIN_MENU_BUTTONS,
+    is_command_enabled
 )
 
 WELCOMED_RECENTLY = set()
@@ -41,6 +42,10 @@ async def chat_action_handler(event):
     
     elif event.user_joined and not event.user_id == me.id:
         if not await check_activation(event.chat_id): return
+        # التحقق إذا كان الترحيب مفعلاً
+        if not is_command_enabled(event.chat_id, "welcome_enabled"):
+            return
+
         chat = await event.get_chat()
         new_user = await event.get_user()
         chat_id_str = str(event.chat_id)
