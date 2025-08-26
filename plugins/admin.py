@@ -134,6 +134,9 @@ async def bot_admin_handler(event):
         reply = await event.get_reply_message()
         if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
         user_to_manage = await reply.get_sender()
+        if user_to_manage.bot:
+            return await event.reply("**لا يمكنك ترقية البوتات إلى رتبة أدمن.**")
+        
         user_to_manage_id = user_to_manage.id
         
         target_rank = await get_user_rank(user_to_manage_id, event)
@@ -204,7 +207,6 @@ async def creator_admin_handler(event):
     chat_id_str = str(event.chat_id)
     actor_rank = await get_user_rank(event.sender_id, event)
     
-    # --- (جديد) معالجة أمر "رفع مالك" ---
     if action == "رفع مالك":
         if actor_rank < Ranks.OWNER:
             return await event.reply("**فقط المالك الفعلي للمجموعة يستطيع استخدام هذا الأمر.**")
@@ -213,7 +215,6 @@ async def creator_admin_handler(event):
         if not reply:
             return await event.reply(f"**✅ أهلاً بك يا مالك المجموعة!**\n**البوت يتعرف عليك بصفتك المالك الأعلى لهذه المجموعة.**")
         
-        # عند الرد، يقوم المالك برفع العضو إلى رتبة "منشئ"
         action = "رفع منشئ"
 
     if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
@@ -233,6 +234,9 @@ async def creator_admin_handler(event):
         if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
         
         user_to_manage = await reply.get_sender()
+        if user_to_manage.bot:
+            return await event.reply("**لا يمكنك ترقية البوتات إلى رتبة منشئ.**")
+            
         user_to_manage_id = user_to_manage.id
         
         target_rank = await get_user_rank(user_to_manage_id, event)
