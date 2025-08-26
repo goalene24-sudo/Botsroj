@@ -15,8 +15,6 @@ async def delete_messages_by_count(event):
         await event.reply("⚠️ هذا الأمر يعمل في المجموعات فقط.")
         return
 
-    # --- فحص الصلاحيات ---
-    # تم تخفيض مستوى الصلاحية المطلوب إلى مشرف مجموعة
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN:
         await event.reply("🚫 عذراً، هذا الأمر متاح لمشرفي المجموعة فما فوق.")
@@ -32,16 +30,24 @@ async def delete_messages_by_count(event):
         return
 
     try:
-        messages_to_delete = []
-        async for msg in client.iter_messages(event.chat_id, limit=count_to_delete, max_id=event.message.id):
-            messages_to_delete.append(msg.id)
+        # --- بداية المنطق الجديد والمُحسَّن لجمع الرسائل ---
+        ids_to_delete = []
+        
+        # أولاً، نجمع الرسائل التي قبل رسالة الأمر
+        async for message in client.iter_messages(
+            event.chat_id,
+            limit=count_to_delete,
+            offset_id=event.message.id # نبدأ من الرسالة التي قبل الأمر
+        ):
+            ids_to_delete.append(message.id)
+            
+        # ثانياً، نضيف رسالة الأمر نفسها إلى القائمة
+        ids_to_delete.append(event.message.id)
+        # --- نهاية المنطق الجديد ---
 
-        if event.message.id not in messages_to_delete:
-            messages_to_delete.append(event.message.id)
+        await client.delete_messages(event.chat_id, ids_to_delete)
 
-        await client.delete_messages(event.chat_id, messages_to_delete)
-
-        confirmation_msg = await event.respond(f"✅ **تم حذف {count_to_delete} رسالة بنجاح.**")
+        confirmation_msg = await event.respond(f"✅ **تم حذف {len(ids_to_delete)} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
 
@@ -64,8 +70,6 @@ async def delete_messages_by_reply(event):
         await event.reply("⚠️ يرجى الرد على الرسالة التي تريد بدء الحذف منها.")
         return
 
-    # --- فحص الصلاحيات ---
-    # تم تخفيض مستوى الصلاحية المطلوب إلى مشرف مجموعة
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN:
         await event.reply("🚫 عذراً، هذا الأمر متاح لمشرفي المجموعة فما فوق.")
