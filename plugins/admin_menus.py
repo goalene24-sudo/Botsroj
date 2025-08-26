@@ -48,7 +48,7 @@ GROUP_ADMIN_COMMANDS_TEXT = """**🛡️ أوامر المدير (المشرف)*
 
 # --- معالج قائمة الإدارة ---
 
-@client.on(events.CallbackQuery(pattern=b"^admin_hub"))
+@client.on(events.CallbackQuery(pattern=b"^admin_hub:"))
 async def admin_hub_handler(event):
     if not await check_activation(event.chat_id): return
     
@@ -69,6 +69,7 @@ async def admin_hub_handler(event):
             [Button.inline("أوامر المنشئين ⚜️", data="admin_hub:creator")],
             [Button.inline("أوامر الأدمنية 🤖", data="admin_hub:bot_admin")],
             [Button.inline("أوامر المدراء 🛡️", data="admin_hub:group_admin")],
+            [Button.inline("إعدادات التفعيل والتعطيل 🔧", data="settings:main")],
             [Button.inline("إعدادات الحماية 🔒", data="protection_menu")],
             [Button.inline("🔙 عودة", data="back_to_main")]
         ]
@@ -85,4 +86,16 @@ async def admin_hub_handler(event):
         text = GROUP_ADMIN_COMMANDS_TEXT
         buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
         
+    # التحقق من صلاحية المستخدم لعرض القائمة
+    required_rank_map = {
+        "owner": Ranks.OWNER,
+        "creator": Ranks.CREATOR,
+        "bot_admin": Ranks.BOT_ADMIN,
+        "group_admin": Ranks.GROUP_ADMIN
+    }
+    
+    required_rank = required_rank_map.get(action)
+    if required_rank and user_rank < required_rank:
+        return await event.answer(f"🚫 | هذه القائمة مخصصة لرتبة {action.replace('_', ' ').title()} فما فوق.", alert=True)
+
     await event.edit(text, buttons=buttons)
