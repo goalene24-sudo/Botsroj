@@ -3,7 +3,6 @@
 import asyncio
 from telethon import events
 from bot import client
-# تم تصحيح طريقة الاستدعاء هنا
 from plugins.utils import get_user_rank, Ranks
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
@@ -17,10 +16,10 @@ async def delete_messages_by_count(event):
         return
 
     # --- فحص الصلاحيات ---
-    # تم تصحيح طريقة المقارنة واستدعاء الدالة
+    # تم تخفيض مستوى الصلاحية المطلوب إلى مشرف مجموعة
     user_rank = await get_user_rank(event.sender_id, event)
-    if user_rank < Ranks.BOT_ADMIN:
-        await event.reply("🚫 عذراً، هذا الأمر متاح لأدمنية البوت فما فوق.")
+    if user_rank < Ranks.GROUP_ADMIN:
+        await event.reply("🚫 عذراً، هذا الأمر متاح لمشرفي المجموعة فما فوق.")
         return
 
     try:
@@ -33,18 +32,15 @@ async def delete_messages_by_count(event):
         return
 
     try:
-        # جمع أرقام الرسائل المراد حذفها
         messages_to_delete = []
         async for msg in client.iter_messages(event.chat_id, limit=count_to_delete, max_id=event.message.id):
             messages_to_delete.append(msg.id)
 
-        # إضافة رسالة الأمر نفسها إلى القائمة إذا لم تكن موجودة
         if event.message.id not in messages_to_delete:
             messages_to_delete.append(event.message.id)
 
         await client.delete_messages(event.chat_id, messages_to_delete)
 
-        # إرسال رسالة تأكيد وحذفها بعد 5 ثوانٍ
         confirmation_msg = await event.respond(f"✅ **تم حذف {count_to_delete} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
@@ -69,23 +65,21 @@ async def delete_messages_by_reply(event):
         return
 
     # --- فحص الصلاحيات ---
-    # تم تصحيح طريقة المقارنة واستدعاء الدالة
+    # تم تخفيض مستوى الصلاحية المطلوب إلى مشرف مجموعة
     user_rank = await get_user_rank(event.sender_id, event)
-    if user_rank < Ranks.BOT_ADMIN:
-        await event.reply("🚫 عذراً، هذا الأمر متاح لأدمنية البوت فما فوق.")
+    if user_rank < Ranks.GROUP_ADMIN:
+        await event.reply("🚫 عذراً، هذا الأمر متاح لمشرفي المجموعة فما فوق.")
         return
 
     try:
         start_msg_id = event.message.reply_to_msg_id
         end_msg_id = event.message.id
 
-        # جمع كل أرقام الرسائل بين رسالة البداية والنهاية
         message_ids_to_delete = [i for i in range(start_msg_id, end_msg_id + 1)]
         
         count = len(message_ids_to_delete)
         await client.delete_messages(event.chat_id, message_ids_to_delete)
 
-        # إرسال رسالة تأكيد وحذفها بعد 5 ثوانٍ
         confirmation_msg = await event.respond(f"✅ **تم حذف {count} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
