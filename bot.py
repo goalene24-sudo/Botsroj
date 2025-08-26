@@ -6,9 +6,11 @@ import logging
 StartTime = datetime.now()
 
 try:
-    client = TelegramClient(None, config.API_ID, config.API_HASH)
+    # --- هذا هو السطر الذي تم تصحيحه ---
+    # لقد استبدلنا None باسم جلسة وليكن 'saruj_bot'
+    client = TelegramClient('saruj_bot', config.API_ID, config.API_HASH)
+    # ------------------------------------
 except Exception as e:
     logging.basicConfig(level=logging.INFO)
     logging.critical(f"!! خطأ فادح عند تهيئة البوت: {e}", exc_info=True)
     exit(1)
-    
