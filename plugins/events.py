@@ -39,7 +39,10 @@ async def general_message_handler(event):
 
     # --- (مُطوَّر) نظام تخزين الرسائل مع الأنواع ---
     if event.id:
-        # تحديد نوع الرسالة
+        # (جديد) قراءة حجم الكلايش المخصص من قاعدة البيانات، مع قيمة افتراضية 200
+        long_text_size = db.get(chat_id_str, {}).get("long_text_size", 200)
+        
+        # تحديد نوع الرسالة (مع تعديل الأولوية)
         msg_type = "text" # النوع الافتراضي
         message_entities = event.message.entities or []
         
@@ -51,13 +54,13 @@ async def general_message_handler(event):
             msg_type = "sticker"
         elif event.document and hasattr(event.document, 'mime_type') and 'gif' in event.document.mime_type:
             msg_type = "gif"
+        # (تم التعديل) فحص الطول أولاً قبل فحص الرابط
+        elif event.text and len(event.text) > long_text_size:
+            msg_type = "long_text"
         elif any(isinstance(e, MessageEntityUrl) for e in message_entities):
             msg_type = "url"
         elif event.forward:
             msg_type = "forward"
-        # تعريف "الكلايش" كنص أطول من 200 حرف
-        elif event.text and len(event.text) > 200:
-            msg_type = "long_text"
 
         if chat_id_str not in db: db[chat_id_str] = {}
         if "message_history" not in db[chat_id_str]:
@@ -84,7 +87,6 @@ async def general_message_handler(event):
         save_db(db)
     # --- نهاية ميزة الذكر التلقائي ---
 
-    # إذا كانت الرسالة لا تحتوي على نص (مثلاً صورة فقط)، نتوقف هنا عن تنفيذ أوامر النصوص
     if not event.text: return
     
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
@@ -161,10 +163,6 @@ async def general_message_handler(event):
                         final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
                         await event.reply(f'**{final_reply}**')
 
-    # هذا السطر تم نقله للأعلى ليعمل بشكل أفضل
-    # if is_admin_or_higher: return
-    
-    # تم وضع الشرط هنا ليتم تطبيقه على الأقفال وفلتر الكلمات فقط
     if not is_admin_or_higher:
         filtered_words = db.get(chat_id_str, {}).get("filtered_words", [])
         if filtered_words and event.text and any(word.lower() in event.text.lower() for word in filtered_words):
