@@ -6,7 +6,7 @@ from bot import client
 from plugins.utils import get_user_rank, Ranks, db, save_db
 
 # --- دالة مساعدة مركزية لتجنب تكرار الكود ---
-async def purge_messages_by_type(event, target_types, count_to_delete):
+async def purge_messages_by_type(event, target_types, count_to_delete, command_text):
     """
     دالة عامة لحذف الرسائل بناءً على نوعها من السجل المحفوظ.
     """
@@ -26,6 +26,7 @@ async def purge_messages_by_type(event, target_types, count_to_delete):
 
     # 2. أخذ العدد المطلوب من الرسائل التي تم فلترتها
     ids_to_delete = [msg["msg_id"] for msg in filtered_messages]
+    # إذا كان العدد المحدد أكبر من عدد الرسائل المتاحة، فسيتم حذف المتاح فقط
     ids_to_delete = ids_to_delete[-count_to_delete:]
 
     # 3. إضافة رسالة الأمر نفسها للحذف
@@ -39,8 +40,11 @@ async def purge_messages_by_type(event, target_types, count_to_delete):
         if chat_id_str in db:
             db[chat_id_str]["message_history"] = updated_history
             save_db(db)
-
-        confirmation_msg = await event.respond(f"✅ **تم حذف {len(ids_to_delete)} رسالة بنجاح.**")
+        
+        # رسالة تأكيد مخصصة
+        deleted_count = len(ids_to_delete)
+        reply_text = f"✅ **تم حذف {deleted_count - 1} {command_text} بنجاح.**" if count_to_delete < 100 else f"✅ **تم حذف كل الـ {command_text} ({deleted_count - 1}) المحفوظة بنجاح.**"
+        confirmation_msg = await event.respond(reply_text)
         await asyncio.sleep(5)
         await confirmation_msg.delete()
 
@@ -48,56 +52,53 @@ async def purge_messages_by_type(event, target_types, count_to_delete):
         print(f"Error in specialized purge: {e}")
         await event.reply("⚠️ حدث خطأ أثناء محاولة الحذف. تأكد من صلاحياتي.")
 
-# --- الأوامر الجديدة ---
+# --- (تم التحديث) الأوامر المتخصصة مع عدد اختياري ---
 
-@client.on(events.NewMessage(pattern=r"^(مسح الصور|مسح صور) (\d+)$"))
+@client.on(events.NewMessage(pattern=r"^(مسح الصور|مسح صور)(?: (\d+))?$"))
 async def purge_photos(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
-    count = int(event.pattern_match.group(2))
-    await purge_messages_by_type(event, ["photo"], count)
+    count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
+    await purge_messages_by_type(event, ["photo"], count, "صورة")
 
-@client.on(events.NewMessage(pattern=r"^(مسح الميديا) (\d+)$"))
+@client.on(events.NewMessage(pattern=r"^(مسح الميديا)(?: (\d+))?$"))
 async def purge_media(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
-    count = int(event.pattern_match.group(2))
-    # الميديا هي كل شيء ليس نصاً عادياً
+    count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     media_types = ["photo", "video", "sticker", "gif"]
-    await purge_messages_by_type(event, media_types, count)
+    await purge_messages_by_type(event, media_types, count, "ميديا")
 
-@client.on(events.NewMessage(pattern=r"^(مسح الكلايش|مسح كلايش) (\d+)$"))
+@client.on(events.NewMessage(pattern=r"^(مسح الكلايش|مسح كلايش)(?: (\d+))?$"))
 async def purge_long_texts(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
-    count = int(event.pattern_match.group(2))
-    await purge_messages_by_type(event, ["long_text"], count)
+    count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
+    await purge_messages_by_type(event, ["long_text"], count, "كليشة")
 
-@client.on(events.NewMessage(pattern=r"^(مسح الروابط|مسح روابط) (\d+)$"))
+@client.on(events.NewMessage(pattern=r"^(مسح الروابط|مسح روابط)(?: (\d+))?$"))
 async def purge_links(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
-    count = int(event.pattern_match.group(2))
-    await purge_messages_by_type(event, ["url"], count)
+    count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
+    await purge_messages_by_type(event, ["url"], count, "رابط")
 
-@client.on(events.NewMessage(pattern=r"^(مسح التوجيه|مسح توجيه) (\d+)$"))
+@client.on(events.NewMessage(pattern=r"^(مسح التوجيه|مسح توجيه)(?: (\d+))?$"))
 async def purge_forwards(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
-    count = int(event.pattern_match.group(2))
-    await purge_messages_by_type(event, ["forward"], count)
+    count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
+    await purge_messages_by_type(event, ["forward"], count, "رسالة موجهة")
 
-
-# --- الأوامر القديمة التي تعمل بشكل جيد ---
+# --- الأوامر الأساسية (تبقى كما هي) ---
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
 async def delete_messages_by_count(event):
     user_rank = await get_user_rank(event.sender_id, event)
     if user_rank < Ranks.GROUP_ADMIN: return
     count = int(event.pattern_match.group(1))
-    # هذا الأمر يحذف كل أنواع الرسائل، لذلك لا نستخدم الفلترة
-    await purge_messages_by_type(event, ["text", "photo", "video", "sticker", "gif", "url", "forward", "long_text"], count)
-
+    all_types = ["text", "photo", "video", "sticker", "gif", "url", "forward", "long_text"]
+    await purge_messages_by_type(event, all_types, count, "رسالة")
 
 @client.on(events.NewMessage(pattern=r"^مسح$"))
 async def delete_messages_by_reply(event):
