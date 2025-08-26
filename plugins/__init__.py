@@ -31,4 +31,5 @@ ALL_MODULES = [
     "plugins.owner",
     "plugins.media_search",
     "plugins.admin_menus",
+    "plugins.settings",
 ]
