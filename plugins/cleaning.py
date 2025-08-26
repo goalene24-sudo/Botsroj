@@ -4,13 +4,12 @@ import asyncio
 from telethon import events
 from bot import client
 from plugins.utils import get_user_rank, Ranks
-import traceback # سنحتاجه للتشخيص
+import traceback
+# استدعاء دالة منخفضة المستوى للتجربة
+from telethon.tl.functions.channels import DeleteMessagesRequest
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
 async def delete_messages_by_count(event):
-    """
-    Handler for .مسح <عدد> - وضع التشخيص
-    """
     if not event.is_group:
         await event.reply("⚠️ هذا الأمر يعمل في المجموعات فقط.")
         return
@@ -31,6 +30,7 @@ async def delete_messages_by_count(event):
 
     try:
         ids_to_delete = []
+        # لا زلنا نحتاج لقراءة السجل، وهو مكان حدوث الخطأ
         async for message in client.iter_messages(
             event.chat_id,
             limit=count_to_delete,
@@ -39,36 +39,33 @@ async def delete_messages_by_count(event):
             ids_to_delete.append(message.id)
         ids_to_delete.append(event.message.id)
         
-        # طباعة معلومات التشخيص في سجلات البوت
-        print(f"[DIAGNOSTIC] Chat: {event.chat_id}, User: {event.sender_id}, Attempting to delete IDs: {ids_to_delete}")
+        if not ids_to_delete:
+            return
 
-        await client.delete_messages(event.chat_id, ids_to_delete)
+        # --- محاولة استخدام دالة حذف مختلفة ---
+        await client(DeleteMessagesRequest(
+            channel=await event.get_input_chat(),
+            id=ids_to_delete
+        ))
+        # ------------------------------------
 
         confirmation_msg = await event.respond(f"✅ **تم حذف {len(ids_to_delete)} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
 
     except Exception as e:
-        # --- بداية كود التشخيص الجديد ---
-        # طباعة الخطأ الكامل في السجلات
         traceback.print_exc()
-        
-        # إرسال الخطأ المفصل للمستخدم في المجموعة
         error_name = type(e).__name__
         error_description = str(e)
-        
         await event.reply(
             f"**❗ تم العثور على خطأ فني ❗**\n\n"
             f"**نوع الخطأ:**\n`{error_name}`\n\n"
-            f"**الوصف التقني:**\n`{error_description}`\n\n"
-            "**يرجى إرسال لقطة شاشة لهذه الرسالة للمتابعة.**"
+            f"**الوصف التقني:**\n`{error_description}`"
         )
-        # --- نهاية كود التشخيص الجديد ---
 
 
 @client.on(events.NewMessage(pattern=r"^مسح$"))
 async def delete_messages_by_reply(event):
-    # This function is working, so no changes are needed here.
     if not event.is_group:
         await event.reply("⚠️ هذا الأمر يعمل في المجموعات فقط.")
         return
@@ -84,7 +81,12 @@ async def delete_messages_by_reply(event):
         end_msg_id = event.message.id
         message_ids_to_delete = [i for i in range(start_msg_id, end_msg_id + 1)]
         count = len(message_ids_to_delete)
-        await client.delete_messages(event.chat_id, message_ids_to_delete)
+        
+        await client(DeleteMessagesRequest(
+            channel=await event.get_input_chat(),
+            id=message_ids_to_delete
+        ))
+
         confirmation_msg = await event.respond(f"✅ **تم حذف {count} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
