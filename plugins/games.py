@@ -5,9 +5,9 @@ import time
 from datetime import timedelta
 from telethon import events, Button
 from bot import client
-from .utils import check_activation, add_points, RPS_GAMES, XO_GAMES, build_xo_keyboard, check_xo_winner, is_admin, db, save_db
+from .utils import check_activation, add_points, RPS_GAMES, XO_GAMES, build_xo_keyboard, check_xo_winner, is_admin, db, save_db, is_command_enabled
 from .quiz_data import QUIZ_QUESTIONS
-from .millionaire import start_game as start_millionaire_game # <-- (جديد) استيراد اللعبة
+from .millionaire import start_game as start_millionaire_game
 
 # --- متغيرات خاصة بالألعاب ---
 MAHIBES_GAMES = {}
@@ -21,6 +21,9 @@ LUCK_BOX_MESSAGES = [
 @client.on(events.NewMessage(pattern="^صندوق الحظ$"))
 async def luck_box_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     chat_id, user_id = event.chat_id, event.sender_id
     chat_id_str, user_id_str = str(chat_id), str(user_id)
     COOLDOWN = 10 * 60 * 60
@@ -56,6 +59,9 @@ async def luck_box_handler(event):
 @client.on(events.NewMessage(pattern="^حظي$"))
 async def slot_machine_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     emojis = ["🍓", "🍉", "🍇", "🍌", "🍋", "🍒", "🏆"]
     a, b, c = random.choice(emojis), random.choice(emojis), random.choice(emojis)
     slot_msg = await event.reply("**جاري سحب الحظ... 🎰**")
@@ -73,6 +79,9 @@ async def slot_machine_handler(event):
 @client.on(events.NewMessage(pattern="^xo$"))
 async def xo_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**يمعود رپلَي على واحد حتى تلعبون!**")
     player1, player2 = await event.get_sender(), await reply.get_sender()
@@ -86,6 +95,9 @@ async def xo_game_handler(event):
 @client.on(events.NewMessage(pattern="^حجره ورقه مقص$"))
 async def rps_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**رپلَي على واحد حتى تتحده!**")
     player1, player2 = await event.get_sender(), await reply.get_sender()
@@ -98,6 +110,9 @@ async def rps_game_handler(event):
 @client.on(events.NewMessage(pattern="^كويز$"))
 async def start_quiz_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     question_data = random.choice(QUIZ_QUESTIONS)
     question, options, correct_answer = question_data["question"], question_data["options"].copy(), question_data["answer"]
     random.shuffle(options)
@@ -108,6 +123,9 @@ async def start_quiz_handler(event):
 @client.on(events.NewMessage(pattern="^محيبس$"))
 async def start_mahbis_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     chat_id = event.chat_id
     if chat_id in MAHIBES_GAMES:
         return await event.reply("**اكو لعبة محيبس بعدها شغالة!**")
@@ -132,8 +150,10 @@ async def start_mahbis_game_handler(event):
         del MAHIBES_GAMES[chat_id]
         await event.respond("**انتهى الوقت! ⏰ محد لزم المحيبس.**")
 
-# --- (جديد) أمر بدء لعبة من سيربح المليون ---
 @client.on(events.NewMessage(pattern="^من سيربح المليون$"))
 async def millionaire_start_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     await start_millionaire_game(event)
