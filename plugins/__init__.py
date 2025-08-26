@@ -33,4 +33,5 @@ ALL_MODULES = [
     "plugins.media_search",
     "plugins.admin_menus",
     "plugins.settings",
+    "plugins.diag_test",
 ]
