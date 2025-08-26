@@ -9,7 +9,7 @@ import config
 from .utils import (
     db, save_db, check_activation,
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS, add_points,
-    FLOOD_TRACKER, get_user_rank, Ranks
+    FLOOD_TRACKER, get_user_rank, Ranks, is_command_enabled
 )
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
@@ -55,82 +55,82 @@ async def general_message_handler(event):
     all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر", "الردود", "ايدي", "id", "اضف رد", "حذف رد", "تفعيل", "ايقاف", "تحذير", "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي"] + service_commands + ["حللني", "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل"]
     is_command = any(event.text.startswith(cmd) for cmd in all_commands) or event.text.startswith("اذان")
 
-    if is_command:
-        return
-
     # --- (تم التعديل) استخدام نظام الرتب الجديد ---
     rank_int = await get_user_rank(event.sender_id, event)
     is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
 
-    # النظام الذكي لاحتساب النقاط
-    if "users" not in db.get(chat_id_str, {}): db[chat_id_str]["users"] = {}
-    if user_id_str not in db[chat_id_str]["users"]:
-        join_date = datetime.now().strftime("%Y-%m-%d")
-        db[chat_id_str]["users"][user_id_str] = {"msg_count": 0, "points": 0, "join_date": join_date, "sahaqat": 0}
-    
-    if "sahaqat" not in db[chat_id_str]["users"][user_id_str]:
-        db[chat_id_str]["users"][user_id_str]["sahaqat"] = 0
+    # لا تقم بحساب النقاط أو الردود إذا كانت الرسالة أمراً
+    if not is_command:
+        # النظام الذكي لاحتساب النقاط
+        if "users" not in db.get(chat_id_str, {}): db[chat_id_str]["users"] = {}
+        if user_id_str not in db[chat_id_str]["users"]:
+            join_date = datetime.now().strftime("%Y-%m-%d")
+            db[chat_id_str]["users"][user_id_str] = {"msg_count": 0, "points": 0, "join_date": join_date, "sahaqat": 0}
+        
+        if "sahaqat" not in db[chat_id_str]["users"][user_id_str]:
+            db[chat_id_str]["users"][user_id_str]["sahaqat"] = 0
 
-    db[chat_id_str]["users"][user_id_str]["msg_count"] = db[chat_id_str]["users"][user_id_str].get("msg_count", 0) + 1
-    db[chat_id_str]["total_msgs"] = db.get(chat_id_str, {}).get("total_msgs", 0) + 1
-    
-    points_multiplier = 1
-    user_data = db[chat_id_str]["users"][user_id_str]
-    inventory = user_data.get("inventory", {})
-    multiplier_item = inventory.get("مضاعف نقاط")
+        db[chat_id_str]["users"][user_id_str]["msg_count"] = db[chat_id_str]["users"][user_id_str].get("msg_count", 0) + 1
+        db[chat_id_str]["total_msgs"] = db.get(chat_id_str, {}).get("total_msgs", 0) + 1
+        
+        points_multiplier = 1
+        user_data = db[chat_id_str]["users"][user_id_str]
+        inventory = user_data.get("inventory", {})
+        multiplier_item = inventory.get("مضاعف نقاط")
 
-    if multiplier_item:
-        purchase_time = multiplier_item.get("purchase_time", 0)
-        duration_days = multiplier_item.get("duration_days", 0)
-        duration_seconds = duration_days * 24 * 60 * 60
-        if time.time() - purchase_time < duration_seconds:
-            points_multiplier = 2
-    
-    points_to_add = 0
-    message_length = len(event.text)
-    
-    if message_length >= 30: points_to_add += 3
-    elif message_length >= 4: points_to_add += 1
-    
-    if event.is_reply: points_to_add += 2
+        if multiplier_item:
+            purchase_time = multiplier_item.get("purchase_time", 0)
+            duration_days = multiplier_item.get("duration_days", 0)
+            duration_seconds = duration_days * 24 * 60 * 60
+            if time.time() - purchase_time < duration_seconds:
+                points_multiplier = 2
+        
+        points_to_add = 0
+        message_length = len(event.text)
+        
+        if message_length >= 30: points_to_add += 3
+        elif message_length >= 4: points_to_add += 1
+        
+        if event.is_reply: points_to_add += 2
 
-    final_points_to_add = points_to_add * points_multiplier
-    if final_points_to_add > 0:
-        add_points(event.chat_id, event.sender_id, final_points_to_add)
-    
-    save_db(db)
-    
-    # --- (تم التعديل) نظام الردود التلقائية ليتوافق مع الرتب الجديدة ---
-    rank_map_to_str = {
-        Ranks.DEVELOPER: "developer",
-        Ranks.OWNER: "developer", 
-        Ranks.CREATOR: "group_admin",
-        Ranks.BOT_ADMIN: "bot_admin",
-        Ranks.GROUP_ADMIN: "group_admin",
-        Ranks.MEMBER: "member"
-    }
-    rank_str = rank_map_to_str.get(rank_int, "member")
+        final_points_to_add = points_to_add * points_multiplier
+        if final_points_to_add > 0:
+            add_points(event.chat_id, event.sender_id, final_points_to_add)
+        
+        save_db(db)
+        
+        # --- (تم التعديل) نظام الردود التلقائية ليتوافق مع الرتب والإعدادات الجديدة ---
+        if is_command_enabled(event.chat_id, "public_replies_enabled"):
+            rank_map_to_str = {
+                Ranks.DEVELOPER: "developer",
+                Ranks.OWNER: "developer", 
+                Ranks.CREATOR: "group_admin",
+                Ranks.BOT_ADMIN: "bot_admin",
+                Ranks.GROUP_ADMIN: "group_admin",
+                Ranks.MEMBER: "member"
+            }
+            rank_str = rank_map_to_str.get(rank_int, "member")
 
-    if not event.is_reply:
-        if event.text == "سروج":
-            if rank_str == "developer": reply = db.get(chat_id_str, {}).get("dev_reply", "أمرني مطوري الغالي 👑")
-            else: reply = db.get(chat_id_str, {}).get("call_reply", "عيوني! بس مو مثل عيون المطور 😉")
-            await event.reply(f"**{reply}**")
-            return
+            if not event.is_reply:
+                if event.text == "سروج":
+                    if rank_str == "developer": reply = db.get(chat_id_str, {}).get("dev_reply", "أمرني مطوري الغالي 👑")
+                    else: reply = db.get(chat_id_str, {}).get("call_reply", "عيوني! بس مو مثل عيون المطور 😉")
+                    await event.reply(f"**{reply}**")
+                    return
 
-        custom_replies = db.get(chat_id_str, {}).get("custom_replies", {})
-        if event.text in custom_replies:
-            reply_text = custom_replies[event.text]
-            if rank_str == "developer": final_reply = f"**لك يا مطوري 🫡:**\n**{reply_text}**"
-            else: final_reply = f"**{reply_text}**"
-            await event.reply(final_reply)
-        elif event.text in DEFAULT_REPLIES:
-            reply_options_for_trigger = DEFAULT_REPLIES[event.text]
-            replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
-            if replies_for_rank:
-                chosen_reply = random.choice(replies_for_rank)
-                final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
-                await event.reply(f'**{final_reply}**')
+                custom_replies = db.get(chat_id_str, {}).get("custom_replies", {})
+                if event.text in custom_replies:
+                    reply_text = custom_replies[event.text]
+                    if rank_str == "developer": final_reply = f"**لك يا مطوري 🫡:**\n**{reply_text}**"
+                    else: final_reply = f"**{reply_text}**"
+                    await event.reply(final_reply)
+                elif event.text in DEFAULT_REPLIES:
+                    reply_options_for_trigger = DEFAULT_REPLIES[event.text]
+                    replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
+                    if replies_for_rank:
+                        chosen_reply = random.choice(replies_for_rank)
+                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
+                        await event.reply(f'**{final_reply}**')
 
     if is_admin_or_higher:
         return
