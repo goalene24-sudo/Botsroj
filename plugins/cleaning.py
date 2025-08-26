@@ -3,7 +3,8 @@
 import asyncio
 from telethon import events
 from bot import client
-from plugins.utils import get_user_rank, RANK_ADMIN
+# تم تصحيح طريقة الاستدعاء هنا
+from plugins.utils import get_user_rank, Ranks
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
 async def delete_messages_by_count(event):
@@ -16,9 +17,10 @@ async def delete_messages_by_count(event):
         return
 
     # --- فحص الصلاحيات ---
-    user_rank = await get_user_rank(event.chat_id, event.sender_id)
-    if user_rank < RANK_ADMIN:
-        await event.reply("🚫 عذراً، هذا الأمر متاح للأدمنية فما فوق.")
+    # تم تصحيح طريقة المقارنة واستدعاء الدالة
+    user_rank = await get_user_rank(event.sender_id, event)
+    if user_rank < Ranks.BOT_ADMIN:
+        await event.reply("🚫 عذراً، هذا الأمر متاح لأدمنية البوت فما فوق.")
         return
 
     try:
@@ -32,7 +34,6 @@ async def delete_messages_by_count(event):
 
     try:
         # جمع أرقام الرسائل المراد حذفها
-        # سيتم حذف رسالة الأمر + العدد المحدد من الرسائل التي تسبقها
         messages_to_delete = []
         async for msg in client.iter_messages(event.chat_id, limit=count_to_delete, max_id=event.message.id):
             messages_to_delete.append(msg.id)
@@ -49,7 +50,6 @@ async def delete_messages_by_count(event):
         await confirmation_msg.delete()
 
     except Exception as e:
-        # في حال حدوث خطأ (مثل عدم وجود صلاحية الحذف لدى البوت)
         print(f"Error in cleaning module (by_count): {e}")
         await event.reply("⚠️ حدث خطأ. تأكد من أنني أمتلك صلاحية حذف الرسائل في هذه المجموعة.")
 
@@ -69,9 +69,10 @@ async def delete_messages_by_reply(event):
         return
 
     # --- فحص الصلاحيات ---
-    user_rank = await get_user_rank(event.chat_id, event.sender_id)
-    if user_rank < RANK_ADMIN:
-        await event.reply("🚫 عذراً، هذا الأمر متاح للأدمنية فما فوق.")
+    # تم تصحيح طريقة المقارنة واستدعاء الدالة
+    user_rank = await get_user_rank(event.sender_id, event)
+    if user_rank < Ranks.BOT_ADMIN:
+        await event.reply("🚫 عذراً، هذا الأمر متاح لأدمنية البوت فما فوق.")
         return
 
     try:
