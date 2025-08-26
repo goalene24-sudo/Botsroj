@@ -37,11 +37,27 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
+    # --- (جديد) نظام تخزين الرسائل للمسح بالعدد ---
+    # يتم حفظ رقم كل رسالة جديدة لكي نتمكن من العودة إليها لاحقاً
+    if event.id:
+        if chat_id_str not in db: db[chat_id_str] = {}
+        if "message_history" not in db[chat_id_str]:
+            db[chat_id_str]["message_history"] = []
+
+        db[chat_id_str]["message_history"].append({"msg_id": event.id})
+        
+        # نحافظ على حجم السجل بحد أقصى 100 رسالة لحماية أداء البوت
+        if len(db[chat_id_str]["message_history"]) > 100:
+            db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
+        
+        # يجب الحفظ بعد كل رسالة لضمان عدم فقدان أي شيء
+        save_db(db)
+    # --- نهاية نظام تخزين الرسائل ---
+
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    # 3600 ثانية = 1 ساعة
-    if now - last_dhikr_time > 3600:
+    if now - last_dhikr_time > 3600: # 3600 ثانية = 1 ساعة
         dhikr_message = random.choice(DHIKR_LIST)
         await client.send_message(event.chat_id, dhikr_message)
         if chat_id_str not in db: db[chat_id_str] = {}
@@ -55,13 +71,10 @@ async def general_message_handler(event):
     all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر", "الردود", "ايدي", "id", "اضف رد", "حذف رد", "تفعيل", "ايقاف", "تحذير", "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي"] + service_commands + ["حللني", "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل"]
     is_command = any(event.text.startswith(cmd) for cmd in all_commands) or event.text.startswith("اذان")
 
-    # --- (تم التعديل) استخدام نظام الرتب الجديد ---
     rank_int = await get_user_rank(event.sender_id, event)
     is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
 
-    # لا تقم بحساب النقاط أو الردود إذا كانت الرسالة أمراً
     if not is_command:
-        # النظام الذكي لاحتساب النقاط
         if "users" not in db.get(chat_id_str, {}): db[chat_id_str]["users"] = {}
         if user_id_str not in db[chat_id_str]["users"]:
             join_date = datetime.now().strftime("%Y-%m-%d")
@@ -99,15 +112,11 @@ async def general_message_handler(event):
         
         save_db(db)
         
-        # --- (تم التعديل) نظام الردود التلقائية ليتوافق مع الرتب والإعدادات الجديدة ---
         if is_command_enabled(event.chat_id, "public_replies_enabled"):
             rank_map_to_str = {
-                Ranks.DEVELOPER: "developer",
-                Ranks.OWNER: "developer", 
-                Ranks.CREATOR: "group_admin",
-                Ranks.BOT_ADMIN: "bot_admin",
-                Ranks.GROUP_ADMIN: "group_admin",
-                Ranks.MEMBER: "member"
+                Ranks.DEVELOPER: "developer", Ranks.OWNER: "developer", 
+                Ranks.CREATOR: "group_admin", Ranks.BOT_ADMIN: "bot_admin",
+                Ranks.GROUP_ADMIN: "group_admin", Ranks.MEMBER: "member"
             }
             rank_str = rank_map_to_str.get(rank_int, "member")
 
@@ -132,8 +141,7 @@ async def general_message_handler(event):
                         final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
                         await event.reply(f'**{final_reply}**')
 
-    if is_admin_or_higher:
-        return
+    if is_admin_or_higher: return
     
     filtered_words = db.get(chat_id_str, {}).get("filtered_words", [])
     if filtered_words and any(word.lower() in event.text.lower() for word in filtered_words):
