@@ -5,7 +5,7 @@ from telethon import events
 from telethon.tl.functions.users import GetFullUserRequest
 from bot import client
 import config
-from .utils import check_activation, db
+from .utils import check_activation, db, is_command_enabled
 
 RANDOM_HEADERS = [
     "شــوف الحــلو؟ 🧐", "تــعال اشــوفك 🫣", "بــاوع الجــمال 🫠",
@@ -19,6 +19,8 @@ RANDOM_TAFA3UL = [
 @client.on(events.NewMessage(pattern=r"^(ايدي|id)(?: |$)(.*)"))
 async def id_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    if not is_command_enabled(event.chat_id, "id_enabled"):
+        return await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
     
     target_user = None
     replied_msg = await event.get_reply_message()
