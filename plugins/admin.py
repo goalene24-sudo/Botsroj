@@ -196,16 +196,26 @@ async def tag_all_handler(event):
     except Exception as e:
         await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`**")
 
-# --- (جديد) أوامر إدارة المنشئين ---
-@client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين)$"))
+@client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين|رفع مالك)$"))
 async def creator_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     action = event.raw_text
     chat_id_str = str(event.chat_id)
-    
     actor_rank = await get_user_rank(event.sender_id, event)
     
+    # --- (جديد) معالجة أمر "رفع مالك" ---
+    if action == "رفع مالك":
+        if actor_rank < Ranks.OWNER:
+            return await event.reply("**فقط المالك الفعلي للمجموعة يستطيع استخدام هذا الأمر.**")
+
+        reply = await event.get_reply_message()
+        if not reply:
+            return await event.reply(f"**✅ أهلاً بك يا مالك المجموعة!**\n**البوت يتعرف عليك بصفتك المالك الأعلى لهذه المجموعة.**")
+        
+        # عند الرد، يقوم المالك برفع العضو إلى رتبة "منشئ"
+        action = "رفع منشئ"
+
     if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
         if actor_rank < Ranks.OWNER:
             return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
@@ -255,7 +265,7 @@ async def creator_admin_handler(event):
         for user_id in creator_ids:
             try:
                 user = await client.get_entity(user_id)
-                list_text += f"- [{user.first_name}](tg://user?id={user.id})\n"
+                list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
             except Exception:
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
