@@ -7,7 +7,7 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
-# --- (جديد) تعريف مستويات الرتب ---
+# --- تعريف مستويات الرتب ---
 class Ranks:
     MEMBER = 0
     GROUP_ADMIN = 1
@@ -135,6 +135,13 @@ LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحرك
 PERCENT_COMMANDS = [ "نسبة الحب", "نسبة الكره", "نسبة الجمال", "نسبة الغباء", "نسبة الخيانة", "نسبة الشجاعة", "نسبة الذكاء" ]
 GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "xo", "الترتيب", "زواج", "كويز", "تخمين", "سمايلات", "سمايل", "سجلي", "المختلف", "اعلام الدول", "عواصم الدول", "رياضيات", "العكس", "اكمل المثل", "محيبس"]
 ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
+
+def is_command_enabled(chat_id, command_key):
+    """(جديد) دالة للتحقق إذا كانت فئة الأوامر مفعلة."""
+    chat_id_str = str(chat_id)
+    settings = db.get(chat_id_str, {}).get("command_settings", {})
+    # الأوامر مفعلة بشكل افتراضي
+    return settings.get(command_key, True)
 
 async def is_admin(chat_id, user_id):
     if chat_id < 0:
