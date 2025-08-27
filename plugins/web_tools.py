@@ -2,6 +2,8 @@
 import httpx
 import wikipedia
 import random
+# (تمت الإضافة) سنحتاج هذه المكتبة للتعامل مع أخطاء JSON
+import json
 from telethon import events
 from bot import client
 from .utils import check_activation
@@ -23,13 +25,23 @@ async def weather_handler(event):
     city = event.pattern_match.group(1)
     if not city:
         return await event.reply("**وين الطقس؟ لازم تكتب اسم المدينة.\nمثال: `طقس بغداد`**")
+    
     api_url = f"https://wttr.in/{city.strip()}?format=j1"
     headers = {"Accept-Language": "ar"}
+    
     try:
         async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(api_url, headers=headers)
+            response = await http_client.get(api_url, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
+        
+        # --- (تم التعديل) إضافة معالجة ذكية للخطأ ---
+        # محاولة تحليل البيانات، إذا فشلت فهذا يعني أن المدينة غير موجودة
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            return await event.reply(f"**عذراً، لم أتمكن من العثور على مدينة بهذا الاسم: '{city}'.\n\n💡 ملاحظة: جرب كتابة الاسم باللغة الإنجليزية.**")
+        # --- نهاية التعديل ---
+
         current_condition = data['current_condition'][0]
         nearest_area = data['nearest_area'][0]
         city_name = nearest_area['areaName'][0]['value']
@@ -44,10 +56,12 @@ async def weather_handler(event):
             f"**سرعة الرياح:** {wind_speed_kmph} كم/ساعة"
         )
         await event.reply(weather_text)
-    except httpx.HTTPError:
+        
+    except httpx.HTTPStatusError:
         await event.reply(f"**ما لگيت مدينة بهذا الاسم '{city}'، تأكد من كتابتها صح.**")
     except Exception as e:
-        await event.reply(f"**صارت مشكلة وما گدرت أجيب حالة الطقس.\n`{e}`**")
+        await event.reply(f"**عذراً، خدمة الطقس لا تستجيب حالياً. يرجى المحاولة مرة أخرى لاحقاً.**\n`{e}`")
+
 
 @client.on(events.NewMessage(pattern=r"^ترجم(?: ([a-zA-Z]{2,5}))?(?: (.*))?s*$"))
 async def translate_handler(event):
