@@ -6,7 +6,6 @@ from telethon import events
 from bot import client
 from .utils import check_activation
 from googletrans import Translator, LANGUAGES
-from urllib.parse import quote_plus
 # تم حذف BeautifulSoup لأنه لم نعد بحاجة إليه
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
@@ -159,9 +158,13 @@ async def define_handler(event):
     try:
         api_url = "https://ar.wiktionary.org/w/api.php"
         params = {
-            "action": "query", "prop": "extracts", "exintro": True,
-            "titles": word, "format": "json", "redirects": 1,
-            "explaintext": True,  # أهم تعديل: طلب النص الصريح بدلاً من HTML
+            "action": "query",
+            "prop": "extracts",
+            # "exintro": True, # --- (تم التعديل) تم حذف هذا السطر ليقرأ الصفحة كاملة ---
+            "titles": word,
+            "format": "json",
+            "redirects": 1,
+            "explaintext": True,
         }
         headers = {'User-Agent': 'SeroojBot/1.0'}
 
@@ -176,17 +179,15 @@ async def define_handler(event):
 
         page_id = next(iter(pages))
         
-        # التحقق إذا كانت الصفحة موجودة
         if page_id == "-1":
             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
             
         extract = pages[page_id].get('extract')
 
-        # التحقق إذا كان المحتوى فارغاً أو رسالة خطأ
         if not extract or "صفحة توضيح" in extract or "لا توجد صفحة" in extract:
             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
 
-        # تحديد طول التعريف
+        # تحديد طول التعريف لمنع الرسائل الطويلة جداً
         if len(extract) > 1500:
             extract = extract[:1500] + "..."
 
