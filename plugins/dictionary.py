@@ -4,7 +4,6 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import db, save_db, get_user_rank, Ranks, check_activation
-# --- (تم التصحيح) إضافة نقطة للمسار الصحيح ---
 from .slang_data import IRAQI_SLANG
 
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
@@ -47,12 +46,14 @@ async def add_definition_handler(event):
         async with client.conversation(event.chat_id, timeout=180) as conv:
             await conv.send_message("**تمام، لنضف تعريفاً جديداً للقاموس.**\n\n**أرسل الآن الكلمة التي تريد تعريفها:**")
             
-            word_msg = await conv.get_response(from_users=event.sender_id)
+            # --- (تم التصحيح) ---
+            word_msg = await conv.get_response()
             word = word_msg.text.strip().lower()
 
             await conv.send_message(f"**حسناً، الكلمة هي `{word}`.**\n\n**أرسل الآن التعريف الكامل لهذه الكلمة:**")
             
-            definition_msg = await conv.get_response(from_users=event.sender_id)
+            # --- (تم التصحيح) ---
+            definition_msg = await conv.get_response()
             definition = definition_msg.text.strip()
             
             # الحفظ في قاعدة البيانات
