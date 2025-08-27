@@ -7,7 +7,7 @@ from bot import client
 from .utils import check_activation
 from googletrans import Translator, LANGUAGES
 from urllib.parse import quote_plus
-from bs4 import BeautifulSoup
+# تم حذف BeautifulSoup لأنه لم نعد بحاجة إليه
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
 
@@ -142,73 +142,61 @@ async def calculate_handler(event):
 
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def define_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): return
+    if not await check_activation(event.chat_id): return
 
     word = event.pattern_match.group(1).strip()
     if not word:
         return await event.reply("**شنو الكلمة اللي تريد تعرف معناها؟**\n**مثال: `معنى استكان`**")
 
-    if word in IRAQI_SLANG:
-        definition = IRAQI_SLANG[word]
+    # الخطوة 1: البحث في القاموس المحلي أولاً
+    if word.lower() in IRAQI_SLANG:
+        definition = IRAQI_SLANG[word.lower()]
         return await event.reply(f"**📖 | معنى كلمة: {word} (لهجة عراقية)**\n\n{definition}")
 
-    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}'**")
+    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}' في ويكاموس...**")
     
+    # الخطوة 2: البحث في ويكاموس باستخدام الواجهة البرمجية API
     try:
         api_url = "https://ar.wiktionary.org/w/api.php"
         params = {
             "action": "query", "prop": "extracts", "exintro": True,
-            "titles": word, "format": "json", "redirects": 1
+            "titles": word, "format": "json", "redirects": 1,
+            "explaintext": True,  # أهم تعديل: طلب النص الصريح بدلاً من HTML
         }
         headers = {'User-Agent': 'SeroojBot/1.0'}
 
         async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(api_url, params=params, headers=headers)
+            response = await http_client.get(api_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
         
         pages = data.get('query', {}).get('pages', {})
+        if not pages:
+             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
+
         page_id = next(iter(pages))
         
+        # التحقق إذا كانت الصفحة موجودة
         if page_id == "-1":
             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
             
-        extract_html = pages[page_id].get('extract')
-        if not extract_html:
+        extract = pages[page_id].get('extract')
+
+        # التحقق إذا كان المحتوى فارغاً أو رسالة خطأ
+        if not extract or "صفحة توضيح" in extract or "لا توجد صفحة" in extract:
             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
 
-        soup = BeautifulSoup(extract_html, 'html.parser')
-        definition_text = soup.get_text(strip=True)
+        # تحديد طول التعريف
+        if len(extract) > 1500:
+            extract = extract[:1500] + "..."
 
-        if "هل تقصد" in definition_text or len(definition_text.split()) < 4:
-            first_link = soup.find('a')
-            if first_link and first_link.has_attr('title'):
-                new_word = first_link['title']
-                await loading_msg.edit(f"**كلمة '{word}' لها عدة معانٍ. جاري جلب التعريف الأدق لـ '{new_word}'...**")
-                
-                params["titles"] = new_word
-                async with httpx.AsyncClient() as http_client:
-                    response = await http_client.get(api_url, params=params, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                pages = data.get('query', {}).get('pages', {})
-                page_id = next(iter(pages))
-                extract_html = pages[page_id].get('extract')
-
-                if not extract_html:
-                    return await loading_msg.edit(f"**عذراً، لم أتمكن من جلب التعريف المحدد.**")
-                
-                soup = BeautifulSoup(extract_html, 'html.parser')
-                definition_text = soup.get_text(separator='\n', strip=True)
-
-        if len(definition_text) > 1500:
-            definition_text = definition_text[:1500] + "..."
-
-        result_text = f"**📖 | معنى كلمة: {word} (من ويكاموس)**\n\n{definition_text}"
+        result_text = f"**📖 | معنى كلمة: {pages[page_id].get('title', word)} (من ويكاموس)**\n\n{extract}"
         await loading_msg.edit(result_text)
 
     except Exception as e:
-        await loading_msg.edit(f"**صارت مشكلة وما گدرت أجيب التعريف.\n`{e}`**")
+        print(f"Error in define_handler: {e}")
+        await loading_msg.edit(f"**صارت مشكلة وما گدرت أجيب التعريف.\nتأكد من اتصالك بالانترنت.**")
+
 
 @client.on(events.NewMessage(pattern=r"^زخرف (.+)"))
 async def zakhrafa_handler(event):
@@ -220,13 +208,11 @@ async def zakhrafa_handler(event):
 
     decorated_results = [f"**🎨 | زخرفة النص:** `{text_to_decorate}`\n"]
     
-    # 1. Algorithmic Style (Stretching/Tatweel)
     words = text_to_decorate.split()
     stretched_words = ["ـ".join(list(word)) for word in words]
     stretched_text = " ".join(stretched_words)
     decorated_results.append(f"▫️ `{stretched_text}`")
 
-    # 2. Styles from the data file
     for style in ZAKHRAFA_STYLES:
         decorated_text = ""
         style_type = style.get("type")
