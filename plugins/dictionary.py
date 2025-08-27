@@ -4,8 +4,8 @@ import asyncio
 from telethon import events
 from bot import client
 from .utils import db, save_db, get_user_rank, Ranks, check_activation
-# سنقوم باستيراد قاموس اللهجة العراقية لدمجه في البحث
-from slang_data import IRAQI_SLANG
+# --- (تم التصحيح) إضافة نقطة للمسار الصحيح ---
+from .slang_data import IRAQI_SLANG
 
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def combined_define_handler(event):
