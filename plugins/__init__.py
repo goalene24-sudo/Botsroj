@@ -9,6 +9,7 @@ ALL_MODULES = [
     "plugins.cleaning",
     "plugins.admin",
     "plugins.aliases",
+    "plugins.dictionary",
     "plugins.fun",
     "plugins.games",
     "plugins.fast_games",
