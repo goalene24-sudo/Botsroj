@@ -2,10 +2,7 @@
 from datetime import datetime, timedelta
 import random
 import time
-# --- (المسار الصحيح للإصدارات الحديثة) ---
 from telethon import events
-from telethon.events import ContinuePropagation
-# -----------------------------------------
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
@@ -40,18 +37,18 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
-    # --- محرك ترجمة الأوامر المضافة (الاختصارات) ---
+    # --- (جديد) محرك ترجمة الأوامر المضافة (الاختصارات) ---
     if event.text:
         aliases = db.get(chat_id_str, {}).get("command_aliases", {})
         command_candidate = event.text.strip()
 
         if command_candidate in aliases:
             original_command = aliases[command_candidate]
+            # نستبدل نص الرسالة في الذاكرة لتتعرف عليها كل الأوامر
             event.text = original_command
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
-            raise ContinuePropagation
     # --- نهاية محرك الترجمة ---
 
     # --- نظام تخزين الرسائل مع الأنواع ---
@@ -164,7 +161,7 @@ async def general_message_handler(event):
                     replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
                     if replies_for_rank:
                         chosen_reply = random.choice(replies_for_rank)
-                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender.id})")
+                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
                         await event.reply(f'**{final_reply}**')
 
     if not is_admin_or_higher:
