@@ -2,14 +2,10 @@
 import httpx
 import wikipedia
 import random
-import asyncio
 from telethon import events
-# (تمت الإضافة) سنحتاج هذا لمعالجة الأخطاء
-from telethon.errors.rpcerrorlist import YouBlockedUserError
 from bot import client
 from .utils import check_activation
 from googletrans import Translator, LANGUAGES
-from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
 
 # --- قواميس مساعدة ---
@@ -133,49 +129,6 @@ async def calculate_handler(event):
         await loading_msg.edit(f"**ما گدرت أتصل بخدمة الحسابات.\n`{e}`**")
     except Exception as e:
         await loading_msg.edit(f"**صارت مشكلة وما گدرت أحسب.\n`{e}`**")
-
-# --- (تم التعديل) النسخة النهائية لأمر "معنى" باستخدام بوت مساعد ---
-@client.on(events.NewMessage(pattern=r"^معنى (.+)"))
-async def define_handler(event):
-    if not await check_activation(event.chat_id): return
-
-    word = event.pattern_match.group(1).strip()
-    if not word:
-        return await event.reply("**شنو الكلمة اللي تريد تعرف معناها؟**\n**مثال: `معنى استكان`**")
-
-    # الخطوة 1: البحث في القاموس المحلي أولاً
-    if word.lower() in IRAQI_SLANG:
-        definition = IRAQI_SLANG[word.lower()]
-        return await event.reply(f"**📖 | معنى كلمة: {word} (لهجة عراقية)**\n\n{definition}")
-
-    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}'...**")
-    
-    # الخطوة 2: استخدام البوت المساعد @zzznambot
-    proxy_bot = "@zzznambot"
-    try:
-        async with client.conversation(proxy_bot, timeout=20) as conv:
-            # إرسال الكلمة للبوت المساعد
-            await conv.send_message(word)
-            
-            # انتظار الرد منه تحديداً (معرف البوت هو 2045033062)
-            response = await conv.get_response(from_users=2045033062)
-            
-            # التحقق إذا لم يجد البوت المساعد الكلمة
-            if "لا يوجد معنى" in response.text or "can't find that" in response.text:
-                await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}'.**")
-            else:
-                # نجح الأمر! نحذف رسالة التحميل ونرسل رده
-                await loading_msg.delete()
-                # نرسل رسالة البوت المساعد كما هي للحفاظ على التنسيق
-                await event.reply(response.message)
-                
-    except YouBlockedUserError:
-        await loading_msg.edit("**⚠️ | خطأ: يجب إلغاء حظر البوت المساعد @zzznambot لتتمكن من استخدام هذا الأمر.**")
-    except asyncio.TimeoutError:
-        await loading_msg.edit("**⌛️ | استغرق البوت المساعد وقتاً طويلاً للرد. يرجى المحاولة مرة أخرى.**")
-    except Exception as e:
-        print(f"Error in define_handler (proxy bot): {e}")
-        await loading_msg.edit("**حدث خطأ غير متوقع أثناء التواصل مع البوت المساعد.**")
 
 
 @client.on(events.NewMessage(pattern=r"^زخرف (.+)"))
