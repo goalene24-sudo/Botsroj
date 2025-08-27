@@ -2,9 +2,8 @@
 from datetime import datetime, timedelta
 import random
 import time
-from telethon import events
-# --- (تمت الإضافة) استدعاء الأداة الجديدة ---
-from telethon.events import ContinuePropagation
+# --- (تم التصحيح) تعديل مسار الاستدعاء ---
+from telethon import events, ContinuePropagation
 # -----------------------------------------
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
@@ -43,7 +42,6 @@ async def general_message_handler(event):
     # --- محرك ترجمة الأوامر المضافة (الاختصارات) ---
     if event.text:
         aliases = db.get(chat_id_str, {}).get("command_aliases", {})
-        # نأخذ النص كاملاً للتحقق من الأوامر التي قد تحتوي على مسافات
         command_candidate = event.text.strip()
 
         if command_candidate in aliases:
@@ -52,8 +50,6 @@ async def general_message_handler(event):
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
-            # --- (تمت الإضافة) السطر السحري ---
-            # هذا السطر يخبر البوت بإكمال البحث عن معالج للأمر المترجم
             raise ContinuePropagation
     # --- نهاية محرك الترجمة ---
 
@@ -197,7 +193,7 @@ async def general_message_handler(event):
             if len(FLOOD_TRACKER[chat_id_str][user_id_str]) > 5:
                 try:
                     await client.edit_permissions(event.chat_id, event.sender_id, send_messages=False, until_date=now + timedelta(minutes=1))
-                    await event.reply(f"**لزكت يمعود! [{event.sender.first_name}](tg://user?id={event.sender_id}) انلصمت لدقيقة بسبب التكرار.**")
+                    await event.reply(f"**لزكت يمعود! [{event.sender.first_name}](tg://user?id={event.sender.id}) انلصمت لدقيقة بسبب التكرار.**")
                     FLOOD_TRACKER[chat_id_str][user_id_str] = []
                 except Exception as e: print(f"خطأ في كتم التكرار: {e}")
                 return
