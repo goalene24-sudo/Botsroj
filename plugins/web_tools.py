@@ -6,7 +6,9 @@ from telethon import events
 from bot import client
 from .utils import check_activation
 from googletrans import Translator, LANGUAGES
-# تم حذف BeautifulSoup لأنه لم نعد بحاجة إليه
+from urllib.parse import quote
+# (تمت الإعادة) سنحتاج هذه المكتبة للمصدر الجديد
+from bs4 import BeautifulSoup
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
 
@@ -113,32 +115,27 @@ async def wiki_handler(event):
 @client.on(events.NewMessage(pattern=r"^احسب (.+)"))
 async def calculate_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-
     expression = event.pattern_match.group(1).strip()
     if not expression:
         return await event.reply("**شحسب؟ اكتب عملية حسابية ويه الأمر.**\n**مثال: `احسب 5 * 10`**")
-
     api_url = "http://api.mathjs.org/v4/"
     params = {"expr": expression}
-    
     loading_msg = await event.reply("🤔 **جاري الحساب...**")
-
     try:
         async with httpx.AsyncClient() as http_client:
             response = await http_client.get(api_url, params=params)
-        
         if response.status_code == 200:
             result = response.text
             await loading_msg.edit(f"**🔢 النتيجة: `{result}`**")
         else:
             error_message = response.text
             await loading_msg.edit(f"**❌ خطأ في العملية الحسابية:**\n`{error_message}`")
-
     except httpx.HTTPError as e:
         await loading_msg.edit(f"**ما گدرت أتصل بخدمة الحسابات.\n`{e}`**")
     except Exception as e:
         await loading_msg.edit(f"**صارت مشكلة وما گدرت أحسب.\n`{e}`**")
 
+# --- (تم التعديل) النسخة الجديدة بالكامل لأمر "معنى" ---
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def define_handler(event):
     if not await check_activation(event.chat_id): return
@@ -152,50 +149,44 @@ async def define_handler(event):
         definition = IRAQI_SLANG[word.lower()]
         return await event.reply(f"**📖 | معنى كلمة: {word} (لهجة عراقية)**\n\n{definition}")
 
-    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}' في ويكاموس...**")
+    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}' في قاموس المعاني...**")
     
-    # الخطوة 2: البحث في ويكاموس باستخدام الواجهة البرمجية API
+    # الخطوة 2: البحث في موقع المعاني (almaany.com)
     try:
-        api_url = "https://ar.wiktionary.org/w/api.php"
-        params = {
-            "action": "query",
-            "prop": "extracts",
-            # "exintro": True, # --- (تم التعديل) تم حذف هذا السطر ليقرأ الصفحة كاملة ---
-            "titles": word,
-            "format": "json",
-            "redirects": 1,
-            "explaintext": True,
+        # تجهيز الرابط بشكل آمن
+        query = quote(word)
+        url = f"https://www.almaany.com/ar/dict/ar-ar/{query}/"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        headers = {'User-Agent': 'SeroojBot/1.0'}
 
         async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(api_url, params=params, headers=headers, timeout=10)
+            response = await http_client.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        pages = data.get('query', {}).get('pages', {})
-        if not pages:
-             return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
-
-        page_id = next(iter(pages))
+        # البحث عن قسم النتائج الرئيسي
+        meaning_div = soup.find('div', class_='meaning')
         
-        if page_id == "-1":
-            return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
-            
-        extract = pages[page_id].get('extract')
+        if not meaning_div:
+            return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في قاموس المعاني.**")
 
-        if not extract or "صفحة توضيح" in extract or "لا توجد صفحة" in extract:
-            return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في ويكاموس.**")
+        # استخلاص النص وتنظيفه
+        definition = meaning_div.get_text(separator='\n', strip=True)
+        
+        # إزالة الأجزاء غير المرغوب فيها (مثل الإعلانات أو الأمثلة الطويلة)
+        if "Sponsored Links" in definition:
+            definition = definition.split("Sponsored Links")[0]
 
-        # تحديد طول التعريف لمنع الرسائل الطويلة جداً
-        if len(extract) > 1500:
-            extract = extract[:1500] + "..."
+        if len(definition) > 1500:
+            definition = definition[:1500] + "..."
 
-        result_text = f"**📖 | معنى كلمة: {pages[page_id].get('title', word)} (من ويكاموس)**\n\n{extract}"
+        result_text = f"**📖 | معنى كلمة: {word} (من قاموس المعاني)**\n\n{definition}"
         await loading_msg.edit(result_text)
 
     except Exception as e:
-        print(f"Error in define_handler: {e}")
+        print(f"Error in define_handler (almaany): {e}")
         await loading_msg.edit(f"**صارت مشكلة وما گدرت أجيب التعريف.\nتأكد من اتصالك بالانترنت.**")
 
 
