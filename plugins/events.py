@@ -2,8 +2,9 @@
 from datetime import datetime, timedelta
 import random
 import time
-# --- (تم التصحيح) تعديل مسار الاستدعاء ---
-from telethon import events, ContinuePropagation
+# --- (المسار الصحيح للإصدارات الحديثة) ---
+from telethon import events
+from telethon.events import ContinuePropagation
 # -----------------------------------------
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
@@ -163,7 +164,7 @@ async def general_message_handler(event):
                     replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
                     if replies_for_rank:
                         chosen_reply = random.choice(replies_for_rank)
-                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
+                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender.id})")
                         await event.reply(f'**{final_reply}**')
 
     if not is_admin_or_higher:
