@@ -21,26 +21,22 @@ async def add_alias_handler(event):
     
     try:
         async with client.conversation(event.sender_id, timeout=300) as conv:
-            await conv.send_message("**
-            
-            تمام، لنقم بإضافة اختصار جديد.
-            
-            **الخطوة 1 من 2:**
-            **أرسل الآن الأمر الأصلي الذي تريد إنشاء اختصار له (مثال: `ايدي`).**
-            
-            **")
+            # --- (تم التصحيح) استخدام علامات الاقتباس الثلاثية ---
+            await conv.send_message("""**تمام، لنقم بإضافة اختصار جديد.
+
+**الخطوة 1 من 2:**
+**أرسل الآن الأمر الأصلي الذي تريد إنشاء اختصار له (مثال: `ايدي`).**
+**""")
             
             original_command_msg = await conv.get_response()
             original_command = original_command_msg.text.strip()
 
-            await conv.send_message(f"**
-            
-            حسناً، الأمر الأصلي هو: `{original_command}`
-            
-            **الخطوة 2 من 2:**
-            **أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `ا`).**
-            
-            **")
+            # --- (تم التصحيح) استخدام علامات الاقتباس الثلاثية ---
+            await conv.send_message(f"""**حسناً، الأمر الأصلي هو: `{original_command}`
+
+**الخطوة 2 من 2:**
+**أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `ا`).**
+**""")
             
             alias_command_msg = await conv.get_response()
             alias_command = alias_command_msg.text.strip()
