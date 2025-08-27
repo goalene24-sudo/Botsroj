@@ -37,49 +37,50 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
-    # --- (مُطوَّر) نظام تخزين الرسائل مع الأنواع ---
+    # --- (جديد) محرك ترجمة الأوامر المضافة (الاختصارات) ---
+    if event.text:
+        aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+        command_candidate = event.text.strip()
+
+        if command_candidate in aliases:
+            original_command = aliases[command_candidate]
+            # نستبدل نص الرسالة في الذاكرة لتتعرف عليها كل الأوامر
+            event.text = original_command
+            event.raw_text = original_command
+            if hasattr(event, 'message') and hasattr(event.message, 'message'):
+                event.message.message = original_command
+    # --- نهاية محرك الترجمة ---
+
+    # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
-        # (جديد) قراءة حجم الكلايش المخصص من قاعدة البيانات، مع قيمة افتراضية 200
         long_text_size = db.get(chat_id_str, {}).get("long_text_size", 200)
-        
-        # تحديد نوع الرسالة (مع تعديل الأولوية)
-        msg_type = "text" # النوع الافتراضي
+        msg_type = "text" 
         message_entities = event.message.entities or []
         
-        if event.photo:
-            msg_type = "photo"
-        elif event.video:
-            msg_type = "video"
-        elif event.sticker:
-            msg_type = "sticker"
-        elif event.document and hasattr(event.document, 'mime_type') and 'gif' in event.document.mime_type:
-            msg_type = "gif"
-        # (تم التعديل) فحص الطول أولاً قبل فحص الرابط
-        elif event.text and len(event.text) > long_text_size:
-            msg_type = "long_text"
-        elif any(isinstance(e, MessageEntityUrl) for e in message_entities):
-            msg_type = "url"
-        elif event.forward:
-            msg_type = "forward"
+        if event.photo: msg_type = "photo"
+        elif event.video: msg_type = "video"
+        elif event.sticker: msg_type = "sticker"
+        elif event.document and hasattr(event.document, 'mime_type') and 'gif' in event.document.mime_type: msg_type = "gif"
+        elif event.text and len(event.text) > long_text_size: msg_type = "long_text"
+        elif any(isinstance(e, MessageEntityUrl) for e in message_entities): msg_type = "url"
+        elif event.forward: msg_type = "forward"
 
         if chat_id_str not in db: db[chat_id_str] = {}
         if "message_history" not in db[chat_id_str]:
             db[chat_id_str]["message_history"] = []
 
-        # إضافة رقم الرسالة ونوعها إلى السجل
         db[chat_id_str]["message_history"].append({"msg_id": event.id, "type": msg_type})
         
-        # الحفاظ على حجم السجل بحد أقصى 100 رسالة
         if len(db[chat_id_str]["message_history"]) > 100:
             db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
         
         save_db(db)
-    # --- نهاية نظام تخزين الرسائل المُطوَّر ---
+    # --- نهاية نظام تخزين الرسائل ---
 
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    if now - last_dhikr_time > 3600: # 3600 ثانية = 1 ساعة
+    if now - last_dhikr_time > 3600:
         dhikr_message = random.choice(DHIKR_LIST)
         await client.send_message(event.chat_id, dhikr_message)
         if chat_id_str not in db: db[chat_id_str] = {}
