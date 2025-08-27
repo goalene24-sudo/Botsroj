@@ -2,13 +2,13 @@
 import httpx
 import wikipedia
 import random
+import asyncio
 from telethon import events
+# (تمت الإضافة) سنحتاج هذا لمعالجة الأخطاء
+from telethon.errors.rpcerrorlist import YouBlockedUserError
 from bot import client
 from .utils import check_activation
 from googletrans import Translator, LANGUAGES
-from urllib.parse import quote
-# (تمت الإعادة) سنحتاج هذه المكتبة للمصدر الجديد
-from bs4 import BeautifulSoup
 from .slang_data import IRAQI_SLANG
 from .zakhrafa_data import ZAKHRAFA_STYLES
 
@@ -27,7 +27,6 @@ async def weather_handler(event):
     city = event.pattern_match.group(1)
     if not city:
         return await event.reply("**وين الطقس؟ لازم تكتب اسم المدينة.\nمثال: `طقس بغداد`**")
-
     api_url = f"https://wttr.in/{city.strip()}?format=j1"
     headers = {"Accept-Language": "ar"}
     try:
@@ -135,7 +134,7 @@ async def calculate_handler(event):
     except Exception as e:
         await loading_msg.edit(f"**صارت مشكلة وما گدرت أحسب.\n`{e}`**")
 
-# --- (تم التعديل) النسخة الجديدة بالكامل لأمر "معنى" ---
+# --- (تم التعديل) النسخة النهائية لأمر "معنى" باستخدام بوت مساعد ---
 @client.on(events.NewMessage(pattern=r"^معنى (.+)"))
 async def define_handler(event):
     if not await check_activation(event.chat_id): return
@@ -149,45 +148,34 @@ async def define_handler(event):
         definition = IRAQI_SLANG[word.lower()]
         return await event.reply(f"**📖 | معنى كلمة: {word} (لهجة عراقية)**\n\n{definition}")
 
-    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}' في قاموس المعاني...**")
+    loading_msg = await event.reply(f"**📖 لحظات... دا أدور على معنى كلمة '{word}'...**")
     
-    # الخطوة 2: البحث في موقع المعاني (almaany.com)
+    # الخطوة 2: استخدام البوت المساعد @zzznambot
+    proxy_bot = "@zzznambot"
     try:
-        # تجهيز الرابط بشكل آمن
-        query = quote(word)
-        url = f"https://www.almaany.com/ar/dict/ar-ar/{query}/"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-
-        async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # البحث عن قسم النتائج الرئيسي
-        meaning_div = soup.find('div', class_='meaning')
-        
-        if not meaning_div:
-            return await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}' في قاموس المعاني.**")
-
-        # استخلاص النص وتنظيفه
-        definition = meaning_div.get_text(separator='\n', strip=True)
-        
-        # إزالة الأجزاء غير المرغوب فيها (مثل الإعلانات أو الأمثلة الطويلة)
-        if "Sponsored Links" in definition:
-            definition = definition.split("Sponsored Links")[0]
-
-        if len(definition) > 1500:
-            definition = definition[:1500] + "..."
-
-        result_text = f"**📖 | معنى كلمة: {word} (من قاموس المعاني)**\n\n{definition}"
-        await loading_msg.edit(result_text)
-
+        async with client.conversation(proxy_bot, timeout=20) as conv:
+            # إرسال الكلمة للبوت المساعد
+            await conv.send_message(word)
+            
+            # انتظار الرد منه تحديداً (معرف البوت هو 2045033062)
+            response = await conv.get_response(from_users=2045033062)
+            
+            # التحقق إذا لم يجد البوت المساعد الكلمة
+            if "لا يوجد معنى" in response.text or "can't find that" in response.text:
+                await loading_msg.edit(f"**عذراً، لم يتم العثور على تعريف للكلمة '{word}'.**")
+            else:
+                # نجح الأمر! نحذف رسالة التحميل ونرسل رده
+                await loading_msg.delete()
+                # نرسل رسالة البوت المساعد كما هي للحفاظ على التنسيق
+                await event.reply(response.message)
+                
+    except YouBlockedUserError:
+        await loading_msg.edit("**⚠️ | خطأ: يجب إلغاء حظر البوت المساعد @zzznambot لتتمكن من استخدام هذا الأمر.**")
+    except asyncio.TimeoutError:
+        await loading_msg.edit("**⌛️ | استغرق البوت المساعد وقتاً طويلاً للرد. يرجى المحاولة مرة أخرى.**")
     except Exception as e:
-        print(f"Error in define_handler (almaany): {e}")
-        await loading_msg.edit(f"**صارت مشكلة وما گدرت أجيب التعريف.\nتأكد من اتصالك بالانترنت.**")
+        print(f"Error in define_handler (proxy bot): {e}")
+        await loading_msg.edit("**حدث خطأ غير متوقع أثناء التواصل مع البوت المساعد.**")
 
 
 @client.on(events.NewMessage(pattern=r"^زخرف (.+)"))
