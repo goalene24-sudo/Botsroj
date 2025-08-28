@@ -1,8 +1,8 @@
-# plugins/events.py
 from datetime import datetime, timedelta
 import random
 import time
 from telethon import events
+from telethon.events import StopPropagation   # ✅ بديل عن ContinuePropagation
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
@@ -30,6 +30,33 @@ def reset_user_warns(chat_id, user_id):
         return True
     return False
 
+# ✅ فحص اذا الأمر معطل
+def is_disabled_command(chat_id, command_text):
+    chat_id_str = str(chat_id)
+    disabled_cmds = db.get(chat_id_str, {}).get("disabled_commands", [])
+    return any(command_text.startswith(cmd) for cmd in disabled_cmds)
+
+# ✅ أوامر لتعطيل وتفعيل الأوامر
+@client.on(events.NewMessage(pattern="^/تعطيل (.+)"))
+async def disable_command(event):
+    cmd = event.pattern_match.group(1).strip()
+    chat_id_str = str(event.chat_id)
+    if "disabled_commands" not in db.get(chat_id_str, {}):
+        db[chat_id_str]["disabled_commands"] = []
+    if cmd not in db[chat_id_str]["disabled_commands"]:
+        db[chat_id_str]["disabled_commands"].append(cmd)
+        save_db(db)
+    await event.reply(f"✅ تم تعطيل الأمر: {cmd}")
+
+@client.on(events.NewMessage(pattern="^/تفعيل (.+)"))
+async def enable_command(event):
+    cmd = event.pattern_match.group(1).strip()
+    chat_id_str = str(event.chat_id)
+    if "disabled_commands" in db.get(chat_id_str, {}) and cmd in db[chat_id_str]["disabled_commands"]:
+        db[chat_id_str]["disabled_commands"].remove(cmd)
+        save_db(db)
+    await event.reply(f"✅ تم تفعيل الأمر: {cmd}")
+
 @client.on(events.NewMessage(func=lambda e: not e.is_private))
 async def general_message_handler(event):
     if not await check_activation(event.chat_id): 
@@ -48,6 +75,10 @@ async def general_message_handler(event):
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
     # --- نهاية محرك الترجمة ---
+
+    # ✅ فحص إذا هذا الأمر معطل
+    if event.text and is_disabled_command(event.chat_id, event.text):
+        raise StopPropagation
 
     # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
