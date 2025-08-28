@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import random
 import time
 from telethon import events
+# --- (تم التحديث) استدعاء أدوات التحكم المتقدمة ---
+from telethon.events import ContinuePropagation, StopPropagation
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
@@ -30,16 +32,26 @@ def reset_user_warns(chat_id, user_id):
         return True
     return False
 
-@client.on(events.NewMessage(func=lambda e: not e.is_private))
+# --- (تم التعديل) إضافة group=1 لرفع أولوية هذا المعالج ---
+@client.on(events.NewMessage(func=lambda e: not e.is_private, group=1))
 async def general_message_handler(event):
-    if not await check_activation(event.chat_id): 
-        return
-        
-    chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
-
+    # --- التحقق من الأوامر المعطلة عاماً (أول شيء يتم التحقق منه) ---
+    if event.text:
+        global_disabled = db.get("global_settings", {}).get("disabled_cmds", [])
+        if global_disabled:
+            command_to_check = event.text.strip().split(" ")[0].lower()
+            if command_to_check in global_disabled:
+                if event.sender_id in config.SUDO_USERS:
+                    try:
+                        await event.reply(f"**ⓘ | ملاحظة للمطور: تم تجاهل الأمر `{command_to_check}` لأنه معطل عاماً.**", delete_in=10)
+                    except: pass
+                # إيقاف تنفيذ الأمر بشكل كامل ومنع أي معالج آخر من العمل
+                raise StopPropagation
+    
     # --- محرك ترجمة الأوامر المضافة (الاختصارات) ---
     if event.text:
-        aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+        chat_id_str_for_alias = str(event.chat_id)
+        aliases = db.get(chat_id_str_for_alias, {}).get("command_aliases", {})
         command_candidate = event.text.strip()
         if command_candidate in aliases:
             original_command = aliases[command_candidate]
@@ -47,21 +59,13 @@ async def general_message_handler(event):
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
-    
-    # --- (جديد) التحقق من الأوامر المعطلة عاماً ---
-    if event.text:
-        global_disabled = db.get("global_settings", {}).get("disabled_cmds", [])
-        if global_disabled:
-            command_to_check = event.text.strip().split(" ")[0].lower()
-            if command_to_check in global_disabled:
-                # إذا كان الأمر معطلاً عاماً، نتجاهل الرسالة ونعود
-                # إذا كان المستخدم هو المطور، نرسل له ملاحظة للتوضيح
-                if event.sender_id in config.SUDO_USERS:
-                    try:
-                        await event.reply(f"**ⓘ | ملاحظة للمطور: تم تجاهل الأمر `{command_to_check}` لأنه معطل عاماً.**", delete_in=10)
-                    except: pass
-                return # إيقاف تنفيذ الأمر
-    # --- نهاية التحقق ---
+            # اسمح للمعالجات الأخرى بالتقاط الأمر المترجم
+            raise ContinuePropagation
+
+    if not await check_activation(event.chat_id): 
+        raise StopPropagation
+        
+    chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
     # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
