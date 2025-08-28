@@ -2,10 +2,11 @@
 import random
 import time
 from telethon import events
-from telethon.tl.functions.users import GetFullUserRequest
 from bot import client
 import config
-from .utils import check_activation, db, is_command_enabled
+from .utils import check_activation, db, get_user_rank, Ranks, is_command_enabled
+# (تمت الإضافة) استدعاء قاموس الأوسمة
+from .achievements import ACHIEVEMENTS
 
 RANDOM_HEADERS = [
     "شــوف الحــلو؟ 🧐", "تــعال اشــوفك 🫣", "بــاوع الجــمال 🫠",
@@ -41,30 +42,38 @@ async def id_handler(event):
 
     chat_id_str, user_id_str = str(event.chat_id), str(target_user.id)
     
-    try:
-        full_user = await client(GetFullUserRequest(target_user.id))
-        bio = full_user.full_user.about or "ماكو بايو."
-    except Exception:
-        bio = "ماكو بايو."
-    
+    # --- جلب كل بيانات المستخدم ---
     user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
     msg_count = user_data.get("msg_count", 0)
     points = user_data.get("points", 0)
     sahaqat = user_data.get("sahaqat", 0)
+    # (تم الإصلاح) جلب النبذة من قاعدة بيانات البوت
+    custom_bio = user_data.get("bio", "لم يتم تعيين نبذة بعد.")
+    
+    # --- جلب الرتبة بالطريقة الموحدة ---
+    rank_int = await get_user_rank(target_user.id, event)
+    rank_map = {
+        Ranks.DEVELOPER: "المطور 👨‍💻",
+        Ranks.OWNER: "مالك المجموعة 👑",
+        Ranks.CREATOR: "منشئ في البوت ⚜️",
+        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
+        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
+        Ranks.MEMBER: "عضو 👤"
+    }
+    rank = rank_map.get(rank_int, "عضو 👤")
+    
+    # --- (جديد) جلب الأوسمة ---
+    user_achievements_keys = user_data.get("achievements", [])
+    badges_str = ""
+    if user_achievements_keys:
+        for ach_key in user_achievements_keys:
+            if ach_key in ACHIEVEMENTS:
+                badges_str += ACHIEVEMENTS[ach_key]["icon"]
     
     # --- التحقق من الألقاب والزخرفة ---
     inventory = user_data.get("inventory", {})
-    vip_status_text = None
     custom_title = None
     decoration = ""
-
-    # التحقق من حالة الـ VIP
-    vip_item = inventory.get("لقب vip")
-    if vip_item:
-        purchase_time = vip_item.get("purchase_time", 0)
-        duration_seconds = vip_item.get("duration_days", 0) * 86400
-        if time.time() - purchase_time < duration_seconds:
-            vip_status_text = "💎 | من كبار الشخصيات VIP"
 
     # التحقق من اللقب المخصص
     custom_title_item = inventory.get("تخصيص لقب")
@@ -81,31 +90,12 @@ async def id_handler(event):
         duration_seconds = decoration_item.get("duration_days", 0) * 86400
         if time.time() - purchase_time < duration_seconds:
             decoration = "✨"
-    # --- نهاية التحقق ---
-
-    bot_admins = db.get(chat_id_str, {}).get("bot_admins", [])
-    rank = ""
-    if target_user.id in config.SUDO_USERS:
-        rank = "المطور الاساسي ⚡️"
-    else:
-        try:
-            perms = await client.get_permissions(event.chat_id, target_user.id)
-            if perms.is_creator: rank = "المالك 👑"
-            elif perms.is_admin: rank = "مشرف 🛡️"
-            elif target_user.id in bot_admins: rank = "أدمن بالبوت ⚜️"
-            else: rank = "عضو 👤"
-        except:
-            if target_user.id in bot_admins: rank = "أدمن بالبوت ⚜️"
-            else: rank = "عضو 👤"
-
+    
     header = random.choice(RANDOM_HEADERS)
     tafa3ul = random.choice(RANDOM_TAFA3UL)
     
     caption = f"**{header}**\n\n"
     
-    if vip_status_text:
-        caption += f"**{vip_status_text}**\n"
-        
     caption += (
         f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**\n"
         f"**- ايديك:** `{target_user.id}`\n"
@@ -118,13 +108,17 @@ async def id_handler(event):
         caption += f"**- لقبك:** {custom_title}\n"
         
     caption += (
+        f"**- نبذتك:** {custom_bio}\n" # (تم الإصلاح)
         f"**- تفاعلك:** {tafa3ul}\n"
         f"**- رسائلك:** `{msg_count}`\n"
         f"**- سحكاتك:** `{sahaqat}`\n"
         f"**- نقاطك:** `{points}`\n"
-        f"**- البايو:** {bio}\n"
-        f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
     )
+    
+    if badges_str:
+        caption += f"**- أوسمتك:** {badges_str}\n" # (جديد)
+    
+    caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
     
     pfp = await client.get_profile_photos(target_user, limit=1)
     if pfp:
