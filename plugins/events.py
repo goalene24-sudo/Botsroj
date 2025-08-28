@@ -3,14 +3,6 @@ from datetime import datetime, timedelta
 import random
 import time
 from telethon import events
-# --- (تم التعديل) كود مرن للتعامل مع مشاكل الاستضافة ---
-try:
-    # المحاولة الأولى: المسار الصحيح في الإصدارات الحديثة
-    from telethon.events import ContinuePropagation, StopPropagation
-except ImportError:
-    # المحاولة الثانية: المسار القديم كخطة بديلة
-    from telethon import ContinuePropagation, StopPropagation
-# ----------------------------------------------------
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
@@ -38,38 +30,10 @@ def reset_user_warns(chat_id, user_id):
         return True
     return False
 
-# --- (تم التعديل) إضافة group=1 لرفع أولوية هذا المعالج ---
-@client.on(events.NewMessage(func=lambda e: not e.is_private, group=1))
+@client.on(events.NewMessage(func=lambda e: not e.is_private))
 async def general_message_handler(event):
-    # --- التحقق من الأوامر المعطلة عاماً (أول شيء يتم التحقق منه) ---
-    if event.text:
-        global_disabled = db.get("global_settings", {}).get("disabled_cmds", [])
-        if global_disabled:
-            command_to_check = event.text.strip().split(" ")[0].lower()
-            if command_to_check in global_disabled:
-                if event.sender_id in config.SUDO_USERS:
-                    try:
-                        await event.reply(f"**ⓘ | ملاحظة للمطور: تم تجاهل الأمر `{command_to_check}` لأنه معطل عاماً.**", delete_in=10)
-                    except: pass
-                # إيقاف تنفيذ الأمر بشكل كامل ومنع أي معالج آخر من العمل
-                raise StopPropagation
-    
-    # --- محرك ترجمة الأوامر المضافة (الاختصارات) ---
-    if event.text:
-        chat_id_str_for_alias = str(event.chat_id)
-        aliases = db.get(chat_id_str_for_alias, {}).get("command_aliases", {})
-        command_candidate = event.text.strip()
-        if command_candidate in aliases:
-            original_command = aliases[command_candidate]
-            event.text = original_command
-            event.raw_text = original_command
-            if hasattr(event, 'message') and hasattr(event.message, 'message'):
-                event.message.message = original_command
-            # اسمح للمعالجات الأخرى بالتقاط الأمر المترجم
-            raise ContinuePropagation
-
     if not await check_activation(event.chat_id): 
-        raise StopPropagation
+        return
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
@@ -97,17 +61,19 @@ async def general_message_handler(event):
             db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
         
         save_db(db)
-    
+    # --- نهاية نظام تخزين الرسائل ---
+
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    if now - last_dhikr_time > 3600:
+    if now - last_dhikr_time > 3600: # 3600 ثانية = 1 ساعة
         dhikr_message = random.choice(DHIKR_LIST)
         await client.send_message(event.chat_id, dhikr_message)
         if chat_id_str not in db: db[chat_id_str] = {}
         db[chat_id_str]["last_dhikr_time"] = now
         save_db(db)
-    
+    # --- نهاية ميزة الذكر التلقائي ---
+
     if not event.text: return
     
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
