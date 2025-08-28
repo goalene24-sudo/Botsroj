@@ -3,8 +3,14 @@ from datetime import datetime, timedelta
 import random
 import time
 from telethon import events
-# --- (تم التحديث) استدعاء أدوات التحكم المتقدمة ---
-from telethon.events import ContinuePropagation, StopPropagation
+# --- (تم التعديل) كود مرن للتعامل مع مشاكل الاستضافة ---
+try:
+    # المحاولة الأولى: المسار الصحيح في الإصدارات الحديثة
+    from telethon.events import ContinuePropagation, StopPropagation
+except ImportError:
+    # المحاولة الثانية: المسار القديم كخطة بديلة
+    from telethon import ContinuePropagation, StopPropagation
+# ----------------------------------------------------
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
