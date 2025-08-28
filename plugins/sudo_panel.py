@@ -7,13 +7,15 @@ from datetime import datetime
 from telethon import events, Button
 from bot import client, StartTime
 import config
-from .utils import db, get_uptime_string
+from .utils import db, get_uptime_string, save_db
 
 # --- الدالة الرئيسية لبناء أزرار لوحة التحكم ---
 def build_sudo_panel():
     buttons = [
         [Button.inline("📊 الإحصائيات العامة", data="sudo_panel:stats")],
         [Button.inline("📢 قسم الإذاعة", data="sudo_panel:broadcast")],
+        # --- (تمت الإضافة) الأزرار الجديدة ---
+        [Button.inline("🚫 الحظر العام", data="sudo_panel:gban"), Button.inline("🧑‍✈️ الترقيات العامة", data="sudo_panel:gadmin")],
         [Button.inline("🔄 إعادة التشغيل", data="sudo_panel:restart"), Button.inline("🛑 إيقاف التشغيل", data="sudo_panel:shutdown")],
         [Button.inline("📁 تحميل قاعدة البيانات", data="sudo_panel:get_db")],
     ]
@@ -46,26 +48,20 @@ async def sudo_panel_callback(event):
 
     elif action == "restart":
         await event.edit("**🔄 | جاري إعادة تشغيل البوت...**")
-        # هذا الأمر يقوم بإعادة تشغيل البوت من نقطة البداية
         os.execl(sys.executable, sys.executable, "-m", "main")
 
     elif action == "shutdown":
         await event.edit("**🛑 | جاري إيقاف تشغيل البوت... إلى اللقاء.**")
-        # هذا الأمر يوقف البوت بشكل كامل
         await client.disconnect()
 
     elif action == "stats":
-        # حساب الإحصائيات
         uptime = get_uptime_string(StartTime)
         group_count = len(db)
-        
-        # حساب عدد المستخدمين الفريدين
         unique_users = set()
         for chat_data in db.values():
             if "users" in chat_data:
                 unique_users.update(chat_data["users"].keys())
         user_count = len(unique_users)
-
         stats_text = f"""**📊 | الإحصائيات العامة للبوت**
 
 **- مدة التشغيل (Uptime):**
@@ -83,45 +79,102 @@ async def sudo_panel_callback(event):
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**📢 | أرسل الآن رسالة الإذاعة التي تريد إرسالها لجميع المجموعات...**\n\n**(للإلغاء، أرسل `الغاء`)**")
-                
                 response = await conv.get_response()
-                if response.text.strip() == "الغاء":
+                if response.text.strip().lower() == "الغاء":
                     return await conv.send_message("**☑️ | تم إلغاء الإذاعة.**")
                 
                 broadcast_message = response.message
-                await conv.send_message("**⏳ | تم استلام الرسالة. سأبدأ الآن ببثها إلى جميع المجموعات. قد يستغرق هذا بعض الوقت...**")
-                
-                successful_sends = 0
-                failed_sends = 0
-                
+                await conv.send_message("**⏳ | سأبدأ الآن ببث الرسالة...**")
+                successful, failed = 0, 0
                 all_chats = list(db.keys())
                 for chat_id_str in all_chats:
                     try:
-                        chat_id = int(chat_id_str)
-                        await client.send_message(chat_id, broadcast_message)
-                        successful_sends += 1
-                        await asyncio.sleep(0.5) # فاصل زمني لتجنب الحظر
+                        await client.send_message(int(chat_id_str), broadcast_message)
+                        successful += 1
+                        await asyncio.sleep(0.5)
                     except Exception as e:
                         print(f"Broadcast failed for chat {chat_id_str}: {e}")
-                        failed_sends += 1
-                
-                await conv.send_message(f"""**📡 | اكتملت عملية الإذاعة!**
-
-**- ✅ نجح الإرسال إلى:** `{successful_sends}` **مجموعة**
-**- ❌ فشل الإرسال إلى:** `{failed_sends}` **مجموعة**
-""")
+                        failed += 1
+                await conv.send_message(f"**📡 | اكتملت الإذاعة!**\n**- ✅ نجح:** `{successful}`\n**- ❌ فشل:** `{failed}`")
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-        
         await event.answer()
 
     elif action == "get_db":
-        await event.answer("📁 | جاري تحضير ملف قاعدة البيانات...")
+        await event.answer("📁 | جاري تحضير الملف...")
         try:
-            await client.send_file(
-                event.chat_id,
-                "database.json",
-                caption="**🗄️ | النسخة الاحتياطية من قاعدة البيانات `database.json`**"
-            )
+            await client.send_file(event.chat_id, "database.json", caption="**🗄️ | النسخة الاحتياطية من `database.json`**")
         except Exception as e:
-            await event.reply(f"**حدث خطأ أثناء إرسال الملف:**\n`{e}`")
+            await event.reply(f"**حدث خطأ:**\n`{e}`")
+
+    # --- (جديد) معالج الحظر العام ---
+    elif action == "gban":
+        try:
+            async with client.conversation(event.sender_id, timeout=300) as conv:
+                await conv.send_message("**🚫 | أرسل الآن ID المستخدم الذي تريد حظره عاماً...**\n\n**(للإلغاء، أرسل `الغاء`)**")
+                response = await conv.get_response()
+                if response.text.strip().lower() == "الغاء":
+                    return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
+                
+                try:
+                    user_id_to_ban = int(response.text.strip())
+                except ValueError:
+                    return await conv.send_message("**⚠️ | ID غير صالح. يرجى إرسال أرقام فقط.**")
+
+                await conv.send_message(f"**⏳ | سأقوم الآن بحظر `{user_id_to_ban}` من كل المجموعات...**")
+                
+                if "globally_banned" not in db: db["globally_banned"] = []
+                if user_id_to_ban not in db["globally_banned"]:
+                    db["globally_banned"].append(user_id_to_ban)
+                    save_db(db)
+
+                successful, failed = 0, 0
+                all_chats = list(db.keys())
+                for chat_id_str in all_chats:
+                    try:
+                        # نتأكد من أن المفتاح هو لمجموعة (رقم سالب)
+                        if chat_id_str.startswith('-'):
+                            await client.edit_permissions(int(chat_id_str), user_id_to_ban, view_messages=False)
+                            successful += 1
+                            await asyncio.sleep(0.5)
+                    except Exception as e:
+                        print(f"GBan failed for chat {chat_id_str}: {e}")
+                        failed += 1
+                
+                await conv.send_message(f"**🚫 | اكتمل الحظر العام!**\n**- ✅ تم الحظر في:** `{successful}` **مجموعة**\n**- ❌ فشل في:** `{failed}` **مجموعة**")
+        except asyncio.TimeoutError:
+            await event.reply("**⏰ | انتهى الوقت.**")
+        await event.answer()
+        
+    # --- (جديد) معالج الترقيات العامة ---
+    elif action == "gadmin":
+        try:
+            async with client.conversation(event.sender_id, timeout=300) as conv:
+                await conv.send_message("**🧑‍✈️ | أرسل الآن ID المستخدم الذي تريد ترقيته 'أدمن بوت' في كل المجموعات...**\n\n**(للإلغاء، أرسل `الغاء`)**")
+                response = await conv.get_response()
+                if response.text.strip().lower() == "الغاء":
+                    return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
+
+                try:
+                    user_id_to_promote = int(response.text.strip())
+                except ValueError:
+                    return await conv.send_message("**⚠️ | ID غير صالح. يرجى إرسال أرقام فقط.**")
+                
+                await conv.send_message(f"**⏳ | سأقوم الآن بترقية `{user_id_to_promote}` في كل المجموعات...**")
+                
+                promoted_in = 0
+                all_chats = list(db.keys())
+                for chat_id_str in all_chats:
+                    # نتأكد من أن المفتاح هو لمجموعة
+                    if chat_id_str.startswith('-'):
+                        db[chat_id_str].setdefault("bot_admins", [])
+                        if user_id_to_promote not in db[chat_id_str]["bot_admins"]:
+                            db[chat_id_str]["bot_admins"].append(user_id_to_promote)
+                            promoted_in += 1
+                
+                save_db(db)
+                await conv.send_message(f"**🧑‍✈️ | اكتملت الترقية العامة!**\n**- ✅ تم ترقية المستخدم في:** `{promoted_in}` **مجموعة جديدة.**")
+
+        except asyncio.TimeoutError:
+            await event.reply("**⏰ | انتهى الوقت.**")
+        await event.answer()
