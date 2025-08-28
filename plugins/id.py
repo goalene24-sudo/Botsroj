@@ -47,7 +47,6 @@ async def id_handler(event):
     msg_count = user_data.get("msg_count", 0)
     points = user_data.get("points", 0)
     sahaqat = user_data.get("sahaqat", 0)
-    # (تم الإصلاح) جلب النبذة من قاعدة بيانات البوت
     custom_bio = user_data.get("bio", "لم يتم تعيين نبذة بعد.")
     
     # --- جلب الرتبة بالطريقة الموحدة ---
@@ -62,7 +61,7 @@ async def id_handler(event):
     }
     rank = rank_map.get(rank_int, "عضو 👤")
     
-    # --- (جديد) جلب الأوسمة ---
+    # --- جلب الأوسمة ---
     user_achievements_keys = user_data.get("achievements", [])
     badges_str = ""
     if user_achievements_keys:
@@ -72,8 +71,17 @@ async def id_handler(event):
     
     # --- التحقق من الألقاب والزخرفة ---
     inventory = user_data.get("inventory", {})
+    vip_status_text = None
     custom_title = None
     decoration = ""
+    
+    # (تم الإصلاح) إعادة التحقق من لقب VIP
+    vip_item = inventory.get("لقب vip")
+    if vip_item:
+        purchase_time = vip_item.get("purchase_time", 0)
+        duration_seconds = vip_item.get("duration_days", 0) * 86400
+        if time.time() - purchase_time < duration_seconds:
+            vip_status_text = "💎 | من كبار الشخصيات VIP"
 
     # التحقق من اللقب المخصص
     custom_title_item = inventory.get("تخصيص لقب")
@@ -96,6 +104,9 @@ async def id_handler(event):
     
     caption = f"**{header}**\n\n"
     
+    if vip_status_text:
+        caption += f"**{vip_status_text}**\n"
+        
     caption += (
         f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**\n"
         f"**- ايديك:** `{target_user.id}`\n"
@@ -108,7 +119,7 @@ async def id_handler(event):
         caption += f"**- لقبك:** {custom_title}\n"
         
     caption += (
-        f"**- نبذتك:** {custom_bio}\n" # (تم الإصلاح)
+        f"**- نبذتك:** {custom_bio}\n"
         f"**- تفاعلك:** {tafa3ul}\n"
         f"**- رسائلك:** `{msg_count}`\n"
         f"**- سحكاتك:** `{sahaqat}`\n"
@@ -116,7 +127,7 @@ async def id_handler(event):
     )
     
     if badges_str:
-        caption += f"**- أوسمتك:** {badges_str}\n" # (جديد)
+        caption += f"**- أوسمتك:** {badges_str}\n"
     
     caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
     
