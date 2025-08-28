@@ -37,19 +37,31 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
-    # --- (جديد) محرك ترجمة الأوامر المضافة (الاختصارات) ---
+    # --- محرك ترجمة الأوامر المضافة (الاختصارات) ---
     if event.text:
         aliases = db.get(chat_id_str, {}).get("command_aliases", {})
         command_candidate = event.text.strip()
-
         if command_candidate in aliases:
             original_command = aliases[command_candidate]
-            # نستبدل نص الرسالة في الذاكرة لتتعرف عليها كل الأوامر
             event.text = original_command
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
-    # --- نهاية محرك الترجمة ---
+    
+    # --- (جديد) التحقق من الأوامر المعطلة عاماً ---
+    if event.text:
+        global_disabled = db.get("global_settings", {}).get("disabled_cmds", [])
+        if global_disabled:
+            command_to_check = event.text.strip().split(" ")[0].lower()
+            if command_to_check in global_disabled:
+                # إذا كان الأمر معطلاً عاماً، نتجاهل الرسالة ونعود
+                # إذا كان المستخدم هو المطور، نرسل له ملاحظة للتوضيح
+                if event.sender_id in config.SUDO_USERS:
+                    try:
+                        await event.reply(f"**ⓘ | ملاحظة للمطور: تم تجاهل الأمر `{command_to_check}` لأنه معطل عاماً.**", delete_in=10)
+                    except: pass
+                return # إيقاف تنفيذ الأمر
+    # --- نهاية التحقق ---
 
     # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
@@ -75,8 +87,7 @@ async def general_message_handler(event):
             db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
         
         save_db(db)
-    # --- نهاية نظام تخزين الرسائل ---
-
+    
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
@@ -86,8 +97,7 @@ async def general_message_handler(event):
         if chat_id_str not in db: db[chat_id_str] = {}
         db[chat_id_str]["last_dhikr_time"] = now
         save_db(db)
-    # --- نهاية ميزة الذكر التلقائي ---
-
+    
     if not event.text: return
     
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
@@ -161,7 +171,7 @@ async def general_message_handler(event):
                     replies_for_rank = reply_options_for_trigger.get(rank_str, reply_options_for_trigger.get("member"))
                     if replies_for_rank:
                         chosen_reply = random.choice(replies_for_rank)
-                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender_id})")
+                        final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender.id})")
                         await event.reply(f'**{final_reply}**')
 
     if not is_admin_or_higher:
