@@ -10,6 +10,7 @@ ALL_MODULES = [
     "plugins.admin",
     "plugins.aliases",
     "plugins.dictionary",
+    "plugins.achievements",
     "plugins.fun",
     "plugins.games",
     "plugins.fast_games",
