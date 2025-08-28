@@ -33,6 +33,7 @@ ALL_MODULES = [
     "plugins.millionaire_data",
     "plugins.millionaire",
     "plugins.owner",
+    "plugins.sudo_panel",
     "plugins.media_search",
     "plugins.admin_menus",
     "plugins.settings",
