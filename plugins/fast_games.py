@@ -25,6 +25,12 @@ def scramble_word(word):
 @client.on(events.NewMessage(pattern="^فككها$"))
 async def start_unscramble_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "فككها" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in UNSCRAMBLE_GAMES:
         return await event.reply("**اكو لعبة بعدها شغالة! كملوها بالاول حتى نبدي وحدة جديدة.**")
@@ -57,6 +63,12 @@ async def check_unscramble_handler(event):
 @client.on(events.NewMessage(pattern="^تخمين$"))
 async def start_guessing_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "تخمين" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     GUESS_ITEMS = {"برج إيفل": "أنا معلم مشهور كلش بباريس. منو آني؟ 🗼", "الكهرباء": "آني شي محد يكدر يشوفني، بس الكل يحتاجني. منو آني؟ 💡"}
     correct_answer, hint = random.choice(list(GUESS_ITEMS.items()))
     await event.reply(f"**يلا نلعب تخمين! 🤔 شغل عقلك وحاول تعرف الجواب:\n\n{hint}**\n\n**اللي يعرف الجواب يدزه برسالة 👇**")
@@ -77,6 +89,13 @@ async def guess_reply_handler(event):
 @client.on(events.NewMessage(pattern="^سمايلات|سمايل$"))
 async def start_smiley_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    command_name = event.raw_text.lower()
+    if command_name in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in SMILEY_GAMES:
         return await event.reply("**اكو لعبة سمايلات بعدها شغالة، لتستعجل!**")
@@ -107,6 +126,12 @@ async def check_smiley_handler(event):
 @client.on(events.NewMessage(pattern="^المختلف$"))
 async def start_difference_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "المختلف" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in DIFFERENCE_GAMES: return await event.reply("**اكو لعبة مختلف بعدها شغالة!**")
     game_data = random.choice(DIFFERENCE_SETS)
@@ -131,6 +156,12 @@ async def check_difference_handler(event):
 @client.on(events.NewMessage(pattern="^اعلام الدول$"))
 async def start_flag_quiz_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "اعلام الدول" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in FLAG_QUIZ_GAMES: return await event.reply("**اكو سؤال أعلام بعده فعال!**")
     flag, country = random.choice(list(FLAG_QUIZ.items()))
@@ -155,6 +186,12 @@ async def check_flag_handler(event):
 @client.on(events.NewMessage(pattern="^عواصم الدول$"))
 async def start_capital_quiz_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "عواصم الدول" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in CAPITAL_QUIZ_GAMES: return await event.reply("**اكو سؤال عواصم بعده فعال!**")
     country, capital = random.choice(list(CAPITAL_QUIZ.items()))
@@ -179,6 +216,12 @@ async def check_capital_handler(event):
 @client.on(events.NewMessage(pattern="^رياضيات$"))
 async def start_math_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "رياضيات" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in MATH_GAMES: return await event.reply("**اكو سؤال رياضيات بعده فعال!**")
     num1, num2 = random.randint(10, 99), random.randint(10, 99)
@@ -204,6 +247,12 @@ async def check_math_handler(event):
 @client.on(events.NewMessage(pattern="^العكس$"))
 async def start_opposites_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "العكس" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in OPPOSITES_GAMES: return await event.reply("**اكو لعبة عكس الكلمة بعدها شغالة!**")
     word, opposite = random.choice(list(OPPOSITES.items()))
@@ -228,6 +277,12 @@ async def check_opposites_handler(event):
 @client.on(events.NewMessage(pattern="^اكمل المثل$"))
 async def start_proverb_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "اكمل المثل" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id = event.chat_id
     if chat_id in PROVERBS_GAMES: return await event.reply("**اكو مثل بعده محد مكمله!**")
     proverb = random.choice(PROVERBS)
