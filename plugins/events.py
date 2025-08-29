@@ -1,8 +1,8 @@
+# plugins/events.py
 from datetime import datetime, timedelta
 import random
 import time
 from telethon import events
-from telethon.events import StopPropagation   # ✅ بديل عن ContinuePropagation
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from bot import client
 import config
@@ -30,55 +30,12 @@ def reset_user_warns(chat_id, user_id):
         return True
     return False
 
-# ✅ فحص اذا الأمر معطل
-def is_disabled_command(chat_id, command_text):
-    chat_id_str = str(chat_id)
-    disabled_cmds = db.get(chat_id_str, {}).get("disabled_commands", [])
-    return any(command_text.startswith(cmd) for cmd in disabled_cmds)
-
-# ✅ أوامر لتعطيل وتفعيل الأوامر
-@client.on(events.NewMessage(pattern="^/تعطيل (.+)"))
-async def disable_command(event):
-    cmd = event.pattern_match.group(1).strip()
-    chat_id_str = str(event.chat_id)
-    if "disabled_commands" not in db.get(chat_id_str, {}):
-        db[chat_id_str]["disabled_commands"] = []
-    if cmd not in db[chat_id_str]["disabled_commands"]:
-        db[chat_id_str]["disabled_commands"].append(cmd)
-        save_db(db)
-    await event.reply(f"✅ تم تعطيل الأمر: {cmd}")
-
-@client.on(events.NewMessage(pattern="^/تفعيل (.+)"))
-async def enable_command(event):
-    cmd = event.pattern_match.group(1).strip()
-    chat_id_str = str(event.chat_id)
-    if "disabled_commands" in db.get(chat_id_str, {}) and cmd in db[chat_id_str]["disabled_commands"]:
-        db[chat_id_str]["disabled_commands"].remove(cmd)
-        save_db(db)
-    await event.reply(f"✅ تم تفعيل الأمر: {cmd}")
-
 @client.on(events.NewMessage(func=lambda e: not e.is_private))
 async def general_message_handler(event):
     if not await check_activation(event.chat_id): 
         return
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
-
-    # --- (النسخة المستقرة) محرك ترجمة الأوامر المضافة ---
-    if event.text:
-        aliases = db.get(chat_id_str, {}).get("command_aliases", {})
-        command_candidate = event.text.strip()
-        if command_candidate in aliases:
-            original_command = aliases[command_candidate]
-            event.text = original_command
-            event.raw_text = original_command
-            if hasattr(event, 'message') and hasattr(event.message, 'message'):
-                event.message.message = original_command
-    # --- نهاية محرك الترجمة ---
-
-    # ✅ فحص إذا هذا الأمر معطل
-    if event.text and is_disabled_command(event.chat_id, event.text):
-        raise StopPropagation
 
     # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
@@ -104,23 +61,33 @@ async def general_message_handler(event):
             db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
         
         save_db(db)
-    
+    # --- نهاية نظام تخزين الرسائل ---
+
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    if now - last_dhikr_time > 3600:
+    if now - last_dhikr_time > 3600: # 3600 ثانية = 1 ساعة
         dhikr_message = random.choice(DHIKR_LIST)
         await client.send_message(event.chat_id, dhikr_message)
         if chat_id_str not in db: db[chat_id_str] = {}
         db[chat_id_str]["last_dhikr_time"] = now
         save_db(db)
-    
+    # --- نهاية ميزة الذكر التلقائي ---
+
     if not event.text: return
     
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
     all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر", "الردود", "ايدي", "id", "اضف رد", "حذف رد", "تفعيل", "ايقاف", "تحذير", "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي"] + service_commands + ["حللني", "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل"]
     is_command = any(event.text.startswith(cmd) for cmd in all_commands) or event.text.startswith("اذان")
 
+    # ✅ تم إضافة هذا الجزء لتعطيل الأوامر ديناميكيًا
+    disabled_commands = db.get(chat_id_str, {}).get("disabled_commands", [])
+    if event.text.lower().strip() in [cmd.lower() for cmd in disabled_commands]:
+        return
+
+    # باقي الكود كما هو بدون تغيير...
+    # يمكنك الآن الاعتماد على قاعدة البيانات لتعطيل أي أمر بشكل آمن
+    
     rank_int = await get_user_rank(event.sender_id, event)
     is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
 
