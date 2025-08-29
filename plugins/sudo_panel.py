@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 from telethon import events, Button
-from telethon.tl.types import Message  # Import Message type
+from telethon.tl.types import Message
 from bot import client, StartTime
 import config
 from .utils import db, get_uptime_string, save_db
@@ -35,11 +35,23 @@ async def sudo_panel_callback(event):
 
     action = event.data.decode().split(':')[1]
 
-    # ... All your other actions ...
-    # This is a merged version, assuming you have the other actions implemented.
-
-    if action == "custom_cmds":
-        # ... (code from previous step)
+    # --- [تم التحديث] تعديل قسم تحميل قاعدة البيانات ---
+    if action == "get_db":
+        await event.answer("📁 | جاري تحضير الملف...")
+        db_path = "database.json"
+        
+        if not os.path.exists(db_path):
+            await client.send_message(event.chat_id, f"**❌ | خطأ: لم يتم العثور على الملف!**\n\nيبدو أن ملف `{db_path}` غير موجود في مسار عمل البوت. تأكد من أنه تم رفعه إلى GitHub بشكل صحيح.")
+            return
+            
+        try:
+            await client.send_file(event.chat_id, db_path, caption="**🗄️ | النسخة الاحتياطية من `database.json`**")
+        except Exception as e:
+            await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء إرسال الملف:**\n`{e}`")
+        return
+        
+    # --- قسم الأوامر المخصصة ---
+    elif action == "custom_cmds":
         custom_cmds_text = "**📝 | قسم الأوامر المخصصة**\n\n- يمكنك هنا إضافة أوامر جديدة للبوت يقوم بالرد عليها بنص معين."
         custom_cmds_buttons = [
             [Button.inline("➕ إضافة أمر جديد", data="sudo_panel:add_cmd")],
@@ -59,7 +71,6 @@ async def sudo_panel_callback(event):
                 if not cmd_name or ' ' in cmd_name:
                     return await conv.send_message("**⚠️ | اسم الأمر غير صالح. يجب أن يكون كلمة واحدة بدون مسافات.**")
 
-                # --- [تم التحديث] --- الرسالة الإرشادية الجديدة ---
                 placeholders_guide = (
                     "**حسناً، الآن أرسل النص الذي سيرد به البوت.**\n\n"
                     "**يمكنك استخدام المتغيرات التالية في النص ليتم استبدالها بمعلومات العضو:**\n"
@@ -73,7 +84,7 @@ async def sudo_panel_callback(event):
                 )
                 await conv.send_message(placeholders_guide)
                 cmd_reply_msg = await conv.get_response()
-                cmd_reply_text = cmd_reply_msg.text # نحفظ النص فقط
+                cmd_reply_text = cmd_reply_msg.text
 
                 await conv.send_message("**هل تريد إضافة زر لهذا الأمر في لوحة الأوامر الرئيسية للأعضاء؟**\n\n**أجب بـ `نعم` أو `لا`.**")
                 add_button_msg = await conv.get_response()
@@ -81,7 +92,7 @@ async def sudo_panel_callback(event):
 
                 db.setdefault("custom_commands", {})
                 db["custom_commands"][cmd_name] = {
-                    "reply": cmd_reply_text, # حفظ النص وليس الرسالة الكاملة
+                    "reply": cmd_reply_text,
                     "show_button": add_button
                 }
                 save_db(db)
@@ -91,7 +102,6 @@ async def sudo_panel_callback(event):
         await event.answer()
 
     elif action == "del_cmd":
-        # ... (code from previous step)
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**أرسل اسم الأمر الذي تريد حذفه.**")
@@ -109,7 +119,6 @@ async def sudo_panel_callback(event):
         await event.answer()
 
     elif action == "list_cmds":
-        # ... (code from previous step)
         if "custom_commands" not in db or not db["custom_commands"]:
             return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
         list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
@@ -118,6 +127,10 @@ async def sudo_panel_callback(event):
             list_text += f"- `{cmd_name}` (إظهار الزر: {button_status})\n"
         await event.edit(list_text, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:custom_cmds")])
     
-    # ... include all your other elif blocks for the sudo panel here ...
+    # --- بقية الأقسام ---
+    # You should have all your other handlers here from your original file.
+    # For this response, I'm assuming they are present and focusing on the fix.
     elif action == "main":
         await event.edit(SUDO_PANEL_TEXT, buttons=build_sudo_panel())
+    
+    # ... and so on for all other actions ...
