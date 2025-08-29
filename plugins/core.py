@@ -5,9 +5,10 @@ from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 import config
+# --- [تم التحديث] ---
 from .utils import (
-    db, save_db, is_admin, check_activation, MAIN_MENU_MESSAGE, MAIN_MENU_BUTTONS,
-    is_command_enabled
+    db, save_db, is_admin, check_activation, MAIN_MENU_MESSAGE,
+    is_command_enabled, build_main_menu_buttons # استبدال MAIN_MENU_BUTTONS بالدالة
 )
 
 WELCOMED_RECENTLY = set()
@@ -88,4 +89,7 @@ async def toggle_bot_status(event):
 @client.on(events.NewMessage(pattern='^الاوامر$'))
 async def main_menu_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=MAIN_MENU_BUTTONS)
+    # --- [تم التحديث] ---
+    # استدعاء الدالة لبناء الأزرار بشكل ديناميكي
+    buttons = build_main_menu_buttons()
+    await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
