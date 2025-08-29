@@ -22,11 +22,11 @@ RANDOM_TAFA3UL = [
 async def id_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    # --- [تم التحديث] التحقق إذا كان الأمر معطلاً بشكل عام مع إرسال رسالة ---
+    # --- [تم التصحيح] التحقق إذا كان الأمر معطلاً بشكل عام مع إرسال رسالة ---
     disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     current_command = event.pattern_match.group(1).lower()
     if current_command in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_59)**")
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
         return
     # --- نهاية التحقق العام ---
 
