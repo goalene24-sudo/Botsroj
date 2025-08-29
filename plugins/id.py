@@ -1,10 +1,12 @@
+# plugins/id.py
 import random
 import time
 from telethon import events
 from bot import client
 import config
 from .utils import check_activation, db, get_user_rank, Ranks, is_command_enabled
-from .achievements import ACHIEVEMENTS  # استدعاء قاموس الأوسمة
+# (تمت الإضافة) استدعاء قاموس الأوسمة
+from .achievements import ACHIEVEMENTS
 
 RANDOM_HEADERS = [
     "شــوف الحــلو؟ 🧐", "تــعال اشــوفك 🫣", "بــاوع الجــمال 🫠",
@@ -17,13 +19,10 @@ RANDOM_TAFA3UL = [
 
 @client.on(events.NewMessage(pattern=r"^(ايدي|id)(?: |$)(.*)"))
 async def id_handler(event):
-    if event.is_private or not await check_activation(event.chat_id):
-        raise events.StopPropagation()
-
+    if event.is_private or not await check_activation(event.chat_id): return
     if not is_command_enabled(event.chat_id, "id_enabled"):
-        await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
-        raise events.StopPropagation()
-
+        return await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
+    
     target_user = None
     replied_msg = await event.get_reply_message()
     user_input = event.pattern_match.group(2)
@@ -34,22 +33,23 @@ async def id_handler(event):
         try:
             target_user = await client.get_entity(user_input)
         except (ValueError, TypeError):
-            await event.reply("**ما لگيت هيج مستخدم.**")
-            raise events.StopPropagation()
+            return await event.reply("**ما لگيت هيج مستخدم.**")
     else:
         target_user = await event.get_sender()
 
     if not target_user:
-        await event.reply("**ما گدرت أحدد المستخدم.**")
-        raise events.StopPropagation()
+        return await event.reply("**ما گدرت أحدد المستخدم.**")
 
     chat_id_str, user_id_str = str(event.chat_id), str(target_user.id)
+    
+    # --- جلب كل بيانات المستخدم ---
     user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
     msg_count = user_data.get("msg_count", 0)
     points = user_data.get("points", 0)
     sahaqat = user_data.get("sahaqat", 0)
     custom_bio = user_data.get("bio", "لم يتم تعيين نبذة بعد.")
-
+    
+    # --- جلب الرتبة بالطريقة الموحدة ---
     rank_int = await get_user_rank(target_user.id, event)
     rank_map = {
         Ranks.DEVELOPER: "المطور 👨‍💻",
@@ -60,19 +60,22 @@ async def id_handler(event):
         Ranks.MEMBER: "عضو 👤"
     }
     rank = rank_map.get(rank_int, "عضو 👤")
-
+    
+    # --- جلب الأوسمة ---
     user_achievements_keys = user_data.get("achievements", [])
     badges_str = ""
     if user_achievements_keys:
         for ach_key in user_achievements_keys:
             if ach_key in ACHIEVEMENTS:
                 badges_str += ACHIEVEMENTS[ach_key]["icon"]
-
+    
+    # --- التحقق من الألقاب والزخرفة ---
     inventory = user_data.get("inventory", {})
     vip_status_text = None
     custom_title = None
     decoration = ""
-
+    
+    # (تم الإصلاح) إعادة التحقق من لقب VIP
     vip_item = inventory.get("لقب vip")
     if vip_item:
         purchase_time = vip_item.get("purchase_time", 0)
@@ -80,27 +83,30 @@ async def id_handler(event):
         if time.time() - purchase_time < duration_seconds:
             vip_status_text = "💎 | من كبار الشخصيات VIP"
 
+    # التحقق من اللقب المخصص
     custom_title_item = inventory.get("تخصيص لقب")
     if custom_title_item:
         purchase_time = custom_title_item.get("purchase_time", 0)
         duration_seconds = custom_title_item.get("duration_days", 0) * 86400
         if time.time() - purchase_time < duration_seconds:
             custom_title = user_data.get("custom_title")
-
+            
+    # التحقق من الزخرفة
     decoration_item = inventory.get("زخرفة")
     if decoration_item:
         purchase_time = decoration_item.get("purchase_time", 0)
         duration_seconds = decoration_item.get("duration_days", 0) * 86400
         if time.time() - purchase_time < duration_seconds:
             decoration = "✨"
-
+    
     header = random.choice(RANDOM_HEADERS)
     tafa3ul = random.choice(RANDOM_TAFA3UL)
-
+    
     caption = f"**{header}**\n\n"
+    
     if vip_status_text:
         caption += f"**{vip_status_text}**\n"
-
+        
     caption += (
         f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**\n"
         f"**- ايديك:** `{target_user.id}`\n"
@@ -108,10 +114,10 @@ async def id_handler(event):
         f"**- حسابك:** [{target_user.first_name}](tg://user?id={target_user.id}) {decoration}\n"
         f"**- رتبتك:** {rank}\n"
     )
-
+    
     if custom_title:
         caption += f"**- لقبك:** {custom_title}\n"
-
+        
     caption += (
         f"**- نبذتك:** {custom_bio}\n"
         f"**- تفاعلك:** {tafa3ul}\n"
@@ -119,15 +125,14 @@ async def id_handler(event):
         f"**- سحكاتك:** `{sahaqat}`\n"
         f"**- نقاطك:** `{points}`\n"
     )
-
+    
     if badges_str:
         caption += f"**- أوسمتك:** {badges_str}\n"
-
+    
     caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
-
+    
     pfp = await client.get_profile_photos(target_user, limit=1)
     if pfp:
         await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
     else:
         await event.reply(caption, reply_to=event.id)
-      
