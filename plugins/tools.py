@@ -30,6 +30,12 @@ DAYS_AR = {
 @client.on(events.NewMessage(pattern="^معلومات المجموعة$"))
 async def group_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "معلومات المجموعة" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat = await event.get_chat()
     chat_id_str = str(event.chat_id)
     loading_msg = await event.reply("**جاي أحسب... 🤓**")
@@ -53,6 +59,12 @@ async def group_info_handler(event):
 @client.on(events.NewMessage(pattern="^احصائيات$"))
 async def group_stats_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "احصائيات" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     chat_id_str = str(event.chat_id)
     users_data = db.get(chat_id_str, {}).get("users", {})
     if not users_data:
@@ -79,6 +91,12 @@ async def group_stats_handler(event):
 @client.on(events.NewMessage(pattern=r"^احجي(?: (.*))?$"))
 async def tts_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "احجي" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     text_to_say = event.pattern_match.group(1)
     if not text_to_say:
         return await event.reply("**شحچي؟ لازم تكتبلي كلام.\nمثال: `احجي صباح الخير`**")
@@ -100,6 +118,12 @@ async def tts_handler(event):
 @client.on(events.NewMessage(pattern=r"^وقت(?: (.*))?$"))
 async def world_clock_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "وقت" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     city_name_raw = event.pattern_match.group(1)
     if not city_name_raw:
         return await event.reply("**لمعرفة الوقت، اكتب اسم مدينة رئيسية.\nمثال: `وقت لندن`**")
@@ -132,7 +156,12 @@ async def world_clock_handler(event):
 @client.on(events.NewMessage(pattern=r"^عمري (.+)"))
 async def age_calculator_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "عمري" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     date_str = event.pattern_match.group(1)
     try:
         birth_date = None
@@ -175,7 +204,12 @@ async def age_calculator_handler(event):
 @client.on(events.NewMessage(pattern=r"^المطور$"))
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "المطور" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
     # --- معلومات المطور ---
     DEV_USER_ID = 196351880
     dev_name = "وِهےـِمِے"
