@@ -1,11 +1,12 @@
 # plugins/id.py
+
 import random
 import time
 from telethon import events
 from bot import client
 import config
 from .utils import check_activation, db, get_user_rank, Ranks, is_command_enabled
-# (تمت الإضافة) استدعاء قاموس الأوسمة
+# استدعاء قاموس الأوسمة
 from .achievements import ACHIEVEMENTS
 
 RANDOM_HEADERS = [
@@ -20,6 +21,17 @@ RANDOM_TAFA3UL = [
 @client.on(events.NewMessage(pattern=r"^(ايدي|id)(?: |$)(.*)"))
 async def id_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- [تمت الإضافة] التحقق إذا كان الأمر معطلاً بشكل عام من لوحة المطور ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    # .group(1) سوف يلتقط "ايدي" أو "id" من النص الذي أدخله المستخدم
+    current_command = event.pattern_match.group(1).lower()
+    if current_command in disabled_cmds:
+        # الأمر معطل بشكل عام، لذلك نتوقف هنا بصمت
+        return
+    # --- نهاية التحقق العام ---
+
+    # --- التحقق إذا كان الأمر معطلاً في المجموعة نفسها ---
     if not is_command_enabled(event.chat_id, "id_enabled"):
         return await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
     
@@ -75,7 +87,7 @@ async def id_handler(event):
     custom_title = None
     decoration = ""
     
-    # (تم الإصلاح) إعادة التحقق من لقب VIP
+    # التحقق من لقب VIP
     vip_item = inventory.get("لقب vip")
     if vip_item:
         purchase_time = vip_item.get("purchase_time", 0)
