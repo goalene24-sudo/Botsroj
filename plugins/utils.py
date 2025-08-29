@@ -1,3 +1,5 @@
+# plugins/utils.py
+
 import json
 from telethon import Button
 import config
@@ -123,13 +125,37 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
-MAIN_MENU_BUTTONS = [
-    [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
-    [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
-    [Button.inline("م6 الإدارة ⚙️", data="admin_hub:main"), Button.inline("م5 الادوات 🛠️", data="tools_menu")],
-    [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
-    [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
-]
+# --- [تم التحديث] تحويل القائمة الثابتة إلى دالة ديناميكية ---
+def build_main_menu_buttons():
+    # الأزرار الأساسية الثابتة
+    buttons = [
+        [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
+        [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
+        [Button.inline("م6 الإدارة ⚙️", data="admin_hub:main"), Button.inline("م5 الادوات 🛠️", data="tools_menu")],
+        [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
+        [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
+    ]
+
+    # جلب الأوامر المخصصة من قاعدة البيانات
+    custom_commands = db.get("custom_commands", {})
+    custom_buttons_row = []
+    
+    # التحقق من كل أمر مخصص
+    for command_name, command_data in custom_commands.items():
+        # إذا كان خيار "إظهار الزر" مفعلاً
+        if command_data.get("show_button"):
+            # قم بإنشاء زر جديد
+            # استخدمنا "ccmd:" كبادئة لتمييز هذه الأزرار
+            new_button = Button.inline(command_name.capitalize(), data=f"ccmd:{command_name}")
+            custom_buttons_row.append(new_button)
+    
+    # إذا كان هناك أزرار مخصصة، قم بإضافتها كصفوف جديدة
+    if custom_buttons_row:
+        chunk_size = 2 # يمكنك تغيير عدد الأزرار في كل صف من هنا
+        for i in range(0, len(custom_buttons_row), chunk_size):
+            buttons.append(custom_buttons_row[i:i + chunk_size])
+
+    return buttons
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
 PERCENT_COMMANDS = [ "نسبة الحب", "نسبة الكره", "نسبة الجمال", "نسبة الغباء", "نسبة الخيانة", "نسبة الشجاعة", "نسبة الذكاء" ]
@@ -224,8 +250,7 @@ def build_xo_keyboard(board):
     return buttons
 
 def check_xo_winner(board):
-    lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4
-,6)]
+    lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
     for line in lines:
         if board[line[0]] == board[line[1]] == board[line[2]] != '-':
             return board[line[0]]
