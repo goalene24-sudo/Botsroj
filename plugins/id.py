@@ -22,12 +22,11 @@ RANDOM_TAFA3UL = [
 async def id_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    # --- [تمت الإضافة] التحقق إذا كان الأمر معطلاً بشكل عام من لوحة المطور ---
+    # --- [تم التحديث] التحقق إذا كان الأمر معطلاً بشكل عام مع إرسال رسالة ---
     disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    # .group(1) سوف يلتقط "ايدي" أو "id" من النص الذي أدخله المستخدم
     current_command = event.pattern_match.group(1).lower()
     if current_command in disabled_cmds:
-        # الأمر معطل بشكل عام، لذلك نتوقف هنا بصمت
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_59)**")
         return
     # --- نهاية التحقق العام ---
 
