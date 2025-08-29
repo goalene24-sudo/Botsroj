@@ -52,12 +52,22 @@ async def youtube_search_handler(event):
 
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
     
-    # تحديد اسم ملف الإخراج
     output_path = "downloads/audio.mp3"
 
+    # --- [تمت الإضافة] --- تحديد مسار ملف الكوكيز ---
+    cookies_file = "cookies.txt"
+    if not os.path.exists(cookies_file):
+        return await msg.edit("**❌ | خطأ إعداد!**\n\n**ملف `cookies.txt` غير موجود. يرجى رفعه إلى ملفات البوت لحل مشكلة التحميل من يوتيوب.**")
+
+
     try:
-        # البحث باستخدام yt-dlp
-        ydl_opts_search = {'quiet': True, 'default_search': 'ytsearch1', 'extract_flat': 'in_playlist'}
+        # البحث باستخدام yt-dlp مع ملف الكوكيز
+        ydl_opts_search = {
+            'quiet': True, 
+            'default_search': 'ytsearch1', 
+            'extract_flat': 'in_playlist',
+            'cookiefile': cookies_file  # <-- تمت الإضافة
+        }
         with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
             info = ydl.extract_info(f"ytsearch1:{search_term}", download=False)
             
@@ -76,13 +86,14 @@ async def youtube_search_handler(event):
         if not os.path.isdir('downloads'):
             os.makedirs('downloads')
         
-        # إعدادات التحميل كملف صوتي (تم تعديل اسم الإخراج)
+        # إعدادات التحميل كملف صوتي مع ملف الكوكيز
         ydl_opts_download = {
             'format': 'bestaudio/best',
-            'outtmpl': 'downloads/audio', # <-- التعديل هنا
+            'outtmpl': 'downloads/audio',
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             'quiet': True,
             'noplaylist': True,
+            'cookiefile': cookies_file # <-- تمت الإضافة
         }
 
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
