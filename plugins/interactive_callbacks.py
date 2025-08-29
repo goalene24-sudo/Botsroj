@@ -5,11 +5,12 @@ from datetime import datetime, timedelta
 from telethon import events, Button
 from bot import client
 import config
+# --- [تم التحديث] ---
 from .utils import (
     db, save_db, is_admin, check_activation, RPS_GAMES, XO_GAMES,
     build_protection_menu, build_xo_keyboard, 
     check_xo_winner, add_points, has_bot_permission,
-    RIDDLES, BLESS_COUNTERS, MAIN_MENU_BUTTONS
+    RIDDLES, BLESS_COUNTERS, build_main_menu_buttons # استبدال المتغير بالدالة
 )
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
 from .games import CURRENT_QUIZZES, MAHIBES_GAMES
@@ -51,10 +52,10 @@ async def handle_interactive_callback(event):
         return
 
     if action == "dice_challenge":
-        # ... (بقية الكود يبقى كما هو)
+        # ... (Your existing code here)
         pass
 
-    # ... (بقية الملف يبقى كما هو)
+    # ... (The rest of your file's logic remains exactly the same)
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
         msg_id = event.message_id
@@ -136,7 +137,7 @@ async def handle_interactive_callback(event):
         return
 
     if action == "tasbeeh":
-        # ... (Leaving this logic as is for now as it's complex)
+        # ... (Your existing code here)
         return
         
     if action == "show_rules":
@@ -149,7 +150,7 @@ async def handle_interactive_callback(event):
             await event.answer("**عذراً، لم يقم المشرفون بوضع قوانين للمجموعة بعد.**", alert=True)
     
     if action == "wyr":
-        # ... (Leaving this logic as is)
+        # ... (Your existing code here)
         return
 
     if action == "riddle":
@@ -174,22 +175,24 @@ async def handle_interactive_callback(event):
         if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
         if chat_id_str not in db: db[chat_id_str] = {}
         db[chat_id_str]["is_paused"] = False; save_db(db)
-        await event.edit("**✅ تم تفعيل البوت بنجاح!**\n**الآن يمكنك استخدام القوائم أدناه للتحكم.**", buttons=MAIN_MENU_BUTTONS)
+        # --- [تم التحديث] ---
+        buttons = build_main_menu_buttons()
+        await event.edit("**✅ تم تفعيل البوت بنجاح!**\n**الآن يمكنك استخدام القوائم أدناه للتحكم.**", buttons=buttons)
     
     if query_data.startswith("rps"):
-        # ... (Leaving as is)
+        # ... (Your existing code here)
         return
 
     if query_data.startswith("xo_move_"):
-        # ... (Leaving as is)
+        # ... (Your existing code here)
         return
     
     if query_data.startswith("bless"):
-        # ... (Leaving as is)
+        # ... (Your existing code here)
         return
 
     if query_data.startswith("mute_"):
-        # ... (Leaving as is)
+        # ... (Your existing code here)
         return
     
     if query_data.startswith("toggle_lock_"):
