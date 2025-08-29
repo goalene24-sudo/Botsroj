@@ -35,6 +35,7 @@ ALL_MODULES = [
     "plugins.owner",
     "plugins.sudo_panel",
     "plugins.media_search",
+    "plugins.custom_commands", # <-- تمت الإضافة
     "plugins.admin_menus",
     "plugins.settings",
 ]
