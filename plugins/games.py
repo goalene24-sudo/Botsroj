@@ -21,6 +21,14 @@ LUCK_BOX_MESSAGES = [
 @client.on(events.NewMessage(pattern="^صندوق الحظ$"))
 async def luck_box_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "صندوق الحظ" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+    
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -59,6 +67,14 @@ async def luck_box_handler(event):
 @client.on(events.NewMessage(pattern="^حظي$"))
 async def slot_machine_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "حظي" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -79,6 +95,14 @@ async def slot_machine_handler(event):
 @client.on(events.NewMessage(pattern="^xo$"))
 async def xo_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "xo" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -95,6 +119,14 @@ async def xo_game_handler(event):
 @client.on(events.NewMessage(pattern="^حجره ورقه مقص$"))
 async def rps_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "حجره ورقه مقص" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -110,6 +142,14 @@ async def rps_game_handler(event):
 @client.on(events.NewMessage(pattern="^كويز$"))
 async def start_quiz_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "كويز" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -123,6 +163,14 @@ async def start_quiz_handler(event):
 @client.on(events.NewMessage(pattern="^محيبس$"))
 async def start_mahbis_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "محيبس" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
@@ -153,6 +201,14 @@ async def start_mahbis_game_handler(event):
 @client.on(events.NewMessage(pattern="^من سيربح المليون$"))
 async def millionaire_start_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
+    
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "من سيربح المليون" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
     if not is_command_enabled(event.chat_id, "games_enabled"):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
