@@ -17,7 +17,7 @@ def build_sudo_panel():
         [Button.inline("🚫 الحظر العام", data="sudo_panel:gban"), Button.inline("🧑‍✈️ الترقيات العامة", data="sudo_panel:gadmin")],
         [Button.inline("🛠️ الصيانة", data="sudo_panel:db_maint"), Button.inline("🔍 فحص البيانات", data="sudo_panel:inspect")],
         [Button.inline("🌐 الإعدادات العامة", data="sudo_panel:global_settings")],
-        [Button.inline("📝 الأوامر المخصصة", data="sudo_panel:custom_cmds")], # <-- تمت الإضافة
+        [Button.inline("📝 الأوامر المخصصة", data="sudo_panel:custom_cmds")],
         [Button.inline("🔄 إعادة التشغيل", data="sudo_panel:restart"), Button.inline("🛑 إيقاف التشغيل", data="sudo_panel:shutdown")],
         [Button.inline("📁 تحميل قاعدة البيانات", data="sudo_panel:get_db")],
     ]
@@ -94,7 +94,6 @@ async def sudo_panel_callback(event):
             await event.reply("**⏰ | انتهى الوقت.**")
         await event.answer()
 
-    # --- [تم التحديث] إصلاح قسم تحميل قاعدة البيانات ---
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير الملف...")
         db_path = "database.json"
@@ -297,11 +296,12 @@ async def sudo_panel_callback(event):
             text_to_send = "**📜 | لا توجد أي أوامر معطلة على مستوى البوت حالياً.**"
         else:
             text_to_send = "**📜 | قائمة الأوامر المعطلة عاماً:**\n\n"
+            # [تم الإصلاح] دمج التعليق في سطر واحد لمنع الخطأ النحوي
             text_to_send += "\n".join(f"{i+1}. `{cmd}`" for i, cmd in enumerate(disabled_list))
         
         await event.edit(text_to_send, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:global_settings")])
 
-    # --- [تمت الإضافة] قسم الأوامر المخصصة الجديد والمطور ---
+    # --- [قسم جديد] الأوامر المخصصة ---
     elif action == "custom_cmds":
         custom_cmds_text = "**📝 | قسم الأوامر المخصصة**\n\n- يمكنك هنا إضافة أوامر جديدة للبوت يقوم بالرد عليها بنص معين."
         custom_cmds_buttons = [
@@ -391,4 +391,4 @@ async def sudo_panel_callback(event):
         if "custom_commands" not in db or not db["custom_commands"]:
             return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
         list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
-        for cmd_name, cmd_data in
+        for cmd_name, cmd_data in db["custom_commands"].items(
