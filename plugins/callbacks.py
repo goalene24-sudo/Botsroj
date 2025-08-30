@@ -62,7 +62,7 @@ async def callback_handler(event):
             for chat_id_str in db:
                 if not chat_id_str.startswith('-'): continue
                 chat_info = db[chat_id_str]
-                if not chat_info.get("is_paused", False):
+                if not chat_info.get("is_paused", False): 
                     total_groups += 1
                     all_users.update(chat_info.get("users", {}).keys())
             uptime = get_uptime_string(StartTime)
