@@ -3,7 +3,7 @@ from telethon import events, Button
 from bot import client, StartTime
 from .utils import (
     db, save_db, is_admin, has_bot_permission,
-    GEMINI_ENABLED, MAIN_MENU_MESSAGE, build_main_menu_buttons, # <-- تم التحديث هنا
+    GEMINI_ENABLED, MAIN_MENU_MESSAGE, build_main_menu_buttons,
     build_protection_menu, get_uptime_string
 )
 from .interactive_callbacks import handle_interactive_callback
@@ -28,8 +28,6 @@ async def callback_handler(event):
 
     if query_data in main_menus:
         text_to_show = None
-        # --- [تم التحديث] ---
-        # بناء الأزرار بشكل ديناميكي بدلاً من استخدام القائمة الثابتة
         buttons_to_show = build_main_menu_buttons()
 
         if query_data == "fun_menu":
@@ -64,7 +62,7 @@ async def callback_handler(event):
             for chat_id_str in db:
                 if not chat_id_str.startswith('-'): continue
                 chat_info = db[chat_id_str]
-                if not chat_info.get("is_paused", False): # Simplified this line
+                if not chat_info.get("is_paused", False):
                     total_groups += 1
                     all_users.update(chat_info.get("users", {}).keys())
             uptime = get_uptime_string(StartTime)
@@ -107,30 +105,28 @@ async def callback_handler(event):
         await handle_interactive_callback(event)
 
 
-# --- [تمت الإضافة] معالج جديد لضغطات أزرار الأوامر المخصصة ---
+# --- [تم التحديث] معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
 @client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
 async def custom_command_button_handler(event):
-    # استخراج اسم الأمر من بيانات الزر
     command_name = event.data.decode().split(':')[1]
-    
     custom_commands = db.get("custom_commands", {})
     
     if command_name not in custom_commands:
         return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
 
-    reply_template = custom_commands[command_name].get("reply")
+    command_data = custom_commands[command_name]
+    reply_template = command_data.get("reply")
+    # إذا لم يتم تحديد طريقة العرض، نستخدم "منبثق" كافتراضي
+    display_mode = command_data.get("display_mode", "popup") 
 
     if not reply_template:
         return await event.answer("⚠️ | لا يوجد نص رد لهذا الأمر.", alert=True)
 
-    # جلب البيانات الديناميكية للمستخدم الذي ضغط على الزر
     sender = await event.get_sender()
     chat = await event.get_chat()
-    
     chat_id_str = str(chat.id)
     sender_id_str = str(sender.id)
     user_data = db.get(chat_id_str, {}).get("users", {}).get(sender_id_str, {})
-    
     msg_count = user_data.get("msg_count", 0)
     points = user_data.get("points", 0)
 
@@ -138,16 +134,25 @@ async def custom_command_button_handler(event):
         if not isinstance(reply_template, str):
             reply_template = str(reply_template)
 
-        # تجهيز النص النهائي
         final_reply = reply_template.format(
             user_first_name=sender.first_name,
-            user_mention=sender.first_name, 
+            user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
             user_id=sender.id,
             points=points,
             msg_count=msg_count,
             chat_title=chat.title
         )
-        # إظهار الرد في رسالة منبثقة (pop-up)
-        await event.answer(final_reply, alert=True)
+
+        # التحقق من طريقة العرض المطلوبة
+        if display_mode == "edit":
+            # تعديل الرسالة مع زر رجوع
+            back_button = Button.inline("🔙 رجوع", data="back_to_main")
+            await event.edit(final_reply, buttons=back_button, parse_mode='md')
+        else:
+            # عرض رسالة منبثقة (السلوك الافتراضي)
+            # الماركداون لا يعمل جيداً في الرسائل المنبثقة، لذا ننشئ نسخة مبسطة
+            popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
+            await event.answer(popup_reply, alert=True)
+
     except Exception as e:
         await event.answer(f"⚠️ | خطأ في عرض الرد: {e}", alert=True)
