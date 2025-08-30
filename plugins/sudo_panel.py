@@ -109,7 +109,6 @@ async def sudo_panel_callback(event):
         try:
             await client.send_file(event.chat_id, db_path, caption="**🗄️ | النسخة الاحتياطية من `database.json`**")
         except Exception as e:
-            # [تم الإصلاح] استخدام علامات اقتباس ثلاثية لتجنب الأخطاء
             error_message = f"""**❌ | حدث خطأ أثناء إرسال الملف:**
 `{e}`"""
             await client.send_message(event.chat_id, error_message)
@@ -203,11 +202,12 @@ async def sudo_panel_callback(event):
                 await conv.send_message("**🏙️ | أرسل الآن ID المجموعة...**")
                 response = await conv.get_response()
                 try:
-                    chat_id = int(response.text.strip())
+                    chat_id_str = response.text.strip()
+                    chat_id = int(chat_id_str)
                 except ValueError:
                     return await conv.send_message("**ID غير صالح.**")
 
-                chat_data = db.get(str(chat_id)) # يجب تحويل ID إلى نص للبحث
+                chat_data = db.get(chat_id_str)
                 if not chat_data: 
                     return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
                 
@@ -382,8 +382,9 @@ async def sudo_panel_callback(event):
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
         
+    # --- [تم التحديث] إضافة كود التشخيص ---
     elif action == "list_cmds":
-        if "custom_commands" not in db or not db["custom_commands"]:
-            return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
-        list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
-      
+        custom_commands_data = db.get("custom_commands")
+        
+        # رسالة تشخيصية لمحتوى الذاكرة
+        debug_message = f"**[رسالة تشخيصية]**\n\n**محتوى `custom_commands` الذي أراه الآن هو:**\n`{custom_commands_data}`"
