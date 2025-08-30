@@ -51,9 +51,17 @@ async def sudo_panel_callback(event):
         await event.edit("**🛑 | جاري إيقاف تشغيل البوت... إلى اللقاء.**")
         await client.disconnect()
 
+    # --- [تم الإصلاح] تعديل طريقة حساب المجموعات ---
     elif action == "stats":
         uptime = get_uptime_string(StartTime)
-        group_count = sum(1 for key in db.keys() if isinstance(key, int) and key < 0)
+        
+        group_count = 0
+        for key in db.keys():
+            try:
+                if int(key) < 0:
+                    group_count += 1
+            except (ValueError, TypeError):
+                continue
         
         unique_users = set()
         for chat_id, chat_data in db.items():
@@ -92,7 +100,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**📡 | اكتملت الإذاعة!**\n**- ✅ نجح:** `{successful}`\n**- ❌ فشل:** `{failed}`")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
+        
 
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير الملف...")
@@ -138,7 +146,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**🚫 | اكتمل الحظر العام!**\n**- ✅ تم الحظر في:** `{successful}`\n**- ❌ فشل في:** `{failed}`")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
+        
         
     elif action == "gadmin":
         try:
@@ -165,8 +173,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**🧑‍✈️ | اكتملت الترقية!**\n**- ✅ تمت الترقية في:** `{promoted_in}` **مجموعة.**")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
-
+        
     elif action == "db_maint":
         await event.edit("**🛠️ | جاري فحص قاعدة البيانات...**")
         inactive_chats = []
@@ -215,8 +222,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(report)
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-            await event.answer()
-
+            
     elif action == "inspect_user":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
@@ -240,8 +246,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(report)
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-            await event.answer()
-
+            
     elif action == "global_settings":
         settings_text = "**🌐 | الإعدادات العامة للبوت**\n\n**اختر الإجراء الذي تريد القيام به:**"
         disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
@@ -269,7 +274,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**✅ | تم تعطيل الأمر `{cmd_to_disable}` في جميع المجموعات.**")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
+        
 
     elif action == "g_enable_cmd":
         try:
@@ -288,8 +293,7 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**✅ | تم إعادة تفعيل الأمر `{cmd_to_enable}` في جميع المجموعات.**")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
-
+        
     elif action == "g_list_disabled":
         disabled_list = db.get("global_settings", {}).get("disabled_cmds", [])
         if not disabled_list:
@@ -366,7 +370,8 @@ async def sudo_panel_callback(event):
                 )
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
+        # --- [تم الإصلاح] حذف السطر المسبب للخطأ ---
+        # await event.answer() 
 
     elif action == "del_cmd":
         try:
@@ -383,12 +388,11 @@ async def sudo_panel_callback(event):
                     await conv.send_message(f"**⚠️ | لم يتم العثور على أمر بهذا الاسم.**")
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-        await event.answer()
+        # --- [تم الإصلاح] حذف السطر المسبب للخطأ ---
+        # await event.answer()
 
     elif action == "list_cmds":
         if "custom_commands" not in db or not db["custom_commands"]:
             return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
         list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
-        for cmd_name, cmd_data in db["custom_commands"].items():
-            button_status = '✅' if cmd_data.get('show_button') else '❌'
-            display_mode = cmd_data
+        for cmd_
