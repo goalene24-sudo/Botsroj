@@ -51,7 +51,6 @@ async def sudo_panel_callback(event):
         await event.edit("**🛑 | جاري إيقاف تشغيل البوت... إلى اللقاء.**")
         await client.disconnect()
 
-    # --- [تم الإصلاح] تعديل طريقة حساب المجموعات ---
     elif action == "stats":
         uptime = get_uptime_string(StartTime)
         
@@ -88,20 +87,17 @@ async def sudo_panel_callback(event):
                 
                 await conv.send_message("**⏳ | سأبدأ الآن ببث الرسالة...**")
                 successful, failed = 0, 0
-                all_chats = [key for key in db.keys() if isinstance(key, int) and key < 0]
-                for chat_id in all_chats:
+                all_chats = [key for key in db.keys() if isinstance(key, str) and key.startswith('-')]
+                for chat_id_str in all_chats:
                     try:
-                        await client.send_message(chat_id, response.message)
-                        successful += 1
-                        await asyncio.sleep(0.5)
+                        await client.send_message(int(chat_id_str), response.message)
+                        successful += 1; await asyncio.sleep(0.5)
                     except Exception as e:
-                        print(f"Broadcast failed for chat {chat_id}: {e}")
-                        failed += 1
+                        print(f"Broadcast failed for chat {chat_id_str}: {e}"); failed += 1
                 await conv.send_message(f"**📡 | اكتملت الإذاعة!**\n**- ✅ نجح:** `{successful}`\n**- ❌ فشل:** `{failed}`")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
         
-
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير الملف...")
         db_path = "database.json"
@@ -113,7 +109,10 @@ async def sudo_panel_callback(event):
         try:
             await client.send_file(event.chat_id, db_path, caption="**🗄️ | النسخة الاحتياطية من `database.json`**")
         except Exception as e:
-            await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء إرسال الملف:**\n`{e}`")
+            # [تم الإصلاح] استخدام علامات اقتباس ثلاثية لتجنب الأخطاء
+            error_message = f"""**❌ | حدث خطأ أثناء إرسال الملف:**
+`{e}`"""
+            await client.send_message(event.chat_id, error_message)
         return
 
     elif action == "gban":
@@ -134,19 +133,16 @@ async def sudo_panel_callback(event):
                 save_db(db)
 
                 successful, failed = 0, 0
-                all_chats = [key for key in db.keys() if isinstance(key, int) and key < 0]
-                for chat_id in all_chats:
+                all_chats = [key for key in db.keys() if isinstance(key, str) and key.startswith('-')]
+                for chat_id_str in all_chats:
                     try:
-                        await client.edit_permissions(chat_id, user_id_to_ban, view_messages=False)
-                        successful += 1
-                        await asyncio.sleep(0.5)
+                        await client.edit_permissions(int(chat_id_str), user_id_to_ban, view_messages=False)
+                        successful += 1; await asyncio.sleep(0.5)
                     except Exception as e:
-                        print(f"GBan failed for chat {chat_id}: {e}")
-                        failed += 1
+                        print(f"GBan failed for chat {chat_id_str}: {e}"); failed += 1
                 await conv.send_message(f"**🚫 | اكتمل الحظر العام!**\n**- ✅ تم الحظر في:** `{successful}`\n**- ❌ فشل في:** `{failed}`")
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
-        
         
     elif action == "gadmin":
         try:
@@ -163,11 +159,11 @@ async def sudo_panel_callback(event):
 
                 await conv.send_message(f"**⏳ | سأقوم الآن بترقية `{user_id_to_promote}`...**")
                 promoted_in = 0
-                all_chats = [key for key in db.keys() if isinstance(key, int) and key < 0]
-                for chat_id in all_chats:
-                    db.setdefault(chat_id, {}).setdefault("bot_admins", [])
-                    if user_id_to_promote not in db[chat_id]["bot_admins"]:
-                        db[chat_id]["bot_admins"].append(user_id_to_promote)
+                all_chats = [key for key in db.keys() if isinstance(key, str) and key.startswith('-')]
+                for chat_id_str in all_chats:
+                    db.setdefault(chat_id_str, {}).setdefault("bot_admins", [])
+                    if user_id_to_promote not in db[chat_id_str]["bot_admins"]:
+                        db[chat_id_str]["bot_admins"].append(user_id_to_promote)
                         promoted_in += 1
                 save_db(db)
                 await conv.send_message(f"**🧑‍✈️ | اكتملت الترقية!**\n**- ✅ تمت الترقية في:** `{promoted_in}` **مجموعة.**")
@@ -177,20 +173,19 @@ async def sudo_panel_callback(event):
     elif action == "db_maint":
         await event.edit("**🛠️ | جاري فحص قاعدة البيانات...**")
         inactive_chats = []
-        all_chats = [key for key in db.keys() if isinstance(key, int) and key < 0]
-        for chat_id in all_chats:
+        all_chats = [key for key in db.keys() if isinstance(key, str) and key.startswith('-')]
+        for chat_id_str in all_chats:
             try:
-                await client.get_entity(chat_id)
-                await asyncio.sleep(1)
+                await client.get_entity(int(chat_id_str)); await asyncio.sleep(1)
             except Exception:
-                inactive_chats.append(chat_id)
+                inactive_chats.append(chat_id_str)
         
         if not inactive_chats:
             return await event.edit("**✅ | قاعدة البيانات نظيفة!**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
         
-        for chat_id in inactive_chats:
-            if chat_id in db: 
-                del db[chat_id]
+        for chat_id_str in inactive_chats:
+            if chat_id_str in db: 
+                del db[chat_id_str]
         save_db(db)
         await event.edit(f"**🗑️ | اكتملت الصيانة!**\n**تم تنظيف `{len(inactive_chats)}` مجموعة غير نشطة.**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
 
@@ -212,7 +207,7 @@ async def sudo_panel_callback(event):
                 except ValueError:
                     return await conv.send_message("**ID غير صالح.**")
 
-                chat_data = db.get(chat_id)
+                chat_data = db.get(str(chat_id)) # يجب تحويل ID إلى نص للبحث
                 if not chat_data: 
                     return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
                 
@@ -229,7 +224,8 @@ async def sudo_panel_callback(event):
                 await conv.send_message("**👤 | أرسل الآن ID المستخدم...**")
                 response = await conv.get_response()
                 try:
-                    user_id = int(response.text.strip())
+                    user_id_str = response.text.strip()
+                    user_id = int(user_id_str)
                 except ValueError:
                     return await conv.send_message("**ID غير صالح.**")
 
@@ -238,10 +234,10 @@ async def sudo_panel_callback(event):
                 report += f"- الحظر العام: {'محظور 🚫' if is_gbanned else 'غير محظور ✅'}\n"
                 
                 groups_found_in, total_msgs = [], 0
-                for chat_id, chat_data in db.items():
-                    if isinstance(chat_data, dict) and "users" in chat_data and user_id in chat_data["users"]:
-                        groups_found_in.append(chat_id)
-                        total_msgs += chat_data["users"][user_id].get("msg_count", 0)
+                for chat_id_str, chat_data in db.items():
+                    if isinstance(chat_data, dict) and "users" in chat_data and user_id_str in chat_data["users"]:
+                        groups_found_in.append(chat_id_str)
+                        total_msgs += chat_data["users"][user_id_str].get("msg_count", 0)
                 report += f"- مجموع الرسائل: {total_msgs}\n- موجود في: `{len(groups_found_in)}` مجموعة\n"
                 await conv.send_message(report)
         except asyncio.TimeoutError: 
@@ -275,7 +271,6 @@ async def sudo_panel_callback(event):
         except asyncio.TimeoutError: 
             await event.reply("**⏰ | انتهى الوقت.**")
         
-
     elif action == "g_enable_cmd":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
@@ -370,9 +365,7 @@ async def sudo_panel_callback(event):
                 )
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-        # --- [تم الإصلاح] حذف السطر المسبب للخطأ ---
-        # await event.answer() 
-
+        
     elif action == "del_cmd":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
@@ -388,11 +381,9 @@ async def sudo_panel_callback(event):
                     await conv.send_message(f"**⚠️ | لم يتم العثور على أمر بهذا الاسم.**")
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-        # --- [تم الإصلاح] حذف السطر المسبب للخطأ ---
-        # await event.answer()
-
+        
     elif action == "list_cmds":
         if "custom_commands" not in db or not db["custom_commands"]:
             return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
         list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
-        for cmd_
+      
