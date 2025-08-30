@@ -296,12 +296,10 @@ async def sudo_panel_callback(event):
             text_to_send = "**📜 | لا توجد أي أوامر معطلة على مستوى البوت حالياً.**"
         else:
             text_to_send = "**📜 | قائمة الأوامر المعطلة عاماً:**\n\n"
-            # [تم الإصلاح] دمج التعليق في سطر واحد لمنع الخطأ النحوي
             text_to_send += "\n".join(f"{i+1}. `{cmd}`" for i, cmd in enumerate(disabled_list))
         
         await event.edit(text_to_send, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:global_settings")])
 
-    # --- [قسم جديد] الأوامر المخصصة ---
     elif action == "custom_cmds":
         custom_cmds_text = "**📝 | قسم الأوامر المخصصة**\n\n- يمكنك هنا إضافة أوامر جديدة للبوت يقوم بالرد عليها بنص معين."
         custom_cmds_buttons = [
@@ -391,4 +389,6 @@ async def sudo_panel_callback(event):
         if "custom_commands" not in db or not db["custom_commands"]:
             return await event.answer("📜 | لا توجد أوامر مخصصة حالياً.", alert=True)
         list_text = "**📜 | قائمة الأوامر المخصصة:**\n\n"
-        for cmd_name, cmd_data in db["custom_commands"].items(
+        for cmd_name, cmd_data in db["custom_commands"].items():
+            button_status = '✅' if cmd_data.get('show_button') else '❌'
+            display_mode = cmd_data
