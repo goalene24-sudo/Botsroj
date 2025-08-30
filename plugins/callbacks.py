@@ -105,7 +105,7 @@ async def callback_handler(event):
         await handle_interactive_callback(event)
 
 
-# --- [تم التحديث] معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
+# --- معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
 @client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
 async def custom_command_button_handler(event):
     command_name = event.data.decode().split(':')[1]
@@ -150,7 +150,6 @@ async def custom_command_button_handler(event):
             await event.edit(final_reply, buttons=back_button, parse_mode='md')
         else:
             # عرض رسالة منبثقة (السلوك الافتراضي)
-            # الماركداون لا يعمل جيداً في الرسائل المنبثقة، لذا ننشئ نسخة مبسطة
             popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
             await event.answer(popup_reply, alert=True)
 
