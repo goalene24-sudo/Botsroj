@@ -169,13 +169,13 @@ async def bot_admin_handler(event):
                 admin_list_text += f"- `{admin_id}` (يمكن غادر المجموعة)\n"
         await event.reply(admin_list_text)
 
-@client.on(events.NewMessage(pattern=r"^(تاك للكل|@all)(?: ([\s\S]*))?$"))
+@client.on(events.NewMessage(pattern=r"^(نداء|@all)(?: ([\s\S]*))?$"))
 async def tag_all_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if not await has_bot_permission(event):
         return await event.reply("**هذا الأمر للمشرفين فقط.**")
     
-    msg = await event.reply("**📣 جاري تحضير المنشن...**")
+    msg = await event.reply("**📣 جاري تحضير النداء...**")
     
     text = event.pattern_match.group(2) or ""
     users_text = f"**{text}**\n\n"
@@ -197,7 +197,7 @@ async def tag_all_handler(event):
         await msg.delete()
         
     except Exception as e:
-        await msg.edit(f"**حدث خطأ أثناء عمل المنشن:**\n`{e}`**")
+        await msg.edit(f"**حدث خطأ أثناء عمل النداء:**\n`{e}`**")
 
 @client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين|رفع مالك)$"))
 async def creator_admin_handler(event):
