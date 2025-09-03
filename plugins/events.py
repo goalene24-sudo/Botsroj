@@ -58,7 +58,8 @@ async def general_message_handler(event):
         if event.photo: msg_type = "photo"
         elif event.video: msg_type = "video"
         elif event.sticker: msg_type = "sticker"
-        elif event.document and hasattr(event.document, 'mime_type') and 'gif' in event.document.mime_type: msg_type = "gif"
+        elif event.gif: msg_type = "gif"
+        elif event.document: msg_type = "document" # Generic document
         elif event.text and len(event.text) > long_text_size: msg_type = "long_text"
         elif any(isinstance(e, MessageEntityUrl) for e in message_entities): msg_type = "url"
         elif event.forward: msg_type = "forward"
@@ -67,7 +68,8 @@ async def general_message_handler(event):
         if "message_history" not in db[chat_id_str]:
             db[chat_id_str]["message_history"] = []
 
-        db[chat_id_str]["message_history"].append({"msg_id": event.id, "type": msg_type})
+        # We now store sender_id as well for more advanced cleaning
+        db[chat_id_str]["message_history"].append({"msg_id": event.id, "type": msg_type, "sender_id": event.sender_id})
         
         if len(db[chat_id_str]["message_history"]) > 100:
             db[chat_id_str]["message_history"] = db[chat_id_str]["message_history"][-100:]
@@ -77,21 +79,83 @@ async def general_message_handler(event):
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    if now - last_dhikr_time > 3600:
+    dhikr_interval = db.get(chat_id_str, {}).get("dhikr_interval", 3600) # Default to 1 hour
+    is_dhikr_enabled = db.get(chat_id_str, {}).get("dhikr_enabled", True) # Default to enabled
+
+    if is_dhikr_enabled and (now - last_dhikr_time > dhikr_interval):
         dhikr_message = random.choice(DHIKR_LIST)
         await client.send_message(event.chat_id, dhikr_message)
         if chat_id_str not in db: db[chat_id_str] = {}
         db[chat_id_str]["last_dhikr_time"] = now
         save_db(db)
-    
+        
+    # --- (مهم) فحص الرتب والأقفال قبل أي شيء آخر ---
+    rank_int = await get_user_rank(event.sender_id, event)
+    is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
+
+    if not is_admin_or_higher:
+        chat_locks = db.get(chat_id_str, {})
+        
+        # 1. التحقق من الأقفال (يعمل على كل الرسائل)
+        message_entities_for_lock = event.message.entities or []
+        checks = {
+            "photo": event.photo, "video": event.video, "gif": event.gif, 
+            "sticker": event.sticker, "url": any(isinstance(e, MessageEntityUrl) for e in message_entities_for_lock), 
+            "username": any(isinstance(e, MessageEntityMention) for e in message_entities_for_lock), 
+            "forward": event.forward, "bot": event.via_bot
+        }
+        for lock_name, condition in checks.items():
+            if chat_locks.get(f"lock_{lock_name}") and condition:
+                try: 
+                    await event.delete()
+                except Exception as e: 
+                    print(f"لم أستطع حذف الرسالة في {chat_id_str}: {e}")
+                return # نوقف المعالجة تماماً بعد الحذف
+
+        # 2. التحقق من التكرار (يعمل على كل الرسائل)
+        if chat_locks.get("anti_flood", False):
+            now_flood = datetime.now()
+            if chat_id_str not in FLOOD_TRACKER: FLOOD_TRACKER[chat_id_str] = {}
+            if user_id_str not in FLOOD_TRACKER[chat_id_str]: FLOOD_TRACKER[chat_id_str][user_id_str] = []
+            FLOOD_TRACKER[chat_id_str][user_id_str].append(now_flood)
+            FLOOD_TRACKER[chat_id_str][user_id_str] = [t for t in FLOOD_TRACKER[chat_id_str][user_id_str] if now_flood - t < timedelta(seconds=5)]
+            if len(FLOOD_TRACKER[chat_id_str][user_id_str]) > 5:
+                try:
+                    await client.edit_permissions(event.chat_id, event.sender_id, send_messages=False, until_date=now_flood + timedelta(minutes=1))
+                    await event.reply(f"**لزكت يمعود! [{event.sender.first_name}](tg://user?id={event.sender.id}) انلصمت لدقيقة بسبب التكرار.**")
+                    FLOOD_TRACKER[chat_id_str][user_id_str] = []
+                except Exception as e: 
+                    print(f"خطأ في كتم التكرار: {e}")
+                return
+
+        # 3. التحقق من الكلمات الممنوعة (يعمل فقط على الرسائل النصية)
+        if event.text:
+            filtered_words = chat_locks.get("filtered_words", [])
+            if filtered_words and any(word.lower() in event.text.lower() for word in filtered_words):
+                try:
+                    await event.delete()
+                    sender = await event.get_sender()
+                    new_warn_count = add_user_warn(event.chat_id, sender.id)
+                    max_warns = db.get(chat_id_str, {}).get("max_warns", 3)
+                    if new_warn_count >= max_warns:
+                        until_date = datetime.now() + timedelta(minutes=1440)
+                        await client.edit_permissions(event.chat_id, sender, send_messages=False, until_date=until_date)
+                        await client.send_message(event.chat_id, f"**❗️تم كتم [{sender.first_name}](tg://user?id={sender.id}) لمدة 24 ساعة** لتجاوز التحذيرات.")
+                        reset_user_warns(event.chat_id, sender.id)
+                    else:
+                        await client.send_message(event.chat_id, f"**⚠️ تم حذف رسالة من [{sender.first_name}](tg://user?id={sender.id}) لمخالفة القوانين.\nعدد تحذيراته: {new_warn_count}/{max_warns}**")
+                    return
+                except Exception as e: 
+                    print(f"خطأ في فلتر الكلمات: {e}")
+
+
+    # --- (مهم) نتوقف هنا إذا كانت الرسالة لا تحتوي على نص ---
     if not event.text: return
     
+    # --- من هنا فصاعداً، الكود يتعامل فقط مع الرسائل النصية ---
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
     all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر", "الردود", "ايدي", "id", "اضف رد", "حذف رد", "تفعيل", "ايقاف", "تحذير", "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي"] + service_commands + ["حللني", "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل"]
     is_command = any(event.text.startswith(cmd) for cmd in all_commands) or event.text.startswith("اذان")
-
-    rank_int = await get_user_rank(event.sender_id, event)
-    is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
 
     if not is_command:
         if "users" not in db.get(chat_id_str, {}): db[chat_id_str]["users"] = {}
@@ -159,43 +223,3 @@ async def general_message_handler(event):
                         chosen_reply = random.choice(replies_for_rank)
                         final_reply = chosen_reply.replace("@USER", f"[{event.sender.first_name}](tg://user?id={event.sender.id})")
                         await event.reply(f'**{final_reply}**')
-
-    if not is_admin_or_higher:
-        filtered_words = db.get(chat_id_str, {}).get("filtered_words", [])
-        if filtered_words and event.text and any(word.lower() in event.text.lower() for word in filtered_words):
-            try:
-                await event.delete()
-                sender = await event.get_sender()
-                new_warn_count = add_user_warn(event.chat_id, sender.id)
-                if new_warn_count >= 3:
-                    until_date = datetime.now() + timedelta(minutes=1440)
-                    await client.edit_permissions(event.chat_id, sender, send_messages=False, until_date=until_date)
-                    await client.send_message(event.chat_id, f"**❗️تم كتم [{sender.first_name}](tg://user?id={sender.id}) لمدة 24 ساعة** لتجاوز التحذيرات.")
-                    reset_user_warns(event.chat_id, sender.id)
-                else:
-                    await client.send_message(event.chat_id, f"**⚠️ تم حذف رسالة من [{sender.first_name}](tg://user?id={sender.id}) لمخالفة القوانين.\nعدد تحذيراته: {new_warn_count}/3**")
-                return
-            except Exception as e: print(f"خطأ في فلتر الكلمات: {e}")
-
-        chat_locks = db.get(chat_id_str, {})
-        if chat_locks.get("anti_flood", False) and event.text:
-            now = datetime.now()
-            if chat_id_str not in FLOOD_TRACKER: FLOOD_TRACKER[chat_id_str] = {}
-            if user_id_str not in FLOOD_TRACKER[chat_id_str]: FLOOD_TRACKER[chat_id_str][user_id_str] = []
-            FLOOD_TRACKER[chat_id_str][user_id_str].append(now)
-            FLOOD_TRACKER[chat_id_str][user_id_str] = [t for t in FLOOD_TRACKER[chat_id_str][user_id_str] if now - t < timedelta(seconds=5)]
-            if len(FLOOD_TRACKER[chat_id_str][user_id_str]) > 5:
-                try:
-                    await client.edit_permissions(event.chat_id, event.sender_id, send_messages=False, until_date=now + timedelta(minutes=1))
-                    await event.reply(f"**لزكت يمعود! [{event.sender.first_name}](tg://user?id={event.sender.id}) انلصمت لدقيقة بسبب التكرار.**")
-                    FLOOD_TRACKER[chat_id_str][user_id_str] = []
-                except Exception as e: print(f"خطأ في كتم التكرار: {e}")
-                return
-                
-        message_entities_for_lock = event.message.entities or []
-        checks = {"photo": event.photo, "video": event.video, "gif": event.document and hasattr(event.document, 'mime_type') and 'image/gif' in event.document.mime_type, "sticker": event.sticker, "url": any(isinstance(e, MessageEntityUrl) for e in message_entities_for_lock), "username": any(isinstance(e, MessageEntityMention) for e in message_entities_for_lock), "forward": event.forward, "bot": event.via_bot}
-        for lock_name, condition in checks.items():
-            if chat_locks.get(lock_name) and condition:
-                try: await event.delete()
-                except Exception as e: print(f"لم أستطع حذف الرسالة في {chat_id_str}: {e}")
-                break
