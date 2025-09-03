@@ -2,7 +2,7 @@
 import random
 import asyncio
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from telethon import events, Button
 from bot import client
 from .utils import check_activation, add_points, RPS_GAMES, XO_GAMES, build_xo_keyboard, check_xo_winner, is_admin, db, save_db, is_command_enabled
@@ -213,3 +213,73 @@ async def millionaire_start_handler(event):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
         
     await start_millionaire_game(event)
+
+# --- (جديد) ميزة ثنائي اليوم ---
+@client.on(events.NewMessage(pattern="^ثنائي اليوم$"))
+async def couple_of_the_day_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+
+    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "ثنائي اليوم" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    # --- نهاية التحقق ---
+
+    if not is_command_enabled(event.chat_id, "games_enabled"):
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+
+    chat_id_str = str(event.chat_id)
+    now = datetime.now()
+    
+    # التحقق إذا تم اختيار ثنائي اليوم بالفعل
+    daily_couple_data = db.get(chat_id_str, {}).get("daily_couple", {})
+    if daily_couple_data:
+        last_chosen_date_str = daily_couple_data.get("date")
+        if last_chosen_date_str == now.strftime("%Y-%m-%d"):
+            user1_id = daily_couple_data["couple"][0]
+            user2_id = daily_couple_data["couple"][1]
+            user1_name = daily_couple_data["user1_name"]
+            user2_name = daily_couple_data["user2_name"]
+            
+            reply_text = (
+                f"**💍 | ثنائي اليوم الذين تم اختيارهم بالفعل هم:**\n\n"
+                f"**[{user1_name}](tg://user?id={user1_id}) + [{user2_name}](tg://user?id={user2_id})**\n\n"
+                "**جربوا حظكم باجر! 😉**"
+            )
+            return await event.reply(reply_text)
+
+    # إذا لم يتم الاختيار، نبدأ عملية جديدة
+    msg = await event.reply("**جاري البحث عن أسعد شخصين في المجموعة لهذا اليوم... 🧐💞**")
+    await asyncio.sleep(2)
+
+    try:
+        participants = await client.get_participants(event.chat_id)
+        # فلترة البوتات والحسابات المحذوفة
+        real_users = [user for user in participants if not user.bot and not user.deleted]
+
+        if len(real_users) < 2:
+            return await msg.edit("**ماكو أعضاء كافين بالمجموعة لاختيار ثنائي! 😥**")
+
+        couple = random.sample(real_users, 2)
+        user1, user2 = couple[0], couple[1]
+
+        # حفظ بيانات الثنائي الجديد
+        if chat_id_str not in db: db[chat_id_str] = {}
+        db[chat_id_str]["daily_couple"] = {
+            "couple": [user1.id, user2.id],
+            "date": now.strftime("%Y-%m-%d"),
+            "user1_name": user1.first_name,
+            "user2_name": user2.first_name
+        }
+        save_db(db)
+        
+        reply_text = (
+            f"**💍 | و ألف مبروك! ثنائي اليوم هم:**\n\n"
+            f"**<a href='tg://user?id={user1.id}'>{user1.first_name}</a> + <a href='tg://user?id={user2.id}'>{user2.first_name}</a>**\n\n"
+            "**نتمنى لكم يوماً سعيداً معاً! 🎉**"
+        )
+        await msg.edit(reply_text, parse_mode='html')
+
+    except Exception as e:
+        await msg.edit(f"**صارت مشكلة وما گدرت اختار ثنائي اليوم: **\n`{e}`")
