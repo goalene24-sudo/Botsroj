@@ -56,33 +56,43 @@ async def lock_unlock_handler(event):
         return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**\n**قائمة الأوامر المتاحة:**\n`" + "`, `".join(LOCK_TYPES_MAP.keys()) + "`")
 
     chat_id_str = str(event.chat_id)
-    # --- (مُصَحَّح) استخدام البادئة lock_ لتوحيد النظام ---
     db_key = f"lock_{lock_key}"
     
     if chat_id_str not in db: db[chat_id_str] = {}
-    
-    if action == "قفل":
-        db[chat_id_str][db_key] = True
-        await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
-    elif action == "فتح":
-        db[chat_id_str][db_key] = False
-        await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
-    
-    save_db(db)
 
-    # --- (مُضاف) تحديث قائمة الأزرار تلقائياً ---
-    protection_menu_msg_id = db.get(chat_id_str, {}).get("protection_menu_msg_id")
-    if protection_menu_msg_id:
-        try:
-            menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
-            new_buttons = await build_protection_menu(event.chat_id)
-            await client.edit_message(event.chat_id, protection_menu_msg_id, menu_text, buttons=new_buttons)
-        except Exception as e:
-            # في حال تم حذف الرسالة أو حدوث خطأ، نتجاهله ونقوم بحذف الآيدي القديم
-            print(f"Failed to update protection menu: {e}")
-            if "protection_menu_msg_id" in db.get(chat_id_str, {}):
-                del db[chat_id_str]["protection_menu_msg_id"]
-                save_db(db)
+    # --- (جديد) التحقق من الحالة الحالية قبل تنفيذ الأمر ---
+    current_state_is_locked = db.get(chat_id_str, {}).get(db_key, False)
+    change_made = False
+
+    if action == "قفل":
+        if current_state_is_locked:
+            return await event.reply(f"**🔒 | {target} مقفلة بالفعل، لا تقلق عزيزي.**")
+        else:
+            db[chat_id_str][db_key] = True
+            await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
+            change_made = True
+    elif action == "فتح":
+        if not current_state_is_locked:
+            return await event.reply(f"**🔓 | {target} مفتوحة بالفعل.**")
+        else:
+            db[chat_id_str][db_key] = False
+            await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
+            change_made = True
+    
+    # لا نقوم بالحفظ أو تحديث الأزرار إلا إذا حدث تغيير فعلي
+    if change_made:
+        save_db(db)
+        protection_menu_msg_id = db.get(chat_id_str, {}).get("protection_menu_msg_id")
+        if protection_menu_msg_id:
+            try:
+                menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
+                new_buttons = await build_protection_menu(event.chat_id)
+                await client.edit_message(event.chat_id, protection_menu_msg_id, menu_text, buttons=new_buttons)
+            except Exception as e:
+                print(f"Failed to update protection menu: {e}")
+                if "protection_menu_msg_id" in db.get(chat_id_str, {}):
+                    del db[chat_id_str]["protection_menu_msg_id"]
+                    save_db(db)
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
