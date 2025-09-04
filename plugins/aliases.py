@@ -8,31 +8,61 @@ from .utils import (
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS
 )
 
-# --- (جديد) قاموس الاختصارات الأساسية والثابتة ---
+# --- (موسَّع) قاموس الاختصارات الأساسية والثابتة ---
 FIXED_ALIASES = {
+    # أوامر أساسية وشخصية
     "ا": "ايدي",
-    "م": "رفع مميز",
+    "س": "سجلي",
+    "ن": "نقاطي",
+    "ر": "راتب",
+    "ممتلكاتي": "ممتلكاتي",
+    "رتبتي": "رتبتي",
+
+    # أوامر الإدارة والرتب
     "اد": "رفع ادمن",
-    "مد": "رفع مدير",
+    "تاد": "تنزيل ادمن",
     "من": "رفع منشئ",
-    "مط": "رفع مطور",
+    "تمن": "تنزيل منشئ",
     "تك": "تنزيل الكل بالرد",
-    "تغ": "تغيير الايدي",
-    "تنز": "تنزيل جميع الرتب",
-    "ر": "الرابط",
-    "رر": "الردود",
+    
+    # أوامر الخدمات والإعدادات
+    "الرابط": "الرابط",
+    "ق": "القوانين",
     "ت": "تثبيت",
-    "ك": "كشف",
-    "تكك": "نداء",
-    "رف": "رفع القيود",
-    "الغ": "الغاء حظر",
+    "ات": "الغاء التثبيت", # افتراضي، يمكنك ربطه بأمر إلغاء التثبيت
+    "ترحيب": "ضع ترحيب",
+    "حترحيب": "حذف الترحيب",
     "رد": "اضف رد",
-    "مر": "مسح رد"
+    "مر": "مسح رد",
+    "رر": "الردود",
+    
+    # أوامر التفاعل الاجتماعي
+    "ز": "زواج",
+    "ط": "طلاق",
+    "ص": "صديقي المفضل",
+    "حص": "حذف صديقي المفضل",
+    "تزوجني": "تزوجني",
+    "بوسه": "بوسة",
+    "حضن": "عناق",
+    "صفعه": "صفعة",
+    "قتل": "قتل",
+    
+    # أوامر الألعاب
+    "صندوق": "صندوق الحظ",
+    "حظ": "حظي",
+    "ك": "كت",
+    "ح": "حزورة",
+    "نك": "نكتة",
+    "لخ": "لو خيروك",
+    
+    # أوامر المنشن والنداء
+    "تكك": "نداء",
 }
+
 
 # --- قائمة شاملة بكل الأوامر المعروفة في البوت للتحقق منها ---
 SERVICE_COMMANDS = [
-    "اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", 
+    "اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "نداء", "@all", "طقس", 
     "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", 
     "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", 
     "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", 
@@ -88,7 +118,7 @@ async def add_alias_handler(event):
             await response.reply(f"""**حسناً، الأمر الأصلي هو: `{original_command}`
 
 **الخطوة 2 من 2:**
-**أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `ا`).**
+**أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `اا`).**
 
 **💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
 **""")
@@ -109,7 +139,6 @@ async def add_alias_handler(event):
             if "command_aliases" not in db[chat_id_str]:
                 db[chat_id_str]["command_aliases"] = {}
 
-            # --- (مُعدل) التحقق من القائمة الثابتة والمخصصة ---
             user_aliases = db[chat_id_str]["command_aliases"]
             if alias_command in user_aliases or alias_command in FIXED_ALIASES:
                 await alias_command_msg.reply(f"**⚠️ عذراً، الاختصار `{alias_command}` مستخدم بالفعل.**")
@@ -136,7 +165,6 @@ async def delete_alias_handler(event):
     chat_id_str = str(event.chat_id)
     alias_to_delete = event.pattern_match.group(1).strip()
     
-    # لا يمكن حذف الاختصارات الثابتة
     if alias_to_delete in FIXED_ALIASES:
         return await event.reply(f"**⚠️ | لا يمكن حذف الاختصار الأساسي `{alias_to_delete}`.**")
 
@@ -154,7 +182,6 @@ async def list_aliases_handler(event):
     if not await check_activation(event.chat_id): return
     chat_id_str = str(event.chat_id)
     
-    # --- (مُعدل) دمج القائمتين ---
     user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
     all_aliases = FIXED_ALIASES.copy()
     all_aliases.update(user_aliases)
@@ -164,7 +191,6 @@ async def list_aliases_handler(event):
 
     reply_text = "**📋 | قائمة الأوامر المضافة (الاختصارات):**\n\n"
     for alias, original in all_aliases.items():
-        # تمييز الأوامر الثابتة (اختياري)
         marker = " (أساسي)" if alias in FIXED_ALIASES and alias not in user_aliases else ""
         reply_text += f"**- `{alias}` ⇜ `{original}`{marker}**\n"
     
@@ -176,26 +202,20 @@ async def sort_aliases_handler(event):
     if not await check_activation(event.chat_id): return
     chat_id_str = str(event.chat_id)
 
-    # --- (مُعدل) دمج القائمتين ---
     user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
-    all_aliases = FIXED_ALIASES.copy()
-    all_aliases.update(user_aliases)
-
-    if not all_aliases:
-        return await event.reply("**ℹ️ | لم يتم إضافة أي أوامر مخصصة لهذه المجموعة بعد.**")
-
+    
     reply_text = "**ترتيب الاوامر**\n\n"
     reply_text += "**◇ : تم ترتيب الاوامر بالشكل التالي ~**\n\n"
     
-    # العرض يبدأ بالقائمة الثابتة ثم المخصصة
+    # عرض القائمة الثابتة بالترتيب
     sorted_fixed = sorted(FIXED_ALIASES.items())
-    sorted_user = sorted(user_aliases.items())
-
     for alias, original in sorted_fixed:
         reply_text += f"**◇ : {original} - {alias}**\n"
     
+    # عرض القائمة المخصصة إذا وجدت
     if user_aliases:
         reply_text += "\n**--- الأوامر المخصصة ---**\n"
+        sorted_user = sorted(user_aliases.items())
         for alias, original in sorted_user:
             reply_text += f"**◇ : {original} - {alias}**\n"
     
