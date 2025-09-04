@@ -2,6 +2,7 @@
 
 import random
 import time
+from datetime import datetime
 from telethon import events
 from bot import client
 import config
@@ -25,7 +26,7 @@ async def id_handler(event):
     # --- [تم التصحيح] التحقق إذا كان الأمر معطلاً بشكل عام مع إرسال رسالة ---
     disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     current_command = event.pattern_match.group(1).lower()
-    if current_command in disabled_cmds:
+    if current_command in disabled_cmds or "ايدي" in disabled_cmds:
         await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
         return
     # --- نهاية التحقق العام ---
@@ -147,3 +148,60 @@ async def id_handler(event):
         await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
     else:
         await event.reply(caption, reply_to=event.id)
+
+# --- (جديد) أمر كشف المستخدم ---
+@client.on(events.NewMessage(pattern="^كشف$"))
+async def kashf_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+
+    # --- التحقق من التعطيل العام ---
+    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
+    if "كشف" in disabled_cmds:
+        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        return
+    
+    replied_msg = await event.get_reply_message()
+    if not replied_msg:
+        return await event.reply("**⚠️ | يجب استخدام هذا الأمر بالرد على رسالة شخص.**")
+        
+    target_user = await replied_msg.get_sender()
+    chat_id_str, user_id_str = str(event.chat_id), str(target_user.id)
+    
+    # --- جلب البيانات ---
+    user_id = target_user.id
+    username = f"@{target_user.username}" if target_user.username else "لا يوجد"
+    account_link = f"[{target_user.first_name}](tg://user?id={target_user.id})"
+    
+    # جلب الرتبة
+    rank_int = await get_user_rank(target_user.id, event)
+    rank_map = {
+        Ranks.DEVELOPER: "المطور 👨‍💻",
+        Ranks.OWNER: "مالك المجموعة 👑",
+        Ranks.CREATOR: "منشئ في البوت ⚜️",
+        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
+        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
+        Ranks.MEMBER: "عضو 👤"
+    }
+    rank_str = rank_map.get(rank_int, "عضو 👤")
+
+    # جلب البيانات من قاعدة البيانات
+    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
+    msg_count = user_data.get("msg_count", 0)
+    sahaqat = user_data.get("sahaqat", 0)
+    join_date = user_data.get("join_date", "غير معروف")
+
+    interaction_status = random.choice(RANDOM_TAFA3UL)
+
+    # --- تنسيق الرسالة ---
+    kashf_text = (
+        f"**◇ : ايديه :** `{user_id}`\n"
+        f"**◇ : معرفه :** {username}\n"
+        f"**◇ : حسابه :** {account_link}\n"
+        f"**◇ : رتبته :** {rank_str}\n"
+        f"**◇ : رسائله :** `{msg_count}`\n"
+        f"**◇ : سحكاته :** `{sahaqat}`\n"
+        f"**◇ : تفاعله :** {interaction_status}\n"
+        f"**◇ : انضمامه :** `{join_date}`"
+    )
+    
+    await event.reply(kashf_text)
