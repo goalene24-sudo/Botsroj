@@ -79,8 +79,20 @@ async def callback_handler(event):
             return await event.edit(about_text, buttons=buttons, link_preview=False)
 
         elif query_data == "protection_menu":
-            if not await has_bot_permission(event): return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
-            return await event.edit("**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**", buttons=await build_protection_menu(event.chat_id))
+            if not await has_bot_permission(event): 
+                return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
+            
+            # --- (مُعَدَّل) تخزين آيدي رسالة الحماية ---
+            chat_id_str = str(event.chat_id)
+            menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
+            menu_buttons = await build_protection_menu(event.chat_id)
+            
+            protection_msg = await event.edit(menu_text, buttons=menu_buttons)
+            
+            if chat_id_str not in db: db[chat_id_str] = {}
+            db[chat_id_str]["protection_menu_msg_id"] = protection_msg.id
+            save_db(db)
+            return
         
         elif query_data == "seerah_main":
             text = "**صلى الله على محمد ﷺ**\n\n**اختر مرحلة من السيرة النبوية الشريفة لعرضها:**"
@@ -116,7 +128,6 @@ async def custom_command_button_handler(event):
 
     command_data = custom_commands[command_name]
     reply_template = command_data.get("reply")
-    # إذا لم يتم تحديد طريقة العرض، نستخدم "منبثق" كافتراضي
     display_mode = command_data.get("display_mode", "popup") 
 
     if not reply_template:
@@ -143,13 +154,10 @@ async def custom_command_button_handler(event):
             chat_title=chat.title
         )
 
-        # التحقق من طريقة العرض المطلوبة
         if display_mode == "edit":
-            # تعديل الرسالة مع زر رجوع
             back_button = Button.inline("🔙 رجوع", data="back_to_main")
             await event.edit(final_reply, buttons=back_button, parse_mode='md')
         else:
-            # عرض رسالة منبثقة (السلوك الافتراضي)
             popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
             await event.answer(popup_reply, alert=True)
 
