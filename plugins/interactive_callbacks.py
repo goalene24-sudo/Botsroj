@@ -5,12 +5,11 @@ from datetime import datetime, timedelta
 from telethon import events, Button
 from bot import client
 import config
-# --- [تم التحديث] ---
 from .utils import (
     db, save_db, is_admin, check_activation, RPS_GAMES, XO_GAMES,
     build_protection_menu, build_xo_keyboard, 
     check_xo_winner, add_points, has_bot_permission,
-    RIDDLES, BLESS_COUNTERS, build_main_menu_buttons # استبدال المتغير بالدالة
+    RIDDLES, BLESS_COUNTERS, build_main_menu_buttons
 )
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
 from .games import CURRENT_QUIZZES, MAHIBES_GAMES
@@ -26,14 +25,12 @@ async def handle_interactive_callback(event):
     action = data_parts[0]
     chat_id_str = str(chat_id)
 
-    # --- معالج أزرار الحماية ---
     if query_data.startswith("toggle_lock_"):
         if not await has_bot_permission(event): 
             return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
         
         if chat_id_str not in db: db[chat_id_str] = {}
         
-        # استخدام المفتاح الصحيح مع البادئة 'lock_'
         db_key = query_data.replace("toggle_", "") 
         
         current_state = db[chat_id_str].get(db_key, False)
@@ -70,10 +67,6 @@ async def handle_interactive_callback(event):
         else:
             await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
         return
-
-    if action == "dice_challenge":
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        pass
 
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
@@ -154,10 +147,6 @@ async def handle_interactive_callback(event):
             await event.edit(full_list_text, buttons=Button.inline("💎 عرض اسم عشوائي مع الشرح", data="asma_husna:random"))
         await event.answer()
         return
-
-    if action == "tasbeeh":
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
         
     if action == "show_rules":
         user = await event.get_sender()
@@ -168,10 +157,6 @@ async def handle_interactive_callback(event):
         else:
             await event.answer("**عذراً، لم يقم المشرفون بوضع قوانين للمجموعة بعد.**", alert=True)
     
-    if action == "wyr":
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
-
     if action == "riddle":
         riddle_index = int(data_parts[1])
         _, riddle_a = RIDDLES[riddle_index]
@@ -193,69 +178,4 @@ async def handle_interactive_callback(event):
         me = await client.get_me()
         if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
         if chat_id_str not in db: db[chat_id_str] = {}
-        db[chat_id_str]["is_paused"] = False; save_db(db)
-        buttons = build_main_menu_buttons()
-        await event.edit("**✅ تم تفعيل البوت بنجاح!**\n**الآن يمكنك استخدام القوائم أدناه للتحكم.**", buttons=buttons)
-    
-    if query_data.startswith("rps"):
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
-
-    if query_data.startswith("xo_move_"):
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
-    
-    if query_data.startswith("bless"):
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
-
-    if query_data.startswith("mute_"):
-        # ... (الكود الأصلي الذي أرسلته كان فارغًا هنا)
-        return
-
-# --- معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
-@client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
-async def custom_command_button_handler(event):
-    command_name = event.data.decode().split(':')[1]
-    custom_commands = db.get("custom_commands", {})
-    
-    if command_name not in custom_commands:
-        return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
-
-    command_data = custom_commands[command_name]
-    reply_template = command_data.get("reply")
-    display_mode = command_data.get("display_mode", "popup") 
-
-    if not reply_template:
-        return await event.answer("⚠️ | لا يوجد نص رد لهذا الأمر.", alert=True)
-
-    sender = await event.get_sender()
-    chat = await event.get_chat()
-    chat_id_str = str(chat.id)
-    sender_id_str = str(sender.id)
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(sender_id_str, {})
-    msg_count = user_data.get("msg_count", 0)
-    points = user_data.get("points", 0)
-
-    try:
-        if not isinstance(reply_template, str):
-            reply_template = str(reply_template)
-
-        final_reply = reply_template.format(
-            user_first_name=sender.first_name,
-            user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
-            user_id=sender.id,
-            points=points,
-            msg_count=msg_count,
-            chat_title=chat.title
-        )
-
-        if display_mode == "edit":
-            back_button = Button.inline("🔙 رجوع", data="back_to_main")
-            await event.edit(final_reply, buttons=back_button, parse_mode='md')
-        else:
-            popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
-            await event.answer(popup_reply, alert=True)
-
-    except Exception as e:
-        await event.answer(f"⚠️ | خطأ في عرض الرد: {e}", alert=True)
+        db[chat_id_str]
