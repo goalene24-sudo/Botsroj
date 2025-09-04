@@ -13,6 +13,7 @@ from .utils import (
 )
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
+from .aliases import FIXED_ALIASES # --- (جديد) تم استيراد القائمة الثابتة ---
 
 def add_user_warn(chat_id, user_id):
     chat_id_str, user_id_str = str(chat_id), str(user_id)
@@ -37,12 +38,17 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
-    # --- (النسخة المستقرة) محرك ترجمة الأوامر المضافة ---
+    # --- (مُحَدَّث) محرك ترجمة الأوامر المضافة والثابتة ---
     if event.text:
-        aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+        # دمج الاختصارات الثابتة مع المخصصة
+        user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+        all_aliases = FIXED_ALIASES.copy()
+        all_aliases.update(user_aliases)
+
         command_candidate = event.text.strip()
-        if command_candidate in aliases:
-            original_command = aliases[command_candidate]
+        if command_candidate in all_aliases:
+            original_command = all_aliases[command_candidate]
+            # تبديل نص الرسالة لتشغيل الأمر الأصلي
             event.text = original_command
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
