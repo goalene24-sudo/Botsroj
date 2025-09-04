@@ -137,3 +137,21 @@ async def list_aliases_handler(event):
         reply_text += f"**- `{alias}` ⇜ `{original}`**\n"
     
     await event.reply(reply_text)
+
+# --- (جديد) أمر ترتيب الأوامر بنفس تنسيق الصورة ---
+@client.on(events.NewMessage(pattern="^ترتيب الاوامر$"))
+async def sort_aliases_handler(event):
+    if not await check_activation(event.chat_id): return
+    chat_id_str = str(event.chat_id)
+    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+
+    if not aliases:
+        return await event.reply("**ℹ️ | لم يتم إضافة أي أوامر مخصصة لهذه المجموعة بعد.**")
+
+    reply_text = "**ترتيب الاوامر**\n\n"
+    reply_text += "**◇ : تم ترتيب الاوامر بالشكل التالي ~**\n\n"
+    
+    for alias, original in aliases.items():
+        reply_text += f"**◇ : {original} - {alias}**\n"
+    
+    await event.reply(reply_text)
