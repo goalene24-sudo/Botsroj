@@ -5,9 +5,10 @@ from datetime import timedelta
 from telethon import events
 from bot import client
 import config
-from .utils import check_activation, has_bot_permission, db, save_db, get_user_rank, Ranks
+# --- (مُعَدَّل) استيراد دالة بناء الأزرار ---
+from .utils import check_activation, has_bot_permission, db, save_db, get_user_rank, Ranks, build_protection_menu
 
-# --- (جديد) قاموس أنواع الأقفال للترجمة من العربية إلى مفاتيح قاعدة البيانات ---
+# --- قاموس أنواع الأقفال للترجمة من العربية إلى مفاتيح قاعدة البيانات ---
 LOCK_TYPES_MAP = {
     # الوسائط الأساسية
     "الصور": "photo",
@@ -49,7 +50,6 @@ async def lock_unlock_handler(event):
     action = event.pattern_match.group(1)
     target = event.pattern_match.group(2).strip()
     
-    # البحث عن المفتاح التقني المقابل للكلمة العربية
     lock_key = LOCK_TYPES_MAP.get(target)
     
     if not lock_key:
@@ -62,12 +62,25 @@ async def lock_unlock_handler(event):
     
     if action == "قفل":
         db[chat_id_str][db_key] = True
-        save_db(db)
         await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
     elif action == "فتح":
         db[chat_id_str][db_key] = False
-        save_db(db)
         await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
+    
+    save_db(db)
+
+    # --- (جديد) تحديث قائمة الأزرار تلقائياً ---
+    protection_menu_msg_id = db.get(chat_id_str, {}).get("protection_menu_msg_id")
+    if protection_menu_msg_id:
+        try:
+            menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
+            new_buttons = await build_protection_menu(event.chat_id)
+            await client.edit_message(event.chat_id, protection_menu_msg_id, menu_text, buttons=new_buttons)
+        except Exception as e:
+            # في حال تم حذف الرسالة أو حدوث خطأ، نتجاهله ونقوم بحذف الآيدي القديم
+            print(f"Failed to update protection menu: {e}")
+            del db[chat_id_str]["protection_menu_msg_id"]
+            save_db(db)
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
