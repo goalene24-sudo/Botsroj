@@ -50,17 +50,22 @@ async def add_alias_handler(event):
 
 **الخطوة 1 من 2:**
 **أرسل الآن الأمر الأصلي الموجود في البوت (مثال: `ايدي`).**
+
+**💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
 **""")
             
             while True: # حلقة للتحقق من الرد الصحيح
                 response = await conv.get_response()
-                # تجاهل الردود من المستخدمين الآخرين
                 if response.sender_id != event.sender_id:
                     continue
                 
+                # --- التحقق من الإلغاء ---
+                if response.text.strip() == "الغاء":
+                    await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
+                    return
+
                 command_to_check = response.text.strip().split(" ")[0] # نأخذ الكلمة الأولى فقط للتحقق
                 
-                # التحقق مما إذا كان الأمر موجوداً
                 if command_to_check in ALL_BOT_COMMANDS:
                     original_command = response.text.strip()
                     break # اخرج من الحلقة إذا كان الأمر صحيحاً
@@ -73,12 +78,19 @@ async def add_alias_handler(event):
 
 **الخطوة 2 من 2:**
 **أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `ا`).**
+
+**💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
 **""")
 
             alias_command_msg = None
             while True: # حلقة للتحقق من الرد الصحيح
                 response = await conv.get_response()
                 if response.sender_id == event.sender_id:
+                    # --- التحقق من الإلغاء ---
+                    if response.text.strip() == "الغاء":
+                        await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
+                        return
+
                     alias_command_msg = response
                     break # اخرج من الحلقة
 
