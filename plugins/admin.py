@@ -56,6 +56,7 @@ async def lock_unlock_handler(event):
         return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**\n**قائمة الأوامر المتاحة:**\n`" + "`, `".join(LOCK_TYPES_MAP.keys()) + "`")
 
     chat_id_str = str(event.chat_id)
+    # --- (مُصَحَّح) استخدام البادئة lock_ لتوحيد النظام ---
     db_key = f"lock_{lock_key}"
     
     if chat_id_str not in db: db[chat_id_str] = {}
@@ -69,7 +70,7 @@ async def lock_unlock_handler(event):
     
     save_db(db)
 
-    # --- (جديد) تحديث قائمة الأزرار تلقائياً ---
+    # --- (مُضاف) تحديث قائمة الأزرار تلقائياً ---
     protection_menu_msg_id = db.get(chat_id_str, {}).get("protection_menu_msg_id")
     if protection_menu_msg_id:
         try:
@@ -79,8 +80,9 @@ async def lock_unlock_handler(event):
         except Exception as e:
             # في حال تم حذف الرسالة أو حدوث خطأ، نتجاهله ونقوم بحذف الآيدي القديم
             print(f"Failed to update protection menu: {e}")
-            del db[chat_id_str]["protection_menu_msg_id"]
-            save_db(db)
+            if "protection_menu_msg_id" in db.get(chat_id_str, {}):
+                del db[chat_id_str]["protection_menu_msg_id"]
+                save_db(db)
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
