@@ -23,7 +23,7 @@ OTHER_COMMANDS = [
     "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", 
     "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي", "حللني", 
     "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل", "اضف امر", "حذف امر", "الاوامر المضافة",
-    "مسح"
+    "مسح", "سجلي", "اهداء", "رتبتي" # تمت الإضافة هنا
 ]
 ALL_BOT_COMMANDS = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + SERVICE_COMMANDS + OTHER_COMMANDS
 
@@ -59,8 +59,8 @@ async def add_alias_handler(event):
                 if response.sender_id != event.sender_id:
                     continue
                 
-                # --- التحقق من الإلغاء ---
-                if response.text.strip() == "الغاء":
+                # --- التحقق من الإلغاء (يقبل الحالتين) ---
+                if response.text.strip() in ["الغاء", "إلغاء"]:
                     await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
                     return
 
@@ -86,8 +86,8 @@ async def add_alias_handler(event):
             while True: # حلقة للتحقق من الرد الصحيح
                 response = await conv.get_response()
                 if response.sender_id == event.sender_id:
-                    # --- التحقق من الإلغاء ---
-                    if response.text.strip() == "الغاء":
+                    # --- التحقق من الإلغاء (يقبل الحالتين) ---
+                    if response.text.strip() in ["الغاء", "إلغاء"]:
                         await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
                         return
 
