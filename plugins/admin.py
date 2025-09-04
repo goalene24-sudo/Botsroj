@@ -7,6 +7,68 @@ from bot import client
 import config
 from .utils import check_activation, has_bot_permission, db, save_db, get_user_rank, Ranks
 
+# --- (جديد) قاموس أنواع الأقفال للترجمة من العربية إلى مفاتيح قاعدة البيانات ---
+LOCK_TYPES_MAP = {
+    # الوسائط الأساسية
+    "الصور": "photo",
+    "الفيديو": "video",
+    "المتحركه": "gif",
+    "الملصقات": "sticker",
+    "الروابط": "url",
+    "المعرف": "username",
+    "التوجيه": "forward",
+    "الملفات": "document",
+    "الاغاني": "audio",
+    "الصوت": "voice",
+    "السيلفي": "video_note",
+    
+    # أنواع الرسائل
+    "الكلايش": "long_text",
+    "الدردشه": "text",
+    "الانلاين": "inline",
+    "البوتات": "bot",
+    
+    # أنواع المحتوى
+    "الجهات": "contact",
+    "الموقع": "location",
+    "الفشار": "game",
+    
+    # اللغات (تحتاج لتفعيل في events.py)
+    "الانكليزيه": "english",
+    
+    # الإجراءات (تحتاج لتفعيل في events.py)
+    "التعديل": "edit",
+}
+
+@client.on(events.NewMessage(pattern=r"^(قفل|فتح) (.+)$"))
+async def lock_unlock_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    if not await has_bot_permission(event):
+        return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+    
+    action = event.pattern_match.group(1)
+    target = event.pattern_match.group(2).strip()
+    
+    # البحث عن المفتاح التقني المقابل للكلمة العربية
+    lock_key = LOCK_TYPES_MAP.get(target)
+    
+    if not lock_key:
+        return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**\n**قائمة الأوامر المتاحة:**\n`" + "`, `".join(LOCK_TYPES_MAP.keys()) + "`")
+
+    chat_id_str = str(event.chat_id)
+    db_key = f"lock_{lock_key}"
+    
+    if chat_id_str not in db: db[chat_id_str] = {}
+    
+    if action == "قفل":
+        db[chat_id_str][db_key] = True
+        save_db(db)
+        await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
+    elif action == "فتح":
+        db[chat_id_str][db_key] = False
+        save_db(db)
+        await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
+
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
