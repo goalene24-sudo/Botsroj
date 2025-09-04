@@ -8,8 +8,29 @@ from .utils import (
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS
 )
 
+# --- (جديد) قاموس الاختصارات الأساسية والثابتة ---
+FIXED_ALIASES = {
+    "ا": "ايدي",
+    "م": "رفع مميز",
+    "اد": "رفع ادمن",
+    "مد": "رفع مدير",
+    "من": "رفع منشئ",
+    "مط": "رفع مطور",
+    "تك": "تنزيل الكل بالرد",
+    "تغ": "تغيير الايدي",
+    "تنز": "تنزيل جميع الرتب",
+    "ر": "الرابط",
+    "رر": "الردود",
+    "ت": "تثبيت",
+    "ك": "كشف",
+    "تكك": "نداء",
+    "رف": "رفع القيود",
+    "الغ": "الغاء حظر",
+    "رد": "اضف رد",
+    "مر": "مسح رد"
+}
+
 # --- قائمة شاملة بكل الأوامر المعروفة في البوت للتحقق منها ---
-# تم جلبها من ملف events.py وملفات أخرى لضمان الدقة
 SERVICE_COMMANDS = [
     "اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "تاك للكل", "@all", "طقس", 
     "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", 
@@ -31,9 +52,6 @@ ALL_BOT_COMMANDS = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + SERVICE_C
 
 @client.on(events.NewMessage(pattern="^اضف امر$"))
 async def add_alias_handler(event):
-    """
-    Handles the conversation to add a new command alias with security and validation.
-    """
     if not await check_activation(event.chat_id): return
 
     user_rank = await get_user_rank(event.sender_id, event)
@@ -45,8 +63,6 @@ async def add_alias_handler(event):
 
     try:
         async with client.conversation(event.chat_id, timeout=180) as conv:
-            
-            # --- الخطوة 1: طلب الأمر الأصلي مع التحقق ---
             await conv.send_message("""**تمام، لنقم بإضافة اختصار جديد.
 
 **الخطوة 1 من 2:**
@@ -55,26 +71,20 @@ async def add_alias_handler(event):
 **💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
 **""")
             
-            while True: # حلقة للتحقق من الرد الصحيح
+            while True:
                 response = await conv.get_response()
-                if response.sender_id != event.sender_id:
-                    continue
-                
-                # --- التحقق من الإلغاء (يقبل الحالتين) ---
+                if response.sender_id != event.sender_id: continue
                 if response.text.strip() in ["الغاء", "إلغاء"]:
                     await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
                     return
 
-                command_to_check = response.text.strip().split(" ")[0] # نأخذ الكلمة الأولى فقط للتحقق
-                
+                command_to_check = response.text.strip().split(" ")[0]
                 if command_to_check in ALL_BOT_COMMANDS:
                     original_command = response.text.strip()
-                    break # اخرج من الحلقة إذا كان الأمر صحيحاً
+                    break
                 else:
                     await response.reply("**⚠️ | عذراً، هذا الأمر (`%s`) غير موجود في قائمة الأوامر الأساسية. يرجى إرسال أمر صحيح.**" % command_to_check)
-                    # استمر في الحلقة لطلب أمر جديد
             
-            # --- الخطوة 2: طلب الاختصار الجديد ---
             await response.reply(f"""**حسناً، الأمر الأصلي هو: `{original_command}`
 
 **الخطوة 2 من 2:**
@@ -84,29 +94,28 @@ async def add_alias_handler(event):
 **""")
 
             alias_command_msg = None
-            while True: # حلقة للتحقق من الرد الصحيح
+            while True:
                 response = await conv.get_response()
                 if response.sender_id == event.sender_id:
-                    # --- التحقق من الإلغاء (يقبل الحالتين) ---
                     if response.text.strip() in ["الغاء", "إلغاء"]:
                         await response.reply("**✅ | تم إلغاء عملية إضافة الأمر.**")
                         return
-
                     alias_command_msg = response
-                    break # اخرج من الحلقة
+                    break
 
             alias_command = alias_command_msg.text.strip()
             
-            # --- الحفظ في قاعدة البيانات ---
             if chat_id_str not in db: db[chat_id_str] = {}
             if "command_aliases" not in db[chat_id_str]:
                 db[chat_id_str]["command_aliases"] = {}
 
-            if alias_command in db[chat_id_str]["command_aliases"]:
+            # --- (مُعدل) التحقق من القائمة الثابتة والمخصصة ---
+            user_aliases = db[chat_id_str]["command_aliases"]
+            if alias_command in user_aliases or alias_command in FIXED_ALIASES:
                 await alias_command_msg.reply(f"**⚠️ عذراً، الاختصار `{alias_command}` مستخدم بالفعل.**")
                 return
 
-            db[chat_id_str]["command_aliases"][alias_command] = original_command
+            user_aliases[alias_command] = original_command
             save_db(db)
 
             await alias_command_msg.reply(f"**✅ | تم الحفظ بنجاح!**\n\n**الآن عند إرسال `{alias_command}`، سيتم تنفيذ الأمر `{original_command}`.**")
@@ -126,8 +135,12 @@ async def delete_alias_handler(event):
     
     chat_id_str = str(event.chat_id)
     alias_to_delete = event.pattern_match.group(1).strip()
-    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+    
+    # لا يمكن حذف الاختصارات الثابتة
+    if alias_to_delete in FIXED_ALIASES:
+        return await event.reply(f"**⚠️ | لا يمكن حذف الاختصار الأساسي `{alias_to_delete}`.**")
 
+    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
     if alias_to_delete in aliases:
         del db[chat_id_str]["command_aliases"][alias_to_delete]
         save_db(db)
@@ -140,31 +153,50 @@ async def delete_alias_handler(event):
 async def list_aliases_handler(event):
     if not await check_activation(event.chat_id): return
     chat_id_str = str(event.chat_id)
-    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+    
+    # --- (مُعدل) دمج القائمتين ---
+    user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+    all_aliases = FIXED_ALIASES.copy()
+    all_aliases.update(user_aliases)
 
-    if not aliases:
+    if not all_aliases:
         return await event.reply("**ℹ️ | لا توجد أي أوامر مضافة (اختصارات) في هذه المجموعة بعد.**")
 
     reply_text = "**📋 | قائمة الأوامر المضافة (الاختصارات):**\n\n"
-    for alias, original in aliases.items():
-        reply_text += f"**- `{alias}` ⇜ `{original}`**\n"
+    for alias, original in all_aliases.items():
+        # تمييز الأوامر الثابتة (اختياري)
+        marker = " (أساسي)" if alias in FIXED_ALIASES and alias not in user_aliases else ""
+        reply_text += f"**- `{alias}` ⇜ `{original}`{marker}**\n"
     
     await event.reply(reply_text)
 
-# --- (جديد) أمر ترتيب الأوامر بنفس تنسيق الصورة ---
+
 @client.on(events.NewMessage(pattern="^ترتيب الاوامر$"))
 async def sort_aliases_handler(event):
     if not await check_activation(event.chat_id): return
     chat_id_str = str(event.chat_id)
-    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
 
-    if not aliases:
+    # --- (مُعدل) دمج القائمتين ---
+    user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+    all_aliases = FIXED_ALIASES.copy()
+    all_aliases.update(user_aliases)
+
+    if not all_aliases:
         return await event.reply("**ℹ️ | لم يتم إضافة أي أوامر مخصصة لهذه المجموعة بعد.**")
 
     reply_text = "**ترتيب الاوامر**\n\n"
     reply_text += "**◇ : تم ترتيب الاوامر بالشكل التالي ~**\n\n"
     
-    for alias, original in aliases.items():
+    # العرض يبدأ بالقائمة الثابتة ثم المخصصة
+    sorted_fixed = sorted(FIXED_ALIASES.items())
+    sorted_user = sorted(user_aliases.items())
+
+    for alias, original in sorted_fixed:
         reply_text += f"**◇ : {original} - {alias}**\n"
+    
+    if user_aliases:
+        reply_text += "\n**--- الأوامر المخصصة ---**\n"
+        for alias, original in sorted_user:
+            reply_text += f"**◇ : {original} - {alias}**\n"
     
     await event.reply(reply_text)
