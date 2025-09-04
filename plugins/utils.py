@@ -125,9 +125,7 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
-# --- [تم التحديث] تحويل القائمة الثابتة إلى دالة ديناميكية ---
 def build_main_menu_buttons():
-    # الأزرار الأساسية الثابتة
     buttons = [
         [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
         [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
@@ -136,22 +134,16 @@ def build_main_menu_buttons():
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
 
-    # جلب الأوامر المخصصة من قاعدة البيانات
     custom_commands = db.get("custom_commands", {})
     custom_buttons_row = []
     
-    # التحقق من كل أمر مخصص
     for command_name, command_data in custom_commands.items():
-        # إذا كان خيار "إظهار الزر" مفعلاً
         if command_data.get("show_button"):
-            # قم بإنشاء زر جديد
-            # استخدمنا "ccmd:" كبادئة لتمييز هذه الأزرار
             new_button = Button.inline(command_name.capitalize(), data=f"ccmd:{command_name}")
             custom_buttons_row.append(new_button)
     
-    # إذا كان هناك أزرار مخصصة، قم بإضافتها كصفوف جديدة
     if custom_buttons_row:
-        chunk_size = 2 # يمكنك تغيير عدد الأزرار في كل صف من هنا
+        chunk_size = 2
         for i in range(0, len(custom_buttons_row), chunk_size):
             buttons.append(custom_buttons_row[i:i + chunk_size])
 
@@ -163,10 +155,8 @@ GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "
 ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
 
 def is_command_enabled(chat_id, command_key):
-    """(جديد) دالة للتحقق إذا كانت فئة الأوامر مفعلة."""
     chat_id_str = str(chat_id)
     settings = db.get(chat_id_str, {}).get("command_settings", {})
-    # الأوامر مفعلة بشكل افتراضي
     return settings.get(command_key, True)
 
 async def is_admin(chat_id, user_id):
@@ -234,7 +224,8 @@ async def build_protection_menu(chat_id):
     chat_id_str, chat_locks = str(chat_id), db.get(str(chat_id), {})
     buttons, row = [], []
     for name, key in LOCK_TYPES.items():
-        status_emoji = "🔒" if chat_locks.get(key, False) else "🔓"
+        # --- (مُعَدَّل) البحث عن المفتاح الصحيح في قاعدة البيانات ---
+        status_emoji = "🔒" if chat_locks.get(f"lock_{key}", False) else "🔓"
         button = Button.inline(f"{status_emoji} {name}", data=f"toggle_lock_{key}")
         row.append(button)
         if len(row) == 2: buttons.append(row); row = []
