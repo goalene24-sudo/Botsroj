@@ -12,7 +12,6 @@ ALL_MODULES = [
     "plugins.dictionary",
     "plugins.achievements",
     "plugins.fun",
-    "plugins.social", # <-- تمت إضافة الملف الجديد هنا
     "plugins.games",
     "plugins.fast_games",
     "plugins.replies",
