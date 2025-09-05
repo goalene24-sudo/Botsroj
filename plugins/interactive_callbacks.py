@@ -11,7 +11,8 @@ from .utils import (
     check_xo_winner, add_points, has_bot_permission,
     RIDDLES, BLESS_COUNTERS, build_main_menu_buttons
 )
-from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
+# --- تم تغيير المسار إلى social.py ---
+from .social import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
 from .games import CURRENT_QUIZZES, MAHIBES_GAMES
 from .services import TASBEEH_AZKAR, NAMES_OF_ALLAH, SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
@@ -147,8 +148,8 @@ async def handle_interactive_callback(event):
             await event.edit(full_list_text, buttons=Button.inline("💎 عرض اسم عشوائي مع الشرح", data="asma_husna:random"))
         await event.answer()
         return
-        
-    if action == "show_rules":
+
+if action == "show_rules":
         user = await event.get_sender()
         rules = db.get(chat_id_str, {}).get("rules")
         if rules:
@@ -178,4 +179,164 @@ async def handle_interactive_callback(event):
         me = await client.get_me()
         if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
         if chat_id_str not in db: db[chat_id_str] = {}
-        db[chat_id_str]
+        db[chat_id_str]["is_paused"] = False; save_db(db)
+        buttons = build_main_menu_buttons()
+        await event.edit("**✅ تم تفعيل البوت بنجاح!**\n**الآن يمكنك استخدام القوائم أدناه للتحكم.**", buttons=buttons)
+    
+    if query_data.startswith("rps"):
+        msg_id = event.message_id
+        if msg_id not in RPS_GAMES:
+            return await event.edit("**هذا التحدي قديم، ابدأ تحديًا جديدًا.**", buttons=None)
+
+        game = RPS_GAMES[msg_id]
+        action_rps, choice, p1_id, p2_id = data_parts
+
+        if user_id not in [int(p1_id), int(p2_id)]:
+            return await event.answer("هذا التحدي ليس لك!", alert=True)
+
+        if user_id == int(p1_id) and not game["p1_choice"]:
+            game["p1_choice"] = choice
+            await event.answer(f"اخترت {choice}. ننتظر اللاعب الثاني...")
+        elif user_id == int(p2_id) and not game["p2_choice"]:
+            game["p2_choice"] = choice
+            await event.answer(f"اخترت {choice}. ننتظر اللاعب الثاني...")
+        else:
+            return await event.answer("لقد قمت بالاختيار بالفعل!", alert=True)
+
+        if game["p1_choice"] and game["p2_choice"]:
+            p1_c, p2_c = game["p1_choice"], game["p2_choice"]
+            p1_n, p2_n = game["p1_name"], game["p2_name"]
+            winner = None
+            if p1_c == p2_c:
+                result_text = "تعادل!"
+            elif (p1_c == "rock" and p2_c == "scissors") or \
+                 (p1_c == "paper" and p2_c == "rock") or \
+                 (p1_c == "scissors" and p2_c == "paper"):
+                winner = p1_n
+            else:
+                winner = p2_n
+            
+            result_message = f"**انتهى التحدي!**\n\n" \
+                             f"**- {p1_n} اختار:** `{p1_c}`\n" \
+                             f"**- {p2_n} اختار:** `{p2_c}`\n\n"
+            if winner:
+                result_message += f"**الفائز هو {winner}! 🥳**"
+            else:
+                result_message += f"**النتيجة تعادل! 🤝**"
+
+            await event.edit(result_message, buttons=None)
+            del RPS_GAMES[msg_id]
+        return
+
+    if query_data.startswith("xo_move_"):
+        msg_id = event.message_id
+        if msg_id not in XO_GAMES:
+            return await event.edit("**هذه اللعبة قديمة، ابدأ لعبة جديدة.**", buttons=None)
+        
+        game = XO_GAMES[msg_id]
+        pos = int(data_parts[1])
+
+        if user_id != game['turn']:
+            return await event.answer("مو سرآك!", alert=True)
+        if game['board'][pos] != '-':
+            return await event.answer("هذا المربع محجوز!", alert=True)
+
+        game['board'][pos] = game['symbol']
+        winner = check_xo_winner(game['board'])
+
+        if winner:
+            winner_name = game['p1_name'] if winner == 'X' else game['p2_name']
+            result_text = f"**انتهت اللعبة! الفائز هو {winner_name} ({winner})! 🏆**"
+            if winner == "draw":
+                result_text = "**انتهت اللعبة بالتعادل! 🤝**"
+            await event.edit(result_text, buttons=build_xo_keyboard(game['board']))
+            del XO_GAMES[msg_id]
+        else:
+            game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
+            game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
+            turn_name = game['p1_name'] if game['turn'] == game['player_x'] else game['p2_name']
+            text = f"**⚔️ لعبة XO!**\n\n**- اللاعب 𝚇:** {game['p1_name']}\n**- اللاعب 𝙾:** {game['p2_name']}\n\n**سره {turn_name} ({game['symbol']})**"
+            await event.edit(text, buttons=build_xo_keyboard(game['board']))
+        return
+    
+    if query_data.startswith("bless"):
+        msg_id = event.message_id
+        if msg_id not in BLESS_COUNTERS:
+            return await event.answer("هذا الزواج قديم!", alert=True)
+        
+        counter = BLESS_COUNTERS[msg_id]
+        if user_id in counter["users"]:
+            return await event.answer("لقد باركت بالفعل!", alert=True)
+        
+        counter["users"].add(user_id)
+        counter["count"] += 1
+        
+        chat_id_bless, event_id_bless = data_parts[1], data_parts[2]
+        new_button = Button.inline(f'مباركين 🎉 ({counter["count"]})', data=f"bless:{chat_id_bless}:{event_id_bless}")
+        await event.edit(buttons=new_button)
+        await event.answer("💖")
+        return
+
+    if query_data.startswith("mute_"):
+        try:
+            _, user_to_mute_id, minutes = query_data.split("_")
+            user_to_mute_id, minutes = int(user_to_mute_id), int(minutes)
+            
+            if not await has_bot_permission(event):
+                return await event.answer("أنت لست مشرفاً!", alert=True)
+
+            until_date = datetime.now() + timedelta(minutes=minutes)
+            await client.edit_permissions(chat_id, user_to_mute_id, send_messages=False, until_date=until_date)
+            
+            user_to_mute = await client.get_entity(user_to_mute_id)
+            await event.edit(f"**✅ تم كتم [{user_to_mute.first_name}](tg://user?id={user_to_mute_id}) لمدة {minutes} دقيقة.**")
+        except Exception as e:
+            await event.edit(f"**حدث خطأ:**\n`{e}`")
+        return
+
+# --- معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
+@client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
+async def custom_command_button_handler(event):
+    command_name = event.data.decode().split(':')[1]
+    custom_commands = db.get("custom_commands", {})
+    
+    if command_name not in custom_commands:
+        return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
+
+    command_data = custom_commands[command_name]
+    reply_template = command_data.get("reply")
+    display_mode = command_data.get("display_mode", "popup") 
+
+    if not reply_template:
+        return await event.answer("⚠️ | لا يوجد نص رد لهذا الأمر.", alert=True)
+
+    sender = await event.get_sender()
+    chat = await event.get_chat()
+    chat_id_str = str(chat.id)
+    sender_id_str = str(sender.id)
+    user_data = db.get(chat_id_str, {}).get("users", {}).get(sender_id_str, {})
+    msg_count = user_data.get("msg_count", 0)
+    points = user_data.get("points", 0)
+
+    try:
+        if not isinstance(reply_template, str):
+            reply_template = str(reply_template)
+
+        final_reply = reply_template.format(
+            user_first_name=sender.first_name,
+            user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
+            user_id=sender.id,
+            points=points,
+            msg_count=msg_count,
+            chat_title=chat.title
+        )
+
+        if display_mode == "edit":
+            back_button = Button.inline("🔙 رجوع", data="back_to_main")
+            await event.edit(final_reply, buttons=back_button, parse_mode='md')
+        else:
+            popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
+            await event.answer(popup_reply, alert=True)
+
+    except Exception as e:
+        await event.answer(f"⚠️ | خطأ في عرض الرد: {e}", alert=True)
