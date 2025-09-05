@@ -12,6 +12,7 @@ ALL_MODULES = [
     "plugins.dictionary",
     "plugins.achievements",
     "plugins.fun",
+    "plugins.social", # <-- تمت إضافة الملف الجديد هنا
     "plugins.games",
     "plugins.fast_games",
     "plugins.replies",
@@ -35,7 +36,7 @@ ALL_MODULES = [
     "plugins.owner",
     "plugins.sudo_panel",
     "plugins.media_search",
-    "plugins.custom_commands", # <-- تمت الإضافة
+    "plugins.custom_commands",
     "plugins.admin_menus",
     "plugins.settings",
 ]
