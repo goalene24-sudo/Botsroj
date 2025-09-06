@@ -8,7 +8,7 @@ from .utils import (
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS
 )
 
-# --- (مُعَدَّل) قاموس الاختصارات الأساسية الجديد (يركز على الإدارة والحماية) ---
+# --- (مُعَدَّل) إضافة الاختصارات الجديدة ---
 FIXED_ALIASES = {
     # الأوامر الأساسية
     "ا": "ايدي",
@@ -23,12 +23,17 @@ FIXED_ALIASES = {
     "تاد": "تنزيل ادمن",
     "من": "رفع منشئ",
     "تمن": "تنزيل منشئ",
+    "ر م": "رفع مميز",
+    "ت م": "تنزيل مميز",
+    "ط": "طرد",
     "ت": "تثبيت",
     "ضت": "ضع ترحيب",
     "حت": "حذف الترحيب",
     "رد": "اضف رد",
     "مر": "مسح رد",
     "رر": "الردود",
+    "تفعيل ص ا": "تشغيل صورة ايدي",
+    "تعطيل ص ا": "تعطيل صورة ايدي",
 
     # أوامر الحماية (قفل)
     "ق ص": "قفل الصور",
@@ -75,8 +80,8 @@ ALL_BOT_COMMANDS = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + SERVICE_C
 async def add_alias_handler(event):
     if not await check_activation(event.chat_id): return
 
-    user_rank = await get_user_rank(event.sender_id, event)
-    if user_rank < Ranks.GROUP_ADMIN:
+    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
 
     chat_id_str = str(event.chat_id)
@@ -149,8 +154,8 @@ async def add_alias_handler(event):
 @client.on(events.NewMessage(pattern=r"^حذف امر (.+)$"))
 async def delete_alias_handler(event):
     if not await check_activation(event.chat_id): return
-    user_rank = await get_user_rank(event.sender_id, event)
-    if user_rank < Ranks.GROUP_ADMIN:
+    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
     
     chat_id_str = str(event.chat_id)
