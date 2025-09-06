@@ -9,14 +9,15 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
-# --- تعريف مستويات الرتب ---
+# --- تعريف مستويات الرتب (تم التحديث) ---
 class Ranks:
-    MEMBER = 0
-    GROUP_ADMIN = 1
-    BOT_ADMIN = 2
-    CREATOR = 3
-    OWNER = 4
-    DEVELOPER = 5
+    MEMBER = 0        # عضو
+    VIP = 1           # عضو مميز (جديد)
+    MOD = 2           # مشرف (من صلاحيات المجموعة)
+    ADMIN = 3         # ادمن (من صلاحيات البوت)
+    CREATOR = 4       # المنشئ
+    SECONDARY_DEV = 5 # مطور ثانوي (جديد)
+    MAIN_DEV = 6      # المطور الرئيسي
 
 try:
     import google.generativeai as genai
@@ -106,6 +107,75 @@ def save_db(data):
 
 db = load_db()
 
+# --- دوال جديدة للتحقق من الرتب ---
+def is_vip(chat_id, user_id):
+    chat_id_str = str(chat_id)
+    vips = db.get(chat_id_str, {}).get("vips", [])
+    return user_id in vips
+
+def is_secondary_dev(chat_id, user_id):
+    chat_id_str = str(chat_id)
+    secondary_devs = db.get(chat_id_str, {}).get("secondary_devs", [])
+    return user_id in secondary_devs
+
+# --- دالة جديدة لتحويل الرتبة إلى نص ---
+def get_rank_name(rank_level):
+    if rank_level == Ranks.MAIN_DEV:
+        return "المطور الرئيسي"
+    elif rank_level == Ranks.SECONDARY_DEV:
+        return "مطور ثانوي"
+    elif rank_level == Ranks.CREATOR:
+        return "المنشئ"
+    elif rank_level == Ranks.ADMIN:
+        return "ادمن"
+    elif rank_level == Ranks.MOD:
+        return "مشرف"
+    elif rank_level == Ranks.VIP:
+        return "عضو مميز"
+    else:
+        return "عضو"
+
+# --- دالة تحديد الرتبة (مُعاد بناؤها بالكامل) ---
+async def get_user_rank(user_id, chat_id):
+    if user_id in config.SUDO_USERS:
+        return Ranks.MAIN_DEV
+
+    chat_id_str = str(chat_id)
+    chat_data = db.get(chat_id_str, {})
+    
+    if user_id in chat_data.get("secondary_devs", []):
+        return Ranks.SECONDARY_DEV
+
+    try:
+        participant = await client.get_participant(chat_id, user_id)
+        if isinstance(participant, ChannelParticipantCreator):
+            return Ranks.CREATOR
+    except UserNotParticipantError:
+        # المستخدم قد لا يكون في المجموعة ولكنه قد يكون في قاعدة البيانات
+        pass
+    except Exception:
+        # قد تحدث أخطاء أخرى إذا لم يكن البوت مشرفًا
+        pass
+
+    if user_id in chat_data.get("bot_admins", []):
+        return Ranks.ADMIN
+
+    # التحقق من صلاحيات المشرف في المجموعة
+    try:
+        perms = await client.get_permissions(chat_id, user_id)
+        if perms.is_admin:
+            return Ranks.MOD
+    except (UserNotParticipantError, ChatAdminRequiredError):
+        pass
+    except Exception:
+        pass
+        
+    if user_id in chat_data.get("vips", []):
+        return Ranks.VIP
+
+    return Ranks.MEMBER
+
+
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
     days = uptime_delta.days
@@ -168,42 +238,11 @@ async def is_admin(chat_id, user_id):
         except Exception: return False
     return False
 
-async def get_user_rank(user_id, event):
-    chat_id = event.chat_id
-    chat_id_str = str(chat_id)
-    
-    if user_id in config.SUDO_USERS:
-        return Ranks.DEVELOPER
-    
-    try:
-        async for p in client.iter_participants(chat_id, filter=ChannelParticipantsAdmins):
-            if p.id == user_id and isinstance(p.participant, ChannelParticipantCreator):
-                return Ranks.OWNER
-    except Exception:
-        pass
-    
-    creators = db.get(chat_id_str, {}).get("creators", [])
-    if user_id in creators:
-        return Ranks.CREATOR
-
-    bot_admins = db.get(chat_id_str, {}).get("bot_admins", [])
-    if user_id in bot_admins:
-        return Ranks.BOT_ADMIN
-    
-    try:
-        participant = await client.get_permissions(chat_id, user_id)
-        if participant.is_admin or participant.is_creator:
-            return Ranks.GROUP_ADMIN
-    except (UserNotParticipantError, ChatAdminRequiredError):
-        pass
-    except Exception:
-        pass
-
-    return Ranks.MEMBER
 
 async def has_bot_permission(event):
-    rank = await get_user_rank(event.sender_id, event)
-    return rank >= Ranks.GROUP_ADMIN
+    # تم تعديل هذه الدالة لتتوافق مع نظام الرتب الجديد
+    rank = await get_user_rank(event.sender_id, event.chat_id)
+    return rank >= Ranks.MOD
 
 async def check_activation(chat_id):
     chat_id_str = str(chat_id)
