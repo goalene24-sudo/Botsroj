@@ -3,7 +3,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from telethon import events
-from telethon.tl import types
+# from telethon.tl import types # تم حذف هذا السطر لأنه غير ضروري ويسبب الخطأ
 from bot import client
 # --- (مُعَدَّل) استيراد الدوال الجديدة ---
 from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks, get_rank_name
@@ -333,7 +333,7 @@ async def my_rank_handler(event):
     
     await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
 
-# --- (جديد) أمر صلاحياتي ---
+# --- (مُصحَّح) أمر صلاحياتي ---
 @client.on(events.NewMessage(pattern="^صلاحياتي$"))
 async def my_permissions_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -341,12 +341,15 @@ async def my_permissions_handler(event):
     sender = await event.get_sender()
     
     try:
-        perms = await client.get_permissions(event.chat_id, sender.id)
+        participant = await client.get_permissions(event.chat_id, sender.id)
     except Exception:
         return await event.reply("**لا يمكنني عرض صلاحياتك.**")
 
-    if not isinstance(perms, types.ChatAdminPermissions):
+    # التحقق بالطريقة الصحيحة من وجود صلاحيات إدارية
+    if not hasattr(participant, 'admin_rights') or not participant.admin_rights:
         return await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
+
+    perms = participant.admin_rights
 
     PERMISSIONS_MAP = {
         "change_info": "تغيير معلومات المجموعة",
@@ -360,7 +363,8 @@ async def my_permissions_handler(event):
     
     permissions_text = f"**⚜️ | صلاحياتك يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
     
-    if perms.anonymous:
+    # التحقق من صلاحية المشرف المخفي
+    if hasattr(participant.participant, 'anonymous') and participant.participant.anonymous:
         permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
         
     for key, description in PERMISSIONS_MAP.items():
