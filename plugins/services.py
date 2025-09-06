@@ -110,16 +110,32 @@ async def asma_al_husna_handler(event):
     ]
     await event.reply(text, buttons=buttons)
 
+# --- (تم التعديل) ---
 @client.on(events.NewMessage(pattern="^سبحة$"))
 async def start_tasbeeh_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    zikr_index = 0
-    zikr_info = TASBEEH_AZKAR[zikr_index]
-    zikr_text, zikr_target = zikr_info["text"], zikr_info["target"]
+    
+    # اختيار الذكر الأول من القائمة
+    zikr_info = TASBEEH_AZKAR[0]
+    zikr_text = zikr_info["text"]
+    zikr_target = zikr_info["target"]
+    
     message_text = f"**الهدف: {zikr_target}**"
+    
+    # --- (التغيير هنا) تعديل صيغة الـ data لتكون كاملة ---
     buttons = [
-        [Button.inline(f"{zikr_text} [0]", data=f"tasbeeh:0:{zikr_index}")],
-        [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh_reset:{zikr_index}")]
+        [
+            Button.inline(
+                f"{zikr_text} [0]", 
+                data=f"tasbeeh:click:{zikr_text}:{zikr_target}:0"
+            )
+        ],
+        [
+            Button.inline(
+                "🔄 إعادة التصفير", 
+                data=f"tasbeeh:reset:{zikr_text}:{zikr_target}:0"
+            )
+        ]
     ]
     await event.reply(message_text, buttons=buttons)
 
