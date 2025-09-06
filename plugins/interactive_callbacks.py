@@ -45,11 +45,18 @@ async def handle_interactive_callback(event):
         return
 
     if action == "tasbeeh":
-        sub_action = data_parts[1]
-        
+        if len(data_parts) < 3: return
+
+        try:
+            sub_action = data_parts[1]
+            tasbeeh_index = int(data_parts[2])
+            current_tasbeeh = TASBEEH_AZKAR[tasbeeh_index]
+        except (ValueError, IndexError):
+            return
+
         if msg_id not in TASBEEH_SESSIONS:
             TASBEEH_SESSIONS[msg_id] = {"count": 0, "last_click": 0}
-
+        
         session = TASBEEH_SESSIONS[msg_id]
         
         if sub_action == "increment":
@@ -57,21 +64,20 @@ async def handle_interactive_callback(event):
             if now - session.get("last_click", 0) < TASBEEH_CLICK_COOLDOWN:
                 return await event.answer("رويدك، لا تضغط بسرعة.", alert=False)
 
-            session["count"] += 1
+            session["count"] = session.get("count", 0) + 1
             session["last_click"] = now
             
-            current_tasbeeh = TASBEEH_AZKAR[int(data_parts[2])]
             buttons = [
-                [Button.inline(f"{current_tasbeeh} [{session['count']}]", data=f"tasbeeh:increment:{data_parts[2]}")],
-                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{data_parts[2]}")]
+                [Button.inline(f"{current_tasbeeh} [{session['count']}]", data=f"tasbeeh:increment:{tasbeeh_index}")],
+                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{tasbeeh_index}")]
             ]
             await event.edit(buttons=buttons)
+
         elif sub_action == "reset":
             session["count"] = 0
-            current_tasbeeh = TASBEEH_AZKAR[int(data_parts[2])]
             buttons = [
-                [Button.inline(f"{current_tasbeeh} [0]", data=f"tasbeeh:increment:{data_parts[2]}")],
-                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{data_parts[2]}")]
+                [Button.inline(f"{current_tasbeeh} [0]", data=f"tasbeeh:increment:{tasbeeh_index}")],
+                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{tasbeeh_index}")]
             ]
             await event.edit(buttons=buttons)
         return
@@ -81,9 +87,15 @@ async def handle_interactive_callback(event):
             return await event.answer("هذه اللعبة قديمة جداً!", alert=True)
 
         game = XO_GAMES[msg_id]
-        position = int(query_data.split("_")[2])
+        
+        try:
+            position = int(query_data.split("_")[2])
+        except (ValueError, IndexError):
+            return
 
-        current_player_id = game[game["turn"] + "_id"]
+        turn = game.get("turn")
+        current_player_id = game.get("p1_id") if turn == "p1" else game.get("p2_id")
+
         if user_id != current_player_id:
             return await event.answer("ليس دورك للعب!", alert=True)
             
@@ -94,15 +106,15 @@ async def handle_interactive_callback(event):
         winner = check_xo_winner(game["board"])
         
         if winner:
-            winner_name = game[game["turn"] + "_name"]
+            winner_name = game.get("p1_name") if turn == "p1" else game.get("p2_name")
             text = f"**🎉 الفائز هو [{winner_name}](tg://user?id={current_player_id})!**" if winner != 'draw' else "**انتهت اللعبة بالتعادل!**"
             await event.edit(text, buttons=build_xo_keyboard(game["board"]))
             del XO_GAMES[msg_id]
         else:
             game["turn"] = "p2" if game["turn"] == "p1" else "p1"
             game["turn_symbol"] = "O" if game["turn_symbol"] == "X" else "X"
-            next_player_name = game[game["turn"] + "_name"]
-            text = f"**لعبة XO بدأت!**\n\n- **اللاعب X:** {game['p1_name']}\n- **اللاعب O:** {game['p2_name']}\n\n**سره {next_player_name} ({game['turn_symbol']})**"
+            next_player_name = game.get(game["turn"] + "_name", "")
+            text = f"**لعبة XO بدأت!**\n\n- **اللاعب X:** {game.get('p1_name')}\n- **اللاعب O:** {game.get('p2_name')}\n\n**سره {next_player_name} ({game['turn_symbol']})**"
             await event.edit(text, buttons=build_xo_keyboard(game["board"]))
         return
 
