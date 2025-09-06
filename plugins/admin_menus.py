@@ -23,6 +23,7 @@ CREATOR_COMMANDS_TEXT = """**⚜️ أوامر المنشئ**
 **- مسح كل الادمنيه:** لحذف جميع أدمنية البوت في المجموعة.
 """
 
+# --- (مُعَدَّل) إضافة شرح أوامر صورة الايدي ---
 BOT_ADMIN_COMMANDS_TEXT = """**🤖 أوامر الأدمن**
 **- رفع مشرف:** (بالرد) لترقية عضو إلى مشرف في المجموعة.
 **- تنزيل مشرف:** (بالرد) لعزل مشرف من المجموعة.
@@ -33,10 +34,11 @@ BOT_ADMIN_COMMANDS_TEXT = """**🤖 أوامر الأدمن**
 **- حذف الترحيب:** لحذف رسالة الترحيب المخصصة.
 **- ضع قوانين:** لوضع قوانين المجموعة.
 **- حذف القوانين:** لحذف قوانين المجموعة.
+**- تشغيل صورة ايدي:** لعرض الصورة في أمر ايدي.
+**- تعطيل صورة ايدي:** لإخفاء الصورة في أمر ايدي.
 **- تفعيل وتعطيل الأوامر:** للتحكم بالأوامر المسموحة في المجموعة.
 """
 
-# --- (مُعَدَّل) إضافة أمر الطرد إلى قائمة الأوامر ---
 GROUP_ADMIN_COMMANDS_TEXT = """**🛡️ أوامر المدير (المشرف)**
 **- طرد:** (بالرد) لطرد عضو من المجموعة.
 **- حظر:** (بالرد) لحظر عضو من المجموعة.
@@ -87,7 +89,6 @@ CLEANING_COMMANDS_TEXT = """**🧹 | أوامر المسح والتنظيف**
 async def admin_hub_handler(event):
     if not await check_activation(event.chat_id): return
     
-    # تم تصحيح استدعاء الدالة واسم الرتبة
     user_rank = await get_user_rank(event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD:
         return await event.answer("🚫 | هذا القسم مخصص للمشرفين فما فوق.", alert=True)
@@ -126,7 +127,6 @@ async def admin_hub_handler(event):
         text = CLEANING_COMMANDS_TEXT
         buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
         
-    # (مُصحَّح) التحقق من صلاحية المستخدم لعرض القائمة
     required_rank_map = {
         "owner": Ranks.OWNER,
         "creator": Ranks.CREATOR,
