@@ -41,7 +41,7 @@ LOCK_TYPES_MAP = {
     "التعديل": "edit",
 }
 
-# --- (جديد) أمر الطرد ---
+# --- أمر الطرد (مُعَدَّل) ---
 @client.on(events.NewMessage(pattern="^طرد$"))
 async def kick_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -55,12 +55,16 @@ async def kick_handler(event):
 
     user_to_kick = await reply.get_sender()
     actor = await event.get_sender()
+    
+    # --- (جديد) التحقق إذا كان المستهدف هو البوت نفسه ---
+    me = await client.get_me()
+    if user_to_kick.id == me.id:
+        return await event.reply("**تريدني اطرد نفسي شدتحس بله😒**")
 
     if user_to_kick.id == actor.id:
         return await event.reply("**لا يمكنك طرد نفسك!**")
 
     try:
-        me = await client.get_me()
         bot_perms = await client.get_permissions(event.chat_id, me.id)
         if not bot_perms.ban_users:
             return await event.reply("**⚠️ | ليس لدي صلاحية طرد الأعضاء في هذه المجموعة.**")
@@ -238,7 +242,7 @@ async def promote_demote_handler(event):
 @client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح الادمنيه)$"))
 async def bot_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    action = event.raw_text.replace(" كل", "") # لتوحيد أمر المسح
+    action = event.raw_text.replace(" كل", "")
     chat_id_str = str(event.chat_id)
     
     actor_rank = await get_user_rank(event.sender_id, event.chat_id)
@@ -275,7 +279,7 @@ async def bot_admin_handler(event):
             if user_to_manage_id in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو أصلاً أدمن بالبوت.**")
             db[chat_id_str]["bot_admins"].append(user_to_manage_id)
             await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) أدمن في البوت.**")
-        else: # تنزيل ادمن
+        else: 
             if user_to_manage_id not in db[chat_id_str]["bot_admins"]: return await event.reply("**هذا الشخص هو مو أدمن بالبوت أصلاً.**")
             db[chat_id_str]["bot_admins"].remove(user_to_manage_id)
             await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) من أدمنية البوت.**")
@@ -376,7 +380,7 @@ async def creator_admin_handler(event):
                 return await event.reply("**هذا الشخص هو أصلاً منشئ.**")
             db[chat_id_str]["creators"].append(user_to_manage_id)
             await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى منشئ في البوت.**")
-        else: # تنزيل منشئ
+        else:
             if user_to_manage_id not in db[chat_id_str]["creators"]:
                 return await event.reply("**هذا الشخص هو ليس منشئاً أصلاً.**")
             db[chat_id_str]["creators"].remove(user_to_manage_id)
@@ -440,7 +444,7 @@ async def secondary_dev_handler(event):
                 return await event.reply("**هذا الشخص هو أصلاً مطور ثانوي.**")
             db[chat_id_str]["secondary_devs"].append(user_to_manage_id)
             await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى مطور ثانوي.**")
-        else: # تنزيل مطور ثانوي
+        else:
             if user_to_manage_id not in db[chat_id_str]["secondary_devs"]:
                 return await event.reply("**هذا الشخص ليس مطور ثانوي أصلاً.**")
             db[chat_id_str]["secondary_devs"].remove(user_to_manage_id)
@@ -504,7 +508,7 @@ async def vip_handler(event):
                 return await event.reply("**هذا الشخص هو أصلاً عضو مميز.**")
             db[chat_id_str]["vips"].append(user_to_manage_id)
             await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى عضو مميز.**")
-        else: # تنزيل مميز
+        else:
             if user_to_manage_id not in db[chat_id_str]["vips"]:
                 return await event.reply("**هذا الشخص ليس عضو مميز أصلاً.**")
             db[chat_id_str]["vips"].remove(user_to_manage_id)
