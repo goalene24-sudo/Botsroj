@@ -26,6 +26,37 @@ async def callback_handler(event):
         "social_menu"
     ]
 
+    # --- (جديد) معالج زر التفعيل ---
+    if query_data.startswith("activate_"):
+        chat_id_str = query_data.split('_')[1]
+        chat_id = int(chat_id_str)
+
+        if not await is_admin(chat_id, event.sender_id):
+            return await event.answer("🚫 | هذا الزر مخصص للمشرفين فقط.", alert=True)
+
+        if chat_id_str not in db: 
+            db[chat_id_str] = {}
+
+        is_currently_paused = db.get(chat_id_str, {}).get("is_paused", False)
+        
+        if not is_currently_paused:
+            # إذا كان البوت مفعلًا بالفعل، نقوم فقط بتعديل الرسالة إلى القائمة الرئيسية
+            buttons = build_main_menu_buttons()
+            await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
+            return await event.answer("✅ | البوت مفعل بالفعل.", alert=False)
+
+        me = await client.get_me()
+        if not await is_admin(chat_id, me.id):
+            return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً لتتمكن من تفعيلي.", alert=True)
+
+        db[chat_id_str]["is_paused"] = False
+        save_db(db)
+        
+        buttons = build_main_menu_buttons()
+        await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
+        await event.answer("✅ | تم تفعيل البوت بنجاح!", alert=True)
+        return
+
     if query_data in main_menus:
         text_to_show = None
         buttons_to_show = build_main_menu_buttons()
@@ -82,7 +113,6 @@ async def callback_handler(event):
             if not await has_bot_permission(event): 
                 return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
             
-            # --- (مُعَدَّل) تخزين آيدي رسالة الحماية ---
             chat_id_str = str(event.chat_id)
             menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
             menu_buttons = await build_protection_menu(event.chat_id)
@@ -117,7 +147,6 @@ async def callback_handler(event):
         await handle_interactive_callback(event)
 
 
-# --- معالج جديد ومطور لضغطات أزرار الأوامر المخصصة ---
 @client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
 async def custom_command_button_handler(event):
     command_name = event.data.decode().split(':')[1]
