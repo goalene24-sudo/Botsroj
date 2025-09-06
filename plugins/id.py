@@ -6,8 +6,8 @@ from datetime import datetime
 from telethon import events
 from bot import client
 import config
+# --- (مُعَدَّل) استيراد الرتب المحدثة ---
 from .utils import check_activation, db, get_user_rank, Ranks, is_command_enabled
-# استدعاء قاموس الأوسمة
 from .achievements import ACHIEVEMENTS
 
 RANDOM_HEADERS = [
@@ -23,15 +23,12 @@ RANDOM_TAFA3UL = [
 async def id_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    # --- [تم التصحيح] التحقق إذا كان الأمر معطلاً بشكل عام مع إرسال رسالة ---
     disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     current_command = event.pattern_match.group(1).lower()
     if current_command in disabled_cmds or "ايدي" in disabled_cmds:
         await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
         return
-    # --- نهاية التحقق العام ---
 
-    # --- التحقق إذا كان الأمر معطلاً في المجموعة نفسها ---
     if not is_command_enabled(event.chat_id, "id_enabled"):
         return await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
     
@@ -61,14 +58,15 @@ async def id_handler(event):
     sahaqat = user_data.get("sahaqat", 0)
     custom_bio = user_data.get("bio", "لم يتم تعيين نبذة بعد.")
     
-    # --- جلب الرتبة بالطريقة الموحدة ---
-    rank_int = await get_user_rank(target_user.id, event)
+    # --- (مُعَدَّل) جلب الرتبة واستخدام القاموس المحدث ---
+    rank_int = await get_user_rank(target_user.id, event.chat_id)
     rank_map = {
-        Ranks.DEVELOPER: "المطور 👨‍💻",
-        Ranks.OWNER: "مالك المجموعة 👑",
-        Ranks.CREATOR: "منشئ في البوت ⚜️",
-        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
-        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
+        Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻",
+        Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️",
+        Ranks.CREATOR: "المنشئ 👑",
+        Ranks.ADMIN: "ادمن في البوت 🤖",
+        Ranks.MOD: "مشرف في المجموعة 🛡️",
+        Ranks.VIP: "عضو مميز ✨",
         Ranks.MEMBER: "عضو 👤"
     }
     rank = rank_map.get(rank_int, "عضو 👤")
@@ -87,7 +85,6 @@ async def id_handler(event):
     custom_title = None
     decoration = ""
     
-    # التحقق من لقب VIP
     vip_item = inventory.get("لقب vip")
     if vip_item:
         purchase_time = vip_item.get("purchase_time", 0)
@@ -95,7 +92,6 @@ async def id_handler(event):
         if time.time() - purchase_time < duration_seconds:
             vip_status_text = "💎 | من كبار الشخصيات VIP"
 
-    # التحقق من اللقب المخصص
     custom_title_item = inventory.get("تخصيص لقب")
     if custom_title_item:
         purchase_time = custom_title_item.get("purchase_time", 0)
@@ -103,7 +99,6 @@ async def id_handler(event):
         if time.time() - purchase_time < duration_seconds:
             custom_title = user_data.get("custom_title")
             
-    # التحقق من الزخرفة
     decoration_item = inventory.get("زخرفة")
     if decoration_item:
         purchase_time = decoration_item.get("purchase_time", 0)
@@ -149,12 +144,10 @@ async def id_handler(event):
     else:
         await event.reply(caption, reply_to=event.id)
 
-# --- (جديد) أمر كشف المستخدم ---
 @client.on(events.NewMessage(pattern="^كشف$"))
 async def kashf_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
 
-    # --- التحقق من التعطيل العام ---
     disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     if "كشف" in disabled_cmds:
         await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
@@ -172,14 +165,15 @@ async def kashf_handler(event):
     username = f"@{target_user.username}" if target_user.username else "لا يوجد"
     account_link = f"[{target_user.first_name}](tg://user?id={target_user.id})"
     
-    # جلب الرتبة
-    rank_int = await get_user_rank(target_user.id, event)
+    # --- (مُعَدَّل) جلب الرتبة واستخدام القاموس المحدث ---
+    rank_int = await get_user_rank(target_user.id, event.chat_id)
     rank_map = {
-        Ranks.DEVELOPER: "المطور 👨‍💻",
-        Ranks.OWNER: "مالك المجموعة 👑",
-        Ranks.CREATOR: "منشئ في البوت ⚜️",
-        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
-        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
+        Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻",
+        Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️",
+        Ranks.CREATOR: "المنشئ 👑",
+        Ranks.ADMIN: "ادمن في البوت 🤖",
+        Ranks.MOD: "مشرف في المجموعة 🛡️",
+        Ranks.VIP: "عضو مميز ✨",
         Ranks.MEMBER: "عضو 👤"
     }
     rank_str = rank_map.get(rank_int, "عضو 👤")
