@@ -70,18 +70,35 @@ async def chat_action_handler(event):
             save_db(db)
         print(f"تمت إزالة البوت من المجموعة {event.chat_id} وتم إيقافه فيها تلقائياً.")
 
+# --- (مُعَدَّل) تعديل منطق أمر تفعيل/ايقاف ---
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
 async def toggle_bot_status(event):
     if event.is_private: return
     if not await is_admin(event.chat_id, event.sender_id):
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
-    chat_id_str, action, me = str(event.chat_id), event.raw_text, await client.get_me()
-    if chat_id_str not in db: db[chat_id_str] = {}
+        
+    chat_id_str = str(event.chat_id)
+    action = event.raw_text
+    me = await client.get_me()
+    
+    if chat_id_str not in db: 
+        db[chat_id_str] = {}
+
+    is_currently_paused = db.get(chat_id_str, {}).get("is_paused", False)
+
     if action == "ايقاف":
+        if is_currently_paused:
+            return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
         db[chat_id_str]["is_paused"] = True
-        save_db(db); await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
-    else:
-        if not await is_admin(event.chat_id, me.id): return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
+        save_db(db)
+        await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
+    else: # تفعيل
+        if not is_currently_paused:
+            return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
+        
+        if not await is_admin(event.chat_id, me.id): 
+            return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
+            
         db[chat_id_str]["is_paused"] = False
         save_db(db)
         await event.reply("**🟢 رجعتلكم! يلا شنو الأوامر؟**")
@@ -89,7 +106,6 @@ async def toggle_bot_status(event):
 @client.on(events.NewMessage(pattern='^الاوامر$'))
 async def main_menu_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- [تم التحديث] ---
     # استدعاء الدالة لبناء الأزرار بشكل ديناميكي
     buttons = build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
