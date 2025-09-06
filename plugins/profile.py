@@ -384,6 +384,8 @@ async def my_permissions_handler(event):
                     permissions_text += f"❌ **{description}**\n"
             
             return await event.reply(permissions_text)
+        except Exception:
+             return await event.reply(f"**رتبتك هي `{rank_name}`، لكن حدث خطأ أثناء محاولة قراءة صلاحياتك.**")
 
     # الخطوة 4: التعامل مع الرتب الأقل
     await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
