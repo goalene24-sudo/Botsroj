@@ -5,7 +5,7 @@ from datetime import timedelta
 from telethon import events
 from bot import client
 import config
-# --- (مُعَدَّل) استيراد دالة بناء الأزرار ---
+# --- (مُعَدَّل) استيراد الدوال والرتب المحدثة ---
 from .utils import check_activation, has_bot_permission, db, save_db, get_user_rank, Ranks, build_protection_menu
 
 # --- قاموس أنواع الأقفال للترجمة من العربية إلى مفاتيح قاعدة البيانات ---
@@ -60,7 +60,6 @@ async def lock_unlock_handler(event):
     
     if chat_id_str not in db: db[chat_id_str] = {}
 
-    # --- (جديد) التحقق من الحالة الحالية قبل تنفيذ الأمر ---
     current_state_is_locked = db.get(chat_id_str, {}).get(db_key, False)
     change_made = False
 
@@ -79,7 +78,6 @@ async def lock_unlock_handler(event):
             await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
             change_made = True
     
-    # لا نقوم بالحفظ أو تحديث الأزرار إلا إذا حدث تغيير فعلي
     if change_made:
         save_db(db)
         protection_menu_msg_id = db.get(chat_id_str, {}).get("protection_menu_msg_id")
@@ -198,18 +196,19 @@ async def promote_demote_handler(event):
     # ... الكود هنا يبقى كما هو ...
     pass
 
-@client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح كل الادمنيه)$"))
+@client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح الادمنيه)$"))
 async def bot_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    action, chat_id_str = event.raw_text, str(event.chat_id)
+    action = event.raw_text.replace(" كل", "") # لتوحيد أمر المسح
+    chat_id_str = str(event.chat_id)
     
-    actor_rank = await get_user_rank(event.sender_id, event)
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
 
-    if action in ["رفع ادمن", "تنزيل ادمن", "مسح كل الادمنيه"]:
-        if actor_rank < Ranks.CREATOR: # الصلاحية الآن للمنشئ فما فوق
-            return await event.reply("**فقط المنشئين والمالك والمطور يستطيعون استخدام هذا الأمر.**")
+    if action in ["رفع ادمن", "تنزيل ادمن", "مسح الادمنيه"]:
+        if actor_rank < Ranks.CREATOR:
+            return await event.reply("**فقط المنشئ والمطور يستطيعون استخدام هذا الأمر.**")
         
-        if action == "مسح كل الادمنيه":
+        if action == "مسح الادمنيه":
             if db.get(chat_id_str, {}).get("bot_admins"):
                 db[chat_id_str]["bot_admins"] = []
                 save_db(db)
@@ -226,7 +225,7 @@ async def bot_admin_handler(event):
         
         user_to_manage_id = user_to_manage.id
         
-        target_rank = await get_user_rank(user_to_manage_id, event)
+        target_rank = await get_user_rank(user_to_manage_id, event.chat_id)
         if target_rank >= actor_rank:
             return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
 
@@ -244,7 +243,7 @@ async def bot_admin_handler(event):
         save_db(db)
     
     elif action == "الادمنيه":
-        if await get_user_rank(event.sender_id, event) < Ranks.GROUP_ADMIN: return
+        if await get_user_rank(event.sender_id, event.chat_id) < Ranks.MOD: return
         bot_admins_ids = db.get(chat_id_str, {}).get("bot_admins", [])
         if not bot_admins_ids: return await event.reply("**ماكو أي أدمن بالبوت حالياً بهاي المجموعة.**")
         admin_list_text = "**⚜️ قائمة الأدمنية في البوت:**\n\n"
@@ -292,10 +291,10 @@ async def creator_admin_handler(event):
     
     action = event.raw_text
     chat_id_str = str(event.chat_id)
-    actor_rank = await get_user_rank(event.sender_id, event)
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
     
     if action == "رفع مالك":
-        if actor_rank < Ranks.OWNER:
+        if actor_rank < Ranks.CREATOR:
             return await event.reply("**فقط المالك الفعلي للمجموعة يستطيع استخدام هذا الأمر.**")
 
         reply = await event.get_reply_message()
@@ -305,8 +304,8 @@ async def creator_admin_handler(event):
         action = "رفع منشئ"
 
     if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
-        if actor_rank < Ranks.OWNER:
-            return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
+        if actor_rank < Ranks.CREATOR:
+            return await event.reply("**فقط منشئ المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
         
         if action == "مسح المنشئين":
             if db.get(chat_id_str, {}).get("creators"):
@@ -326,7 +325,7 @@ async def creator_admin_handler(event):
             
         user_to_manage_id = user_to_manage.id
         
-        target_rank = await get_user_rank(user_to_manage_id, event)
+        target_rank = await get_user_rank(user_to_manage_id, event.chat_id)
         if target_rank >= actor_rank:
             return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
         
@@ -346,7 +345,7 @@ async def creator_admin_handler(event):
         save_db(db)
 
     elif action == "المنشئين":
-        if actor_rank < Ranks.GROUP_ADMIN: return
+        if actor_rank < Ranks.MOD: return
         
         creator_ids = db.get(chat_id_str, {}).get("creators", [])
         if not creator_ids:
@@ -361,6 +360,135 @@ async def creator_admin_handler(event):
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
 
+# --- (جديد) أوامر المطور الثانوي ---
+@client.on(events.NewMessage(pattern="^(رفع مطور ثانوي|تنزيل مطور ثانوي|المطورين الثانويين|مسح المطورين الثانويين)$"))
+async def secondary_dev_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    action = event.raw_text
+    chat_id_str = str(event.chat_id)
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+
+    if action in ["رفع مطور ثانوي", "تنزيل مطور ثانوي", "مسح المطورين الثانويين"]:
+        if actor_rank not in [Ranks.MAIN_DEV, Ranks.CREATOR]:
+            return await event.reply("**فقط المطور الرئيسي ومنشئ المجموعة يستطيعون استخدام هذا الأمر.**")
+        
+        if action == "مسح المطورين الثانويين":
+            if db.get(chat_id_str, {}).get("secondary_devs"):
+                db[chat_id_str]["secondary_devs"] = []
+                save_db(db)
+                await event.reply("**✅ تم مسح قائمة المطورين الثانويين لهذه المجموعة بنجاح.**")
+            else:
+                await event.reply("**القائمة فارغة أصلاً.**")
+            return
+
+        reply = await event.get_reply_message()
+        if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
+        user_to_manage = await reply.get_sender()
+        if user_to_manage.bot:
+            return await event.reply("**لا يمكنك ترقية البوتات لهذه الرتبة.**")
+        
+        user_to_manage_id = user_to_manage.id
+        
+        target_rank = await get_user_rank(user_to_manage_id, event.chat_id)
+        if target_rank >= actor_rank:
+            return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
+
+        if chat_id_str not in db: db[chat_id_str] = {}
+        if "secondary_devs" not in db[chat_id_str]: db[chat_id_str]["secondary_devs"] = []
+
+        if action == "رفع مطور ثانوي":
+            if user_to_manage_id in db[chat_id_str]["secondary_devs"]:
+                return await event.reply("**هذا الشخص هو أصلاً مطور ثانوي.**")
+            db[chat_id_str]["secondary_devs"].append(user_to_manage_id)
+            await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى مطور ثانوي.**")
+        else: # تنزيل مطور ثانوي
+            if user_to_manage_id not in db[chat_id_str]["secondary_devs"]:
+                return await event.reply("**هذا الشخص ليس مطور ثانوي أصلاً.**")
+            db[chat_id_str]["secondary_devs"].remove(user_to_manage_id)
+            await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) من المطورين الثانويين.**")
+        save_db(db)
+
+    elif action == "المطورين الثانويين":
+        if actor_rank < Ranks.ADMIN: return
+        
+        dev_ids = db.get(chat_id_str, {}).get("secondary_devs", [])
+        if not dev_ids:
+            return await event.reply("**لا يوجد أي مطورين ثانويين في المجموعة.**")
+            
+        list_text = "**⚜️ قائمة المطورين الثانويين:**\n\n"
+        for user_id in dev_ids:
+            try:
+                user = await client.get_entity(user_id)
+                list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
+            except Exception:
+                list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
+        await event.reply(list_text)
+
+# --- (جديد) أوامر العضو المميز ---
+@client.on(events.NewMessage(pattern="^(رفع مميز|تنزيل مميز|المميزين|مسح المميزين)$"))
+async def vip_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    action = event.raw_text
+    chat_id_str = str(event.chat_id)
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+
+    if action in ["رفع مميز", "تنزيل مميز", "مسح المميزين"]:
+        if actor_rank < Ranks.ADMIN:
+            return await event.reply("**هذا الأمر للادمنية فما فوق.**")
+        
+        if action == "مسح المميزين":
+            if db.get(chat_id_str, {}).get("vips"):
+                db[chat_id_str]["vips"] = []
+                save_db(db)
+                await event.reply("**✅ تم مسح قائمة الأعضاء المميزين لهذه المجموعة بنجاح.**")
+            else:
+                await event.reply("**القائمة فارغة أصلاً.**")
+            return
+
+        reply = await event.get_reply_message()
+        if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
+        user_to_manage = await reply.get_sender()
+        if user_to_manage.bot:
+            return await event.reply("**لا يمكنك ترقية البوتات لهذه الرتبة.**")
+        
+        user_to_manage_id = user_to_manage.id
+        
+        target_rank = await get_user_rank(user_to_manage_id, event.chat_id)
+        if target_rank >= actor_rank:
+            return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
+
+        if chat_id_str not in db: db[chat_id_str] = {}
+        if "vips" not in db[chat_id_str]: db[chat_id_str]["vips"] = []
+
+        if action == "رفع مميز":
+            if user_to_manage_id in db[chat_id_str]["vips"]:
+                return await event.reply("**هذا الشخص هو أصلاً عضو مميز.**")
+            db[chat_id_str]["vips"].append(user_to_manage_id)
+            await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) إلى عضو مميز.**")
+        else: # تنزيل مميز
+            if user_to_manage_id not in db[chat_id_str]["vips"]:
+                return await event.reply("**هذا الشخص ليس عضو مميز أصلاً.**")
+            db[chat_id_str]["vips"].remove(user_to_manage_id)
+            await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage_id}) من المميزين.**")
+        save_db(db)
+
+    elif action == "المميزين":
+        if actor_rank < Ranks.MOD: return
+        
+        vip_ids = db.get(chat_id_str, {}).get("vips", [])
+        if not vip_ids:
+            return await event.reply("**لا يوجد أي أعضاء مميزين في المجموعة.**")
+            
+        list_text = "**⚜️ قائمة الأعضاء المميزين:**\n\n"
+        for user_id in vip_ids:
+            try:
+                user = await client.get_entity(user_id)
+                list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
+            except Exception:
+                list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
+        await event.reply(list_text)
+
+
 # --- (جديد) أمر تحديد حجم الكلايش ---
 @client.on(events.NewMessage(pattern=r"^ضع حجم الكلايش (\d+)$"))
 async def set_long_text_size(event):
@@ -371,8 +499,8 @@ async def set_long_text_size(event):
         return
 
     # Check for admin permissions
-    rank = await get_user_rank(event.sender_id, event)
-    if rank < Ranks.GROUP_ADMIN:
+    rank = await get_user_rank(event.sender_id, event.chat_id)
+    if rank < Ranks.MOD:
         return await event.reply("**هذا الأمر متاح للمشرفين فما فوق.**")
 
     try:
