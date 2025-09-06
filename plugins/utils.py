@@ -185,8 +185,18 @@ async def build_protection_menu(chat_id):
     buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
     return buttons
 
-def build_xo_keyboard(board):
-    return [[Button.inline(board[j] if board[j] != '-' else ' ', data=f"xo_move_{j}") for j in range(i, i + 3)] for i in range(0, 9, 3)]
+# --- (تم التعديل) ---
+def build_xo_keyboard(board, game_over=False):
+    buttons = []
+    for i in range(0, 9, 3):
+        row = []
+        for j in range(i, i + 3):
+            text = board[j] if board[j] != '-' else ' '
+            # --- (التغيير هنا) تعديل صيغة الـ data ---
+            callback_data = "xo:done" if game_over else f"xo:{j}"
+            row.append(Button.inline(text, data=callback_data))
+        buttons.append(row)
+    return buttons
 
 def check_xo_winner(board):
     lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
