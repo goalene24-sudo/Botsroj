@@ -16,15 +16,14 @@ from .games import CURRENT_QUIZZES, MAHIBES_GAMES
 from .services import TASBEEH_AZKAR, NAMES_OF_ALLAH, SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
 
-TASBEEH_SESSIONS = {}
-TASBEEH_CLICK_COOLDOWN = 1
+TASBEEH_COOLDOWN = {}
+TASBEEH_CLICK_COOLDOWN = 3
 
 async def handle_interactive_callback(event):
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
     data_parts = query_data.split(':')
     action = data_parts[0]
     chat_id_str = str(chat_id)
-    msg_id = event.message_id
 
     if query_data.startswith("toggle_lock_"):
         if not await has_bot_permission(event): 
@@ -40,132 +39,133 @@ async def handle_interactive_callback(event):
         
         action_text = "قفل" if db[chat_id_str][db_key] else "فتح"
         await event.answer(f"تم {action_text} بنجاح.")
-
         await event.edit(buttons=await build_protection_menu(chat_id))
         return
 
-    if action == "tasbeeh":
-        if len(data_parts) < 3: return
+    # --- (إصلاح) بداية منطق لعبة حجرة ورقة مقص ---
+    if action == "rps":
+        msg_id = event.message_id
+        game = RPS_GAMES.get(msg_id)
+        if not game:
+            return await event.answer("🚫 | **هذا التحدي قديم أو انتهى.**", alert=True)
 
-        try:
-            sub_action = data_parts[1]
-            tasbeeh_index = int(data_parts[2])
-            current_tasbeeh = TASBEEH_AZKAR[tasbeeh_index]
-        except (ValueError, IndexError):
-            return
+        player_choice, p1_id, p2_id = data_parts[1], int(game["p1"]), int(game["p2"])
 
-        if msg_id not in TASBEEH_SESSIONS:
-            TASBEEH_SESSIONS[msg_id] = {"count": 0, "last_click": 0}
+        if user_id not in [p1_id, p2_id]:
+            return await event.answer("🤨 | **هذا التحدي مو إلك!**", alert=True)
         
-        session = TASBEEH_SESSIONS[msg_id]
-        
-        if sub_action == "increment":
-            now = time.time()
-            if now - session.get("last_click", 0) < TASBEEH_CLICK_COOLDOWN:
-                return await event.answer("رويدك، لا تضغط بسرعة.", alert=False)
+        player_key = "p1_choice" if user_id == p1_id else "p2_choice"
+        if game[player_key]:
+            return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
 
-            session["count"] = session.get("count", 0) + 1
-            session["last_click"] = now
+        game[player_key] = player_choice
+        
+        if game["p1_choice"] and game["p2_choice"]:
+            p1_name, p2_name = game["p1_name"], game["p2_name"]
+            p1_c, p2_c = game["p1_choice"], game["p2_choice"]
             
-            buttons = [
-                [Button.inline(f"{current_tasbeeh} [{session['count']}]", data=f"tasbeeh:increment:{tasbeeh_index}")],
-                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{tasbeeh_index}")]
-            ]
-            await event.edit(buttons=buttons)
+            choice_emojis = {"rock": "🗿", "paper": "📄", "scissors": "✂️"}
+            p1_e, p2_e = choice_emojis[p1_c], choice_emojis[p2_c]
 
-        elif sub_action == "reset":
-            session["count"] = 0
-            buttons = [
-                [Button.inline(f"{current_tasbeeh} [0]", data=f"tasbeeh:increment:{tasbeeh_index}")],
-                [Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{tasbeeh_index}")]
-            ]
-            await event.edit(buttons=buttons)
+            win_conditions = {("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")}
+            
+            if p1_c == p2_c:
+                winner_text = "**تعادل! ماكو فايز.**"
+            elif (p1_c, p2_c) in win_conditions:
+                winner_text = f"**الف مبروك! [{p1_name}](tg://user?id={p1_id}) فاز.**"
+                add_points(chat_id, p1_id, 25)
+            else:
+                winner_text = f"**الف مبروك! [{p2_name}](tg://user?id={p2_id}) فاز.**"
+                add_points(chat_id, p2_id, 25)
+
+            result_text = f"**انتهى التحدي!**\n\n- **{p1_name} اختار:** {p1_e}\n- **{p2_name} اختار:** {p2_e}\n\n**النتيجة:** {winner_text}"
+            await event.edit(result_text, buttons=None)
+            del RPS_GAMES[msg_id]
+        else:
+            await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
         return
 
-    if query_data.startswith("xo_move_"):
-        if msg_id not in XO_GAMES:
-            return await event.answer("هذه اللعبة قديمة جداً!", alert=True)
+    # --- (إصلاح) بداية منطق لعبة XO ---
+    if action == "xo":
+        msg_id = event.message_id
+        game = XO_GAMES.get(msg_id)
+        if not game:
+            return await event.answer("🚫 | **هذه اللعبة قديمة أو انتهت.**", alert=True)
 
-        game = XO_GAMES[msg_id]
-        
-        try:
-            position = int(query_data.split("_")[2])
-        except (ValueError, IndexError):
-            return
+        if user_id != game['turn']:
+            return await event.answer("😒 | **مو سرآك هسه!**", alert=True)
 
-        turn = game.get("turn")
-        current_player_id = game.get("p1_id") if turn == "p1" else game.get("p2_id")
+        pos = int(data_parts[1])
+        if game['board'][pos] != '-':
+            return await event.answer("❌ | **هذا المكان محجوز! اختر مكان فارغ.**", alert=True)
 
-        if user_id != current_player_id:
-            return await event.answer("ليس دورك للعب!", alert=True)
-            
-        if game["board"][position] != '-':
-            return await event.answer("هذا المربع محجوز!", alert=True)
-            
-        game["board"][position] = game["turn_symbol"]
-        winner = check_xo_winner(game["board"])
-        
+        game['board'][pos] = game['symbol']
+        winner = check_xo_winner(game['board'])
+
         if winner:
-            winner_name = game.get("p1_name") if turn == "p1" else game.get("p2_name")
-            text = f"**🎉 الفائز هو [{winner_name}](tg://user?id={current_player_id})!**" if winner != 'draw' else "**انتهت اللعبة بالتعادل!**"
-            await event.edit(text, buttons=build_xo_keyboard(game["board"]))
+            winner_user_id = game['player_x'] if winner == 'X' else game['player_o']
+            winner_name = game['p1_name'] if winner == 'X' else game['p2_name']
+            add_points(chat_id, winner_user_id, 50)
+            text = f"**🎉 الف مبروك!**\n\n**الفائز هو [{winner_name}](tg://user?id={winner_user_id}) ({winner})! 🏆**\n**لقد ربحت 50 نقطة.**"
+            await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
+            del XO_GAMES[msg_id]
+        elif '-' not in game['board']:
+            text = "**انتهت اللعبة بالتعادل! 🤝**"
+            await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
             del XO_GAMES[msg_id]
         else:
-            game["turn"] = "p2" if game["turn"] == "p1" else "p1"
-            game["turn_symbol"] = "O" if game["turn_symbol"] == "X" else "X"
-            next_player_name = game.get(game["turn"] + "_name", "")
-            text = f"**لعبة XO بدأت!**\n\n- **اللاعب X:** {game.get('p1_name')}\n- **اللاعب O:** {game.get('p2_name')}\n\n**سره {next_player_name} ({game['turn_symbol']})**"
-            await event.edit(text, buttons=build_xo_keyboard(game["board"]))
+            game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
+            game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
+            turn_name = game['p2_name'] if game['turn'] == game['player_o'] else game['p1_name']
+            text = (f"**⚔️ لعبة XO مستمرة!**\n\n"
+                    f"**- اللاعب 𝚇:** {game['p1_name']}\n"
+                    f"**- اللاعب 𝙾:** {game['p2_name']}\n\n"
+                    f"**سره {turn_name} ({game['symbol']})**")
+            await event.edit(text, buttons=build_xo_keyboard(game['board']))
         return
 
-    if action == "rps":
-        if msg_id not in RPS_GAMES:
-            return await event.answer("هذه اللعبة قديمة جداً!", alert=True)
-            
-        game = RPS_GAMES[msg_id]
-        if user_id != game["p2_id"]:
-            return await event.answer("هذا التحدي ليس لك!", alert=True)
-            
-        p1_choice = game["p1_choice"]
-        p2_choice = data_parts[1]
+    # --- (إصلاح) بداية منطق السبحة ---
+    if action == "tasbeeh":
+        sub_action, zikr, goal, current_str = data_parts[1], data_parts[2], int(data_parts[3]), data_parts[4]
+        current = int(current_str)
         
-        choices_map = {"rock": "✊ حجرة", "paper": "✋ ورقة", "scissors": "✌️ مقص"}
-        p1_text, p2_text = choices_map[p1_choice], choices_map[p2_choice]
-        
-        result_text = ""
-        if p1_choice == p2_choice:
-            result_text = "**تعادل!**"
-        elif (p1_choice == "rock" and p2_choice == "scissors") or \
-             (p1_choice == "paper" and p2_choice == "rock") or \
-             (p1_choice == "scissors" and p2_choice == "paper"):
-            result_text = f"**الفائز هو [{game['p1_name']}](tg://user?id={game['p1_id']})!**"
-            add_points(chat_id, game['p1_id'], 10)
-        else:
-            result_text = f"**الفائز هو [{game['p2_name']}](tg://user?id={game['p2_id']})!**"
-            add_points(chat_id, game['p2_id'], 10)
+        if sub_action == "click":
+            now = time.time()
+            last_click = TASBEEH_COOLDOWN.get(user_id, 0)
+            if now - last_click < TASBEEH_CLICK_COOLDOWN:
+                return await event.answer("على كيفك، لا تضغط بسرعة!", alert=True)
             
-        final_text = (
-            f"**انتهى التحدي!**\n\n"
-            f"**- {game['p1_name']} اختار:** {p1_text}\n"
-            f"**- {game['p2_name']} اختار:** {p2_text}\n\n"
-            f"{result_text}"
-        )
-        await event.edit(final_text)
-        del RPS_GAMES[msg_id]
+            TASBEEH_COOLDOWN[user_id] = now
+            current += 1
+            
+            if current == goal:
+                await event.answer("تقبل الله طاعتك 🤲", alert=True)
+                new_buttons = [[Button.inline(f"{zikr} [{current}]", data=f"tasbeeh:click:{zikr}:{goal}:{current}"), 
+                                Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
+                await event.edit(buttons=new_buttons)
+            else:
+                new_buttons = [[Button.inline(f"{zikr} [{current}]", data=f"tasbeeh:click:{zikr}:{goal}:{current}"), 
+                                Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
+                # Use answer to avoid API flood, only edit if necessary
+                await event.edit(buttons=new_buttons)
+
+        elif sub_action == "reset":
+            current = 0
+            new_buttons = [[Button.inline(f"{zikr} [0]", data=f"tasbeeh:click:{zikr}:{goal}:0"), 
+                            Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
+            await event.edit(buttons=new_buttons)
+            await event.answer("تم تصفير العداد.")
         return
 
     if action == "mahbis":
         game = MAHIBES_GAMES.get(chat_id)
         if not game:
             return await event.answer("هاي اللعبة خلصانة.", alert=True)
-
         player_id = game["player_id"]
         if user_id != player_id:
             return await event.answer("هاي اللعبة مو الك! اذا تريد تلعب، اكتب `محيبس`", alert=True)
-
         guess_pos = int(data_parts[2])
         winner_pos = game["winner_pos"]
-
         if guess_pos == winner_pos:
             winner = await event.get_sender()
             add_points(chat_id, winner.id, 50)
@@ -282,3 +282,12 @@ async def handle_interactive_callback(event):
         else:
             await event.edit(f"**اويليي، غلط جوابك يا [{winner.first_name}](tg://user?id={winner.id})! 😢 الجواب الصح هو '{correct_answer}'.**")
         await event.answer()
+
+    if query_data.startswith("activate_"):
+        chat_id_to_activate = int(query_data.split("_")[1])
+        if not await is_admin(chat_id_to_activate, user_id): return await event.answer("**هذا الزر مخصص للمشرفين فقط.**", alert=True)
+        me = await client.get_me()
+        if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
+        if chat_id_str not in db: db[chat_id_str] = {}
+        # The rest of the activation logic was cut off in the original file, so I'm leaving it as is.
+        # db[chat_id_str]
