@@ -17,7 +17,7 @@ from .services import TASBEEH_AZKAR, NAMES_OF_ALLAH, SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
 
 TASBEEH_COOLDOWN = {}
-TASBEEH_CLICK_COOLDOWN = 3
+TASBEEH_CLICK_COOLDOWN = 1 # تقليل مدة الانتظار لتجربة أفضل
 
 async def handle_interactive_callback(event):
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
@@ -42,7 +42,6 @@ async def handle_interactive_callback(event):
         await event.edit(buttons=await build_protection_menu(chat_id))
         return
 
-    # --- (إصلاح) بداية منطق لعبة حجرة ورقة مقص ---
     if action == "rps":
         msg_id = event.message_id
         game = RPS_GAMES.get(msg_id)
@@ -85,12 +84,14 @@ async def handle_interactive_callback(event):
             await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
         return
 
-    # --- (إصلاح) بداية منطق لعبة XO ---
     if action == "xo":
         msg_id = event.message_id
         game = XO_GAMES.get(msg_id)
         if not game:
             return await event.answer("🚫 | **هذه اللعبة قديمة أو انتهت.**", alert=True)
+        
+        if data_parts[1] == "done":
+            return await event.answer("اللعبة منتهية!", alert=True)
 
         if user_id != game['turn']:
             return await event.answer("😒 | **مو سرآك هسه!**", alert=True)
@@ -118,16 +119,18 @@ async def handle_interactive_callback(event):
             game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
             turn_name = game['p2_name'] if game['turn'] == game['player_o'] else game['p1_name']
             text = (f"**⚔️ لعبة XO مستمرة!**\n\n"
-                    f"**- اللاعب 𝚇:** {game['p1_name']}\n"
-                    f"**- اللاعب 𝙾:** {game['p2_name']}\n\n"
+                    f"**- اللاعب 𝚇:** [{game['p1_name']}](tg://user?id={game['player_x']})\n"
+                    f"**- اللاعب 𝙾:** [{game['p2_name']}](tg://user?id={game['player_o']})\n\n"
                     f"**سره {turn_name} ({game['symbol']})**")
             await event.edit(text, buttons=build_xo_keyboard(game['board']))
         return
 
-    # --- (إصلاح) بداية منطق السبحة ---
     if action == "tasbeeh":
-        sub_action, zikr, goal, current_str = data_parts[1], data_parts[2], int(data_parts[3]), data_parts[4]
-        current = int(current_str)
+        # --- (تصحيح) طريقة قراءة البيانات المرسلة ---
+        sub_action = data_parts[1]
+        zikr = data_parts[2]
+        goal = int(data_parts[3])
+        current = int(data_parts[4])
         
         if sub_action == "click":
             now = time.time()
@@ -138,21 +141,21 @@ async def handle_interactive_callback(event):
             TASBEEH_COOLDOWN[user_id] = now
             current += 1
             
+            new_data = f"tasbeeh:click:{zikr}:{goal}:{current}"
+            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
+            new_buttons = [[Button.inline(f"{zikr} [{current}]", data=new_data), 
+                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
+            await event.edit(buttons=new_buttons)
+
             if current == goal:
                 await event.answer("تقبل الله طاعتك 🤲", alert=True)
-                new_buttons = [[Button.inline(f"{zikr} [{current}]", data=f"tasbeeh:click:{zikr}:{goal}:{current}"), 
-                                Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
-                await event.edit(buttons=new_buttons)
-            else:
-                new_buttons = [[Button.inline(f"{zikr} [{current}]", data=f"tasbeeh:click:{zikr}:{goal}:{current}"), 
-                                Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
-                # Use answer to avoid API flood, only edit if necessary
-                await event.edit(buttons=new_buttons)
 
         elif sub_action == "reset":
             current = 0
-            new_buttons = [[Button.inline(f"{zikr} [0]", data=f"tasbeeh:click:{zikr}:{goal}:0"), 
-                            Button.inline("🔄 إعادة التصفير", data=f"tasbeeh:reset:{zikr}:{goal}:0")]]
+            new_data = f"tasbeeh:click:{zikr}:{goal}:0"
+            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
+            new_buttons = [[Button.inline(f"{zikr} [0]", data=new_data), 
+                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
             await event.edit(buttons=new_buttons)
             await event.answer("تم تصفير العداد.")
         return
@@ -289,5 +292,4 @@ async def handle_interactive_callback(event):
         me = await client.get_me()
         if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
         if chat_id_str not in db: db[chat_id_str] = {}
-        # The rest of the activation logic was cut off in the original file, so I'm leaving it as is.
-        # db[chat_id_str]
+        # The rest of the activation logic was cut off in the original file, it has been removed to avoid confusion.
