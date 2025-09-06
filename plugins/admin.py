@@ -3,7 +3,8 @@ import asyncio
 import re
 from datetime import timedelta
 from telethon import events
-from telethon.tl.types import ChatAdminRights
+# --- (مُصحَّح) إزالة استيراد غير ضروري ---
+# from telethon.tl.types import ChatAdminRights 
 from bot import client
 import config
 # --- (مُعَدَّل) استيراد الدوال والرتب المحدثة ---
@@ -294,20 +295,22 @@ async def promote_demote_handler(event):
     
     try:
         if action == "رفع مشرف":
-            # إعطاء صلاحيات المشرف الافتراضية
-            rights = ChatAdminRights(
+            await client.edit_admin(
+                event.chat_id, 
+                user_to_manage,
                 change_info=True,
                 delete_messages=True,
                 ban_users=True,
                 invite_users=True,
                 pin_messages=True
             )
-            await client.edit_admin(event.chat_id, user_to_manage, rights=rights)
             await event.reply(f"**✅ | تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى مشرف.**")
         else: # تنزيل مشرف
-            # سحب جميع الصلاحيات
-            rights = ChatAdminRights() 
-            await client.edit_admin(event.chat_id, user_to_manage, rights=rights)
+            await client.edit_admin(
+                event.chat_id, 
+                user_to_manage,
+                is_admin=False
+            )
             await event.reply(f"**☑️ | تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من الإشراف.**")
             
     except Exception as e:
