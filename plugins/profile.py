@@ -3,6 +3,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from telethon import events
+from telethon.tl import types
 from bot import client
 # --- (مُعَدَّل) استيراد الدوال الجديدة ---
 from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks, get_rank_name
@@ -311,7 +312,6 @@ async def delete_best_friend_handler(event):
     else:
         await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
 
-# --- (مُعَدَّل) أمر رتبتي ---
 @client.on(events.NewMessage(pattern=r"^\.?رتبتي$"))
 async def my_rank_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -332,3 +332,41 @@ async def my_rank_handler(event):
     emoji = rank_emoji_map.get(rank_level, "👤")
     
     await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
+
+# --- (جديد) أمر صلاحياتي ---
+@client.on(events.NewMessage(pattern="^صلاحياتي$"))
+async def my_permissions_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    
+    sender = await event.get_sender()
+    
+    try:
+        perms = await client.get_permissions(event.chat_id, sender.id)
+    except Exception:
+        return await event.reply("**لا يمكنني عرض صلاحياتك.**")
+
+    if not isinstance(perms, types.ChatAdminPermissions):
+        return await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
+
+    PERMISSIONS_MAP = {
+        "change_info": "تغيير معلومات المجموعة",
+        "delete_messages": "حذف الرسائل",
+        "ban_users": "حظر/طرد المستخدمين",
+        "invite_users": "دعوة مستخدمين جدد",
+        "pin_messages": "تثبيت الرسائل",
+        "add_admins": "إضافة مشرفين جدد",
+        "manage_call": "إدارة المحادثات الصوتية"
+    }
+    
+    permissions_text = f"**⚜️ | صلاحياتك يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
+    
+    if perms.anonymous:
+        permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
+        
+    for key, description in PERMISSIONS_MAP.items():
+        if getattr(perms, key, False):
+            permissions_text += f"✅ **{description}**\n"
+        else:
+            permissions_text += f"❌ **{description}**\n"
+            
+    await event.reply(permissions_text)
