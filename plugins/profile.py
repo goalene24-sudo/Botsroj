@@ -4,7 +4,8 @@ import random
 from datetime import datetime, timedelta
 from telethon import events
 from bot import client
-from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks
+# --- (مُعَدَّل) استيراد الدوال الجديدة ---
+from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks, get_rank_name
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
 async def my_stats_handler(event):
@@ -122,7 +123,7 @@ async def daily_reward_handler(event):
     if current_time - last_reward_time < cooldown:
         remaining_seconds = cooldown - (current_time - last_reward_time)
         remaining_time = str(timedelta(seconds=remaining_seconds)).split('.')[0]
-        return await event.reply(f"**ما تستلم راتبك بعد! تعال باچر. 😅\n\نالوقت المتبقي: {remaining_time}**")
+        return await event.reply(f"**ما تستلم راتبك بعد! تعال باچر. 😅\n\nالوقت المتبقي: {remaining_time}**")
 
     reward = random.randint(100, 500)
     add_points(event.chat_id, sender.id, reward)
@@ -310,21 +311,24 @@ async def delete_best_friend_handler(event):
     else:
         await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
 
+# --- (مُعَدَّل) أمر رتبتي ---
 @client.on(events.NewMessage(pattern=r"^\.?رتبتي$"))
 async def my_rank_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    rank_int = await get_user_rank(event.sender_id, event)
-
-    rank_map = {
-        Ranks.DEVELOPER: "المطور 👨‍💻",
-        Ranks.OWNER: "مالك المجموعة 👑",
-        Ranks.CREATOR: "منشئ في البوت ⚜️",
-        Ranks.BOT_ADMIN: "ادمن في البوت 🤖",
-        Ranks.GROUP_ADMIN: "مشرف في المجموعة 🛡️",
-        Ranks.MEMBER: "عضو فقط 👤"
+    rank_level = await get_user_rank(event.sender_id, event.chat_id)
+    rank_name = get_rank_name(rank_level)
+    
+    rank_emoji_map = {
+        Ranks.MAIN_DEV: "👨‍💻",
+        Ranks.SECONDARY_DEV: "🛠️",
+        Ranks.OWNER: "👑",
+        Ranks.CREATOR: "⚜️",
+        Ranks.ADMIN: "🤖",
+        Ranks.MOD: "🛡️",
+        Ranks.VIP: "✨",
+        Ranks.MEMBER: "👤"
     }
+    emoji = rank_emoji_map.get(rank_level, "👤")
     
-    rank_ar = rank_map.get(rank_int, "عضو فقط 👤")
-    
-    await event.reply(f"⌔︙**رتبتك هي :** {rank_ar}")
+    await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
