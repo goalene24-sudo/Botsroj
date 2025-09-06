@@ -41,6 +41,45 @@ LOCK_TYPES_MAP = {
     "التعديل": "edit",
 }
 
+# --- (جديد) أمر الطرد ---
+@client.on(events.NewMessage(pattern="^طرد$"))
+async def kick_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+
+    if not await has_bot_permission(event):
+        return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("**⚠️ | يجب استخدام هذا الأمر بالرد على رسالة شخص لطرده.**")
+
+    user_to_kick = await reply.get_sender()
+    actor = await event.get_sender()
+
+    if user_to_kick.id == actor.id:
+        return await event.reply("**لا يمكنك طرد نفسك!**")
+
+    try:
+        me = await client.get_me()
+        bot_perms = await client.get_permissions(event.chat_id, me.id)
+        if not bot_perms.ban_users:
+            return await event.reply("**⚠️ | ليس لدي صلاحية طرد الأعضاء في هذه المجموعة.**")
+    except Exception:
+        return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي، يرجى التأكد من أنني مشرف.**")
+
+    actor_rank = await get_user_rank(actor.id, event.chat_id)
+    target_rank = await get_user_rank(user_to_kick.id, event.chat_id)
+
+    if target_rank >= actor_rank:
+        return await event.reply("**❌ | لا يمكنك طرد شخص يمتلك رتبة مساوية لك أو أعلى.**")
+
+    try:
+        await client.kick_participant(event.chat_id, user_to_kick.id)
+        await event.reply(f"**✅ | تم طرد العضو [{user_to_kick.first_name}](tg://user?id={user_to_kick.id}) من المجموعة بنجاح.**")
+    except Exception as e:
+        await event.reply(f"**حدث خطأ أثناء محاولة طرد العضو:**\n`{str(e)}`")
+
+
 @client.on(events.NewMessage(pattern=r"^(قفل|فتح) (.+)$"))
 async def lock_unlock_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -294,7 +333,7 @@ async def creator_admin_handler(event):
     actor_rank = await get_user_rank(event.sender_id, event.chat_id)
     
     if action == "رفع مالك":
-        if actor_rank < Ranks.CREATOR:
+        if actor_rank < Ranks.OWNER:
             return await event.reply("**فقط المالك الفعلي للمجموعة يستطيع استخدام هذا الأمر.**")
 
         reply = await event.get_reply_message()
@@ -304,8 +343,8 @@ async def creator_admin_handler(event):
         action = "رفع منشئ"
 
     if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
-        if actor_rank < Ranks.CREATOR:
-            return await event.reply("**فقط منشئ المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
+        if actor_rank < Ranks.OWNER:
+            return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
         
         if action == "مسح المنشئين":
             if db.get(chat_id_str, {}).get("creators"):
@@ -360,7 +399,7 @@ async def creator_admin_handler(event):
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
 
-# --- (جديد) أوامر المطور الثانوي ---
+# --- أوامر المطور الثانوي ---
 @client.on(events.NewMessage(pattern="^(رفع مطور ثانوي|تنزيل مطور ثانوي|المطورين الثانويين|مسح المطورين الثانويين)$"))
 async def secondary_dev_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -369,8 +408,8 @@ async def secondary_dev_handler(event):
     actor_rank = await get_user_rank(event.sender_id, event.chat_id)
 
     if action in ["رفع مطور ثانوي", "تنزيل مطور ثانوي", "مسح المطورين الثانويين"]:
-        if actor_rank not in [Ranks.MAIN_DEV, Ranks.CREATOR]:
-            return await event.reply("**فقط المطور الرئيسي ومنشئ المجموعة يستطيعون استخدام هذا الأمر.**")
+        if actor_rank not in [Ranks.MAIN_DEV, Ranks.OWNER]:
+            return await event.reply("**فقط المطور الرئيسي ومالك المجموعة يستطيعون استخدام هذا الأمر.**")
         
         if action == "مسح المطورين الثانويين":
             if db.get(chat_id_str, {}).get("secondary_devs"):
@@ -424,7 +463,7 @@ async def secondary_dev_handler(event):
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
 
-# --- (جديد) أوامر العضو المميز ---
+# --- أوامر العضو المميز ---
 @client.on(events.NewMessage(pattern="^(رفع مميز|تنزيل مميز|المميزين|مسح المميزين)$"))
 async def vip_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -488,17 +527,11 @@ async def vip_handler(event):
                 list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
         await event.reply(list_text)
 
-
-# --- (جديد) أمر تحديد حجم الكلايش ---
 @client.on(events.NewMessage(pattern=r"^ضع حجم الكلايش (\d+)$"))
 async def set_long_text_size(event):
-    """
-    Sets the character count threshold for a message to be considered "long_text".
-    """
     if not await check_activation(event.chat_id): 
         return
 
-    # Check for admin permissions
     rank = await get_user_rank(event.sender_id, event.chat_id)
     if rank < Ranks.MOD:
         return await event.reply("**هذا الأمر متاح للمشرفين فما فوق.**")
@@ -508,7 +541,6 @@ async def set_long_text_size(event):
     except (ValueError, IndexError):
         return await event.reply("⚠️ يرجى تحديد رقم صحيح.")
 
-    # Validate the size to be within a reasonable range
     if not (50 <= size <= 2000):
         return await event.reply("⚠️ حجم الكلايش يجب أن يكون بين 50 و 2000 حرف.")
 
