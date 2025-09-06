@@ -9,15 +9,16 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
-# --- تعريف مستويات الرتب (تم التحديث) ---
+# --- (مُصحَّح) تعريف مستويات الرتب مع إعادة رتبة المالك ---
 class Ranks:
     MEMBER = 0        # عضو
-    VIP = 1           # عضو مميز (جديد)
+    VIP = 1           # عضو مميز
     MOD = 2           # مشرف (من صلاحيات المجموعة)
     ADMIN = 3         # ادمن (من صلاحيات البوت)
-    CREATOR = 4       # المنشئ
-    SECONDARY_DEV = 5 # مطور ثانوي (جديد)
-    MAIN_DEV = 6      # المطور الرئيسي
+    CREATOR = 4       # المنشئ (تمت ترقيته)
+    OWNER = 5         # مالك المجموعة الفعلي
+    SECONDARY_DEV = 6 # مطور ثانوي
+    MAIN_DEV = 7      # المطور الرئيسي
 
 try:
     import google.generativeai as genai
@@ -36,66 +37,13 @@ BLESS_COUNTERS = {}
 
 JOKES = [
     "اكو واحد راح للطبيب گاله دكتور عندي إسهال، الطبيب گاله حلّل، گال لعد شعبالك قابل مخثر؟",
-    "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح.",
-    "اكو واحد سال صاحبه گله شنو رأيك بالحب قبل الزواج؟ گله يلهي عن الزج.",
-    "اكو فد واحد خبيث صعد بالباص شاف بنيه واكفه گعد بمكانها وگلها تفضلي.",
-    "واحد سأل محشش: شنو الفرق بين الأسبوع والصحراء؟ گله المحشش: بسيطة، الصحراء ما بيها أحد والأسبوع بي أحد.",
-    "محشش يسوق سيارة أبوه، أبوه دزله رسالة: ابني دير بالك على نفسك بالطريق. رد عليه برسالة: لا تخاف يابه آني دايسوق السيارة مو نفسي.",
-    "واحد غبي اشترى موبايل جديد، خابر على نفسه وگال: هلا والله شلونك؟ شخبارك؟",
-    "أستاذ يسأل طلابه: من هو الحيوان الذي يوقظكم صباحاً؟ جاوب طالب: أبويه.",
-    "محشش راح يخطب، أهل العروسة سألوه: شنو تشتغل؟ گالهم: فنان. سألوه: ترسم لو تنحت؟ گالهم: لا، أفلّس.",
-    "مرة واحد بخيل جاب لبيته 3 تفاحات، مرته گالتله: ليش بس تلاثة؟ گاللها: مو انتو تلاثة، تردين آكل وحدي؟",
-    "محشش شاف لافتة مكتوب عليها 'مزرعة أبقار'، سأل راعي المزرعة: شلون تزرعون البقر؟ گله الراعي: نرش سكر ويطلع بقر. راح المحشش ثاني يوم رش سكر، رجع لگه النمل ملموم، گال: يا سبحان الله شوف البقر شكد حلو وهو صغير.",
-    "واحد گال لصاحبه: أريد أخطب. گاله صاحبه: خوش فكرة، بس منو؟ گاله: أي وحدة، المهم أخلص من أمي.",
-    "بخيل مات، لگوا بوصيته كاتب: لا تغسلوني، آني سبحت البارحة.",
-    "واحد راح يشتري ساعة، سأل أبو المحل: بيش الساعة؟ گاله: كل وحدة وسعرها. گاله: لعد انطيني أم اللاش.",
-    "محشش سأل صاحبه: شنو أحلى شي بالدنيا؟ گاله: النوم. گاله: زين وشنو أحلى شي بالنوم؟ گاله: من تحلم إنك نايم.",
-    "مرة مدرس سأل طالب: شنو عاصمة إسبانيا؟ الطالب سكت. المدرس گاله: مدريد. الطالب گاله: والله أدري بس ما أريد أجاوب.",
-    "واحد فتح محل ملابس، أول يوم محد اشترى منه. ثاني يوم هم محد اشترى. ثالث يوم قفل المحل وكتب: 'سأعود بعد قليل، ذهبت لأشتري من نفسي'.",
-    "محشش ضيع مفتاح سيارته، صار يدور عليه. صاحبه گاله: وين ضيعته؟ گاله: بالسيارة. گاله صاحبه: لعد ليش تدور هنا؟ گاله: مو هنا الضوه أقوى.",
-    "واحد سأل الثاني: ليش الفراعنة كانوا يبنون الأهرامات؟ گاله الثاني: لأن كانوا يخافون من الشمس.",
-    "بخيل اشترى آيفون، حطه بوضع الطيران حتى لا يصرف رصيد.",
-    "محشش يسأل أبوه: يابه صدك الحب أعمى؟ گاله أبوه: باوع على أمك وانت تعرف.",
-    "واحد غبي راح للمطعم، طلب شوربة. الجرسون جابله الشوربة والخبز. الغبي گام يغمس الخبز بالبيبسي.",
-    "محشش راح للمتحف، شاف تمثال حصان وعليه فارس. سأل الدليل: منو هذا؟ گاله الدليل: هذا صلاح الدين. گاله المحشش: زين والفرس اللي تحته منو؟",
-    "واحد گال لأبوه: أريد أتزوج. أبوه گاله: منو؟ گاله: جدتي. أبوه گاله: ولك هاي أمي، تتزوج أمي؟ گاله: عادي، مو انت هم متزوج أمي؟"
+    "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح."
 ]
 RIDDLES = [
     ("شنو الشي اللي كلما تاخذ منه يكبر؟", "الحفرة"),
-    ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة"),
-    ("شنو الشي اللي عنده سنون بس ما ياكل؟", "المشط"),
-    ("شنو الشي اللي تشوفه بالليل تلث مرات وبالنهار مرة وحدة؟", "حرف اللام"),
-    ("ما هو الشيء الذي له عين ولا يرى؟", "الإبرة"),
-    ("ما هو الشيء الذي قلبه يأكل قشره؟", "الشمعة المشتعلة"),
-    ("ما هو الشيء الذي يوجد في وسط باريس؟", "حرف الراء"),
-    ("ما هو الشيء الذي كلما طال قصر؟", "العمر"),
-    ("ما هو الشيء الذي إذا غليته تجمد؟", "البيض"),
-    ("ما هو الشيء الذي له أوراق وليس بنبات، وله جلد وليس بحيوان، وعلم وليس بإنسان؟", "الكتاب"),
-    ("ما هو الشيء الذي يخترق الزجاج ولا يكسره؟", "الضوء"),
-    ("يسير بلا رجلين ولا يدخل إلا بالأذنين، ما هو؟", "الصوت"),
-    ("ما هو الشيء الذي إذا لمسته صاح؟", "الجرس"),
-    ("حامل ومحمول، نصفه ناشف ونصفه مبلول، فما هو؟", "السفينة"),
-    ("تراه في الدقيقة مرتين وفي القرن مرة واحدة؟", "حرف القاف"),
-    ("ما هو الشيء الذي له رقبة وليس له رأس؟", "الجاجة"),
-    ("ما هو الشيء الذي ينبض بلا قلب؟", "الساعة"),
-    ("ما هو الشيء الذي ترميه كلما احتجت إليه؟", "شبكة الصيد"),
-    ("ما هو الشيء الذي يوصلك من بيتك إلى عملك دون أن يتحرك؟", "الطريق"),
-    ("ما هو البيت الذي ليس فيه أبواب ولا نوافذ؟", "بيت الشعر"),
-    ("ما هو الشيء الذي تأكل منه وهو لا يؤكل؟", "الصحن"),
-    ("ما هو الشيء المليء بالثقوب ولكنه يحتفظ بالماء؟", "الإسفنج"),
-    ("ما هي التي ترى كل شيء وليس لها عيون؟", "المرآة"),
-    ("أخت خالك وليست خالتك، فمن تكون؟", "أمك"),
-    ("ما هو الشيء الذي أمامك دائمًا ولكنك لا تراه؟", "المستقبل"),
-    ("ما هو الشيء الذي يموت إذا شرب؟", "النار"),
-    ("ابن أمك وأبيك وليس بأخيك ولا أختك؟", "أنت"),
-    ("ما هو الشيء الذي له أربع أرجل ولا يستطيع المشي؟", "الكرسي"),
-    ("ما هو الشيء الذي يكتب ولا يقرأ؟", "القلم"),
-    ("ما هو الشيء الذي إذا وضعته في الثلاجة لا يبرد؟", "الفلفل الحار"),
-    ("ما هو الشيء الذي له رأسين وثمانية أقدام؟", "شخصان يحملان طاولة"),
-    ("شيء لونه أسود وقلبه أبيض ويرتدي قبعة على رأسه؟", "الباذنجان"),
-    ("ما هو الشيء الذي يصعد الجبل بثلاثة أرجل وينزل برجل واحدة؟", "الرجل العجوز مع عكازه")
+    ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة")
 ]
-QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل.", "خوش حچي.", "بالضبط.", "هاي حقيقة ما ينضحك عليها.", "لهالسبب آني أحب هاي المجموعة." ]
+QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
 def load_db():
     try:
@@ -107,7 +55,6 @@ def save_db(data):
 
 db = load_db()
 
-# --- دوال جديدة للتحقق من الرتب ---
 def is_vip(chat_id, user_id):
     chat_id_str = str(chat_id)
     vips = db.get(chat_id_str, {}).get("vips", [])
@@ -118,24 +65,18 @@ def is_secondary_dev(chat_id, user_id):
     secondary_devs = db.get(chat_id_str, {}).get("secondary_devs", [])
     return user_id in secondary_devs
 
-# --- دالة جديدة لتحويل الرتبة إلى نص ---
+# --- (مُصحَّح) دالة تحويل الرتبة إلى نص ---
 def get_rank_name(rank_level):
-    if rank_level == Ranks.MAIN_DEV:
-        return "المطور الرئيسي"
-    elif rank_level == Ranks.SECONDARY_DEV:
-        return "مطور ثانوي"
-    elif rank_level == Ranks.CREATOR:
-        return "المنشئ"
-    elif rank_level == Ranks.ADMIN:
-        return "ادمن"
-    elif rank_level == Ranks.MOD:
-        return "مشرف"
-    elif rank_level == Ranks.VIP:
-        return "عضو مميز"
-    else:
-        return "عضو"
+    if rank_level == Ranks.MAIN_DEV: return "المطور الرئيسي"
+    elif rank_level == Ranks.SECONDARY_DEV: return "مطور ثانوي"
+    elif rank_level == Ranks.OWNER: return "مالك المجموعة"
+    elif rank_level == Ranks.CREATOR: return "منشئ"
+    elif rank_level == Ranks.ADMIN: return "ادمن"
+    elif rank_level == Ranks.MOD: return "مشرف"
+    elif rank_level == Ranks.VIP: return "عضو مميز"
+    else: return "عضو"
 
-# --- دالة تحديد الرتبة (مُعاد بناؤها بالكامل) ---
+# --- (مُصحَّح) دالة تحديد الرتبة ---
 async def get_user_rank(user_id, chat_id):
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
@@ -149,38 +90,32 @@ async def get_user_rank(user_id, chat_id):
     try:
         participant = await client.get_participant(chat_id, user_id)
         if isinstance(participant, ChannelParticipantCreator):
-            return Ranks.CREATOR
-    except UserNotParticipantError:
-        # المستخدم قد لا يكون في المجموعة ولكنه قد يكون في قاعدة البيانات
-        pass
-    except Exception:
-        # قد تحدث أخطاء أخرى إذا لم يكن البوت مشرفًا
-        pass
+            return Ranks.OWNER
+    except UserNotParticipantError: pass
+    except Exception: pass
+
+    if user_id in chat_data.get("creators", []):
+        return Ranks.CREATOR
 
     if user_id in chat_data.get("bot_admins", []):
         return Ranks.ADMIN
 
-    # التحقق من صلاحيات المشرف في المجموعة
     try:
         perms = await client.get_permissions(chat_id, user_id)
         if perms.is_admin:
             return Ranks.MOD
-    except (UserNotParticipantError, ChatAdminRequiredError):
-        pass
-    except Exception:
-        pass
+    except (UserNotParticipantError, ChatAdminRequiredError): pass
+    except Exception: pass
         
     if user_id in chat_data.get("vips", []):
         return Ranks.VIP
 
     return Ranks.MEMBER
 
-
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
-    days = uptime_delta.days
-    hours, rem = divmod(uptime_delta.seconds, 3600)
-    minutes, seconds = divmod(rem, 60)
+    days, hours, rem = uptime_delta.days, divmod(uptime_delta.seconds, 3600)
+    minutes, _ = divmod(rem[1], 60)
     uptime_str = ""
     if days > 0: uptime_str += f"{days} يوم و "
     if hours > 0: uptime_str += f"{hours} ساعة و "
@@ -203,20 +138,11 @@ def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
-
     custom_commands = db.get("custom_commands", {})
-    custom_buttons_row = []
-    
-    for command_name, command_data in custom_commands.items():
-        if command_data.get("show_button"):
-            new_button = Button.inline(command_name.capitalize(), data=f"ccmd:{command_name}")
-            custom_buttons_row.append(new_button)
-    
+    custom_buttons_row = [Button.inline(name.capitalize(), data=f"ccmd:{name}") for name, data in custom_commands.items() if data.get("show_button")]
     if custom_buttons_row:
-        chunk_size = 2
-        for i in range(0, len(custom_buttons_row), chunk_size):
-            buttons.append(custom_buttons_row[i:i + chunk_size])
-
+        for i in range(0, len(custom_buttons_row), 2):
+            buttons.append(custom_buttons_row[i:i + 2])
     return buttons
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
@@ -225,64 +151,45 @@ GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "
 ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
 
 def is_command_enabled(chat_id, command_key):
-    chat_id_str = str(chat_id)
-    settings = db.get(chat_id_str, {}).get("command_settings", {})
-    return settings.get(command_key, True)
+    return db.get(str(chat_id), {}).get("command_settings", {}).get(command_key, True)
 
 async def is_admin(chat_id, user_id):
     if chat_id < 0:
         try:
-            participant = await client.get_permissions(chat_id, user_id)
-            return participant.is_admin or participant.is_creator
+            p = await client.get_permissions(chat_id, user_id)
+            return p.is_admin or p.is_creator
         except (UserNotParticipantError, ChatAdminRequiredError): return False
         except Exception: return False
     return False
 
-
 async def has_bot_permission(event):
-    # تم تعديل هذه الدالة لتتوافق مع نظام الرتب الجديد
     rank = await get_user_rank(event.sender_id, event.chat_id)
     return rank >= Ranks.MOD
 
 async def check_activation(chat_id):
-    chat_id_str = str(chat_id)
-    is_paused = db.get(chat_id_str, {}).get("is_paused", False)
-    if is_paused:
-        return False
-    return True
+    return not db.get(str(chat_id), {}).get("is_paused", False)
 
 def add_points(chat_id, user_id, points_to_add):
-    chat_id_str, user_id_str = str(chat_id), str(user_id)
-    if chat_id_str not in db: db[chat_id_str] = {}
-    if "users" not in db[chat_id_str]: db[chat_id_str]["users"] = {}
-    if user_id_str not in db[chat_id_str]["users"]: db[chat_id_str]["users"][user_id_str] = {"msg_count": 0, "sahaqat": 0, "points": 0}
-    if "points" not in db[chat_id_str]["users"][user_id_str]: db[chat_id_str]["users"][user_id_str]["points"] = 0
-    db[chat_id_str]["users"][user_id_str]["points"] += points_to_add; save_db(db)
+    cid, uid = str(chat_id), str(user_id)
+    db.setdefault(cid, {}).setdefault("users", {}).setdefault(uid, {"msg_count": 0, "sahaqat": 0, "points": 0})
+    db[cid]["users"][uid]["points"] = db[cid]["users"][uid].get("points", 0) + points_to_add
+    save_db(db)
 
 async def build_protection_menu(chat_id):
-    chat_id_str, chat_locks = str(chat_id), db.get(str(chat_id), {})
-    buttons, row = [], []
+    locks, buttons, row = db.get(str(chat_id), {}), [], []
     for name, key in LOCK_TYPES.items():
-        # --- (مُعَدَّل) البحث عن المفتاح الصحيح في قاعدة البيانات ---
-        status_emoji = "🔒" if chat_locks.get(f"lock_{key}", False) else "🔓"
-        button = Button.inline(f"{status_emoji} {name}", data=f"toggle_lock_{key}")
-        row.append(button)
+        emoji = "🔒" if locks.get(f"lock_{key}", False) else "🔓"
+        row.append(Button.inline(f"{emoji} {name}", data=f"toggle_lock_{key}"))
         if len(row) == 2: buttons.append(row); row = []
     if row: buttons.append(row)
     buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
     return buttons
 
 def build_xo_keyboard(board):
-    buttons = []
-    for i in range(0, 9, 3):
-        row = [Button.inline(board[j] if board[j] != '-' else ' ', data=f"xo_move_{j}") for j in range(i, i + 3)]
-        buttons.append(row)
-    return buttons
+    return [[Button.inline(board[j] if board[j] != '-' else ' ', data=f"xo_move_{j}") for j in range(i, i + 3)] for i in range(0, 9, 3)]
 
 def check_xo_winner(board):
     lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
-    for line in lines:
-        if board[line[0]] == board[line[1]] == board[line[2]] != '-':
-            return board[line[0]]
-    if '-' not in board: return 'draw'
-    return None
+    for a, b, c in lines:
+        if board[a] == board[b] == board[c] != '-': return board[a]
+    return 'draw' if '-' not in board else None
