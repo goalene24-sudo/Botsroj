@@ -9,11 +9,11 @@ import config
 from .utils import (
     db, save_db, check_activation,
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS, add_points,
-    FLOOD_TRACKER, get_user_rank, Ranks, is_command_enabled
+    FLOOD_TRACKER, get_user_rank, Ranks, is_command_enabled, is_vip
 )
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
-from .aliases import FIXED_ALIASES # --- (جديد) تم استيراد القائمة الثابتة ---
+from .aliases import FIXED_ALIASES
 
 def add_user_warn(chat_id, user_id):
     chat_id_str, user_id_str = str(chat_id), str(user_id)
@@ -38,9 +38,8 @@ async def general_message_handler(event):
         
     chat_id_str, user_id_str = str(event.chat_id), str(event.sender_id)
 
-    # --- (مُحَدَّث) محرك ترجمة الأوامر المضافة والثابتة ---
+    # --- محرك ترجمة الأوامر المضافة والثابتة ---
     if event.text:
-        # دمج الاختصارات الثابتة مع المخصصة
         user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
         all_aliases = FIXED_ALIASES.copy()
         all_aliases.update(user_aliases)
@@ -48,12 +47,10 @@ async def general_message_handler(event):
         command_candidate = event.text.strip()
         if command_candidate in all_aliases:
             original_command = all_aliases[command_candidate]
-            # تبديل نص الرسالة لتشغيل الأمر الأصلي
             event.text = original_command
             event.raw_text = original_command
             if hasattr(event, 'message') and hasattr(event.message, 'message'):
                 event.message.message = original_command
-    # --- نهاية محرك الترجمة ---
 
     # --- نظام تخزين الرسائل مع الأنواع ---
     if event.id:
@@ -65,7 +62,7 @@ async def general_message_handler(event):
         elif event.video: msg_type = "video"
         elif event.sticker: msg_type = "sticker"
         elif event.gif: msg_type = "gif"
-        elif event.document: msg_type = "document" # Generic document
+        elif event.document: msg_type = "document"
         elif event.text and len(event.text) > long_text_size: msg_type = "long_text"
         elif any(isinstance(e, MessageEntityUrl) for e in message_entities): msg_type = "url"
         elif event.forward: msg_type = "forward"
@@ -74,7 +71,6 @@ async def general_message_handler(event):
         if "message_history" not in db[chat_id_str]:
             db[chat_id_str]["message_history"] = []
 
-        # We now store sender_id as well for more advanced cleaning
         db[chat_id_str]["message_history"].append({"msg_id": event.id, "type": msg_type, "sender_id": event.sender_id})
         
         if len(db[chat_id_str]["message_history"]) > 100:
@@ -85,8 +81,8 @@ async def general_message_handler(event):
     # --- ميزة الذكر التلقائي ---
     now = int(time.time())
     last_dhikr_time = db.get(chat_id_str, {}).get("last_dhikr_time", 0)
-    dhikr_interval = db.get(chat_id_str, {}).get("dhikr_interval", 3600) # Default to 1 hour
-    is_dhikr_enabled = db.get(chat_id_str, {}).get("dhikr_enabled", True) # Default to enabled
+    dhikr_interval = db.get(chat_id_str, {}).get("dhikr_interval", 3600)
+    is_dhikr_enabled = db.get(chat_id_str, {}).get("dhikr_enabled", True)
 
     if is_dhikr_enabled and (now - last_dhikr_time > dhikr_interval):
         dhikr_message = random.choice(DHIKR_LIST)
@@ -95,11 +91,12 @@ async def general_message_handler(event):
         db[chat_id_str]["last_dhikr_time"] = now
         save_db(db)
         
-    # --- (مهم) فحص الرتب والأقفال قبل أي شيء آخر ---
-    rank_int = await get_user_rank(event.sender_id, event)
-    is_admin_or_higher = rank_int >= Ranks.GROUP_ADMIN
+    # --- (مُعَدَّل) فحص الرتب والأقفال ---
+    rank_int = await get_user_rank(event.sender_id, event.chat_id)
+    # أي شخص رتبته مشرف فما فوق، أو عضو مميز، يتم إعفاؤه من الأقفال
+    is_immune = rank_int >= Ranks.MOD or is_vip(event.chat_id, event.sender_id)
 
-    if not is_admin_or_higher:
+    if not is_immune:
         chat_locks = db.get(chat_id_str, {})
         
         # 1. التحقق من الأقفال (يعمل على كل الرسائل)
@@ -119,7 +116,7 @@ async def general_message_handler(event):
                 return # نوقف المعالجة تماماً بعد الحذف
 
         # 2. التحقق من التكرار (يعمل على كل الرسائل)
-        if chat_locks.get("anti_flood", False):
+        if chat_locks.get("lock_anti_flood", False): # تم تصحيح المفتاح
             now_flood = datetime.now()
             if chat_id_str not in FLOOD_TRACKER: FLOOD_TRACKER[chat_id_str] = {}
             if user_id_str not in FLOOD_TRACKER[chat_id_str]: FLOOD_TRACKER[chat_id_str][user_id_str] = []
@@ -155,10 +152,8 @@ async def general_message_handler(event):
                     print(f"خطأ في فلتر الكلمات: {e}")
 
 
-    # --- (مهم) نتوقف هنا إذا كانت الرسالة لا تحتوي على نص ---
     if not event.text: return
     
-    # --- من هنا فصاعداً، الكود يتعامل فقط مع الرسائل النصية ---
     service_commands = ["اضف كلمة ممنوعة", "حذف كلمة ممنوعة", "الكلمات الممنوعة", "نداء", "@all", "طقس", "معلومات المجموعة", "احصائيات", "ضع رد المطور", "ضع رد المناداة", "مسح رد المطور", "مسح رد المناداة", "احجي", "حظي", "فككها", "صندوق الحظ", "ضع ترحيب", "حذف الترحيب", "تثبيت", "تفعيل الصراحة هنا", "تعطيل الصراحة هنا", "ضع قناة سجل الصراحة", "سبحة", "اسماء الله الحسنى", "سيرة النبي", "ضع قوانين", "القوانين", "حذف القوانين", "نشاطك", "عمري"]
     all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر", "الردود", "ايدي", "id", "اضف رد", "حذف رد", "تفعيل", "ايقاف", "تحذير", "حذف التحذيرات", "اذكار الصباح", "اذكار المساء", "راتب", "ضع نبذة", "المتجر", "شراء", "طلاق", "ممتلكاتي", "نقاطي", "صديقي المفضل", "حذف صديقي المفضل", "ضع ميلادي"] + service_commands + ["حللني", "حلل", "لو خيروك", "تحدي نرد", "ميمز", "سمايلات", "سمايل"]
     is_command = any(event.text.startswith(cmd) for cmd in all_commands) or event.text.startswith("اذان")
@@ -202,10 +197,15 @@ async def general_message_handler(event):
         save_db(db)
         
         if is_command_enabled(event.chat_id, "public_replies_enabled"):
+            # --- (مُعَدَّل) قاموس الردود ليتوافق مع الرتب الجديدة ---
             rank_map_to_str = {
-                Ranks.DEVELOPER: "developer", Ranks.OWNER: "developer", 
-                Ranks.CREATOR: "group_admin", Ranks.BOT_ADMIN: "bot_admin",
-                Ranks.GROUP_ADMIN: "group_admin", Ranks.MEMBER: "member"
+                Ranks.MAIN_DEV: "developer",
+                Ranks.SECONDARY_DEV: "developer",
+                Ranks.CREATOR: "group_admin",
+                Ranks.ADMIN: "bot_admin",
+                Ranks.MOD: "group_admin",
+                Ranks.VIP: "member",
+                Ranks.MEMBER: "member"
             }
             rank_str = rank_map_to_str.get(rank_int, "member")
 
