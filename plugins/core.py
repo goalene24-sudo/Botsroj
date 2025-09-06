@@ -62,7 +62,29 @@ async def chat_action_handler(event):
         
         buttons = Button.inline("📜 عرض القوانين", data="show_rules")
         await client.send_message(event.chat_id, f"**{welcome_text}**", buttons=buttons)
-    
+        
+    # --- (مُعَدَّل) منطق حذف الرتب عند الطرد أو الحظر أو المغادرة ---
+    elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
+        chat_id_str = str(event.chat_id)
+        user_id_to_clear = event.user_id
+        
+        if chat_id_str not in db:
+            return
+
+        chat_data = db[chat_id_str]
+        ranks_removed = False
+        
+        rank_lists_to_check = ["vips", "bot_admins", "creators", "secondary_devs"]
+        
+        for rank_list in rank_lists_to_check:
+            if rank_list in chat_data and user_id_to_clear in chat_data[rank_list]:
+                chat_data[rank_list].remove(user_id_to_clear)
+                ranks_removed = True
+                print(f"User {user_id_to_clear} removed from '{rank_list}' in chat {chat_id_str} due to leaving/being kicked.")
+
+        if ranks_removed:
+            save_db(db)
+
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
         chat_id_str = str(event.chat_id)
         if chat_id_str in db:
