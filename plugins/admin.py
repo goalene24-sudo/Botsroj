@@ -3,6 +3,7 @@ import asyncio
 import re
 from datetime import timedelta
 from telethon import events
+from telethon.tl.types import ChatAdminRights
 from bot import client
 import config
 # --- (مُعَدَّل) استيراد الدوال والرتب المحدثة ---
@@ -255,9 +256,63 @@ async def toggle_id_photo_handler(event):
         
     save_db(db)
 
+# --- (مُصحَّح) أمر رفع وتنزيل المشرف ---
 @client.on(events.NewMessage(pattern=r"^(رفع مشرف|تنزيل مشرف)$"))
 async def promote_demote_handler(event):
-    pass
+    if event.is_private or not await check_activation(event.chat_id): return
+
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.ADMIN:
+        return await event.reply("**🚫 | هذا الأمر للادمنية فما فوق.**")
+
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("**⚠️ | يجب استخدام هذا الأمر بالرد على رسالة شخص.**")
+
+    user_to_manage = await reply.get_sender()
+    actor = await event.get_sender()
+
+    if user_to_manage.bot:
+        return await event.reply("**لا يمكنك رفع أو تنزيل بوت كمشرف.**")
+    
+    if user_to_manage.id == actor.id:
+        return await event.reply("**لا يمكنك تغيير رتبة نفسك.**")
+
+    try:
+        me = await client.get_me()
+        bot_perms = await client.get_permissions(event.chat_id, me.id)
+        if not bot_perms.add_admins:
+            return await event.reply("**⚠️ | ليس لدي صلاحية إضافة مشرفين جدد في هذه المجموعة.**")
+    except Exception:
+        return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي، يرجى التأكد من أنني مشرف.**")
+
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank:
+        return await event.reply("**❌ | لا يمكنك إدارة شخص يمتلك رتبة مساوية لك أو أعلى.**")
+
+    action = event.raw_text
+    
+    try:
+        if action == "رفع مشرف":
+            # إعطاء صلاحيات المشرف الافتراضية
+            rights = ChatAdminRights(
+                change_info=True,
+                delete_messages=True,
+                ban_users=True,
+                invite_users=True,
+                pin_messages=True
+            )
+            await client.edit_admin(event.chat_id, user_to_manage, rights=rights)
+            await event.reply(f"**✅ | تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى مشرف.**")
+        else: # تنزيل مشرف
+            # سحب جميع الصلاحيات
+            rights = ChatAdminRights() 
+            await client.edit_admin(event.chat_id, user_to_manage, rights=rights)
+            await event.reply(f"**☑️ | تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من الإشراف.**")
+            
+    except Exception as e:
+        await event.reply(f"**حدث خطأ:**\n`{str(e)}`")
+
 
 @client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح الادمنيه)$"))
 async def bot_admin_handler(event):
