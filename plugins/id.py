@@ -58,12 +58,13 @@ async def id_handler(event):
     sahaqat = user_data.get("sahaqat", 0)
     custom_bio = user_data.get("bio", "لم يتم تعيين نبذة بعد.")
     
-    # --- (مُعَدَّل) جلب الرتبة واستخدام القاموس المحدث ---
+    # --- جلب الرتبة ---
     rank_int = await get_user_rank(target_user.id, event.chat_id)
     rank_map = {
         Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻",
         Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️",
-        Ranks.CREATOR: "المنشئ 👑",
+        Ranks.OWNER: "مالك المجموعة 👑",
+        Ranks.CREATOR: "المنشئ ⚜️",
         Ranks.ADMIN: "ادمن في البوت 🤖",
         Ranks.MOD: "مشرف في المجموعة 🛡️",
         Ranks.VIP: "عضو مميز ✨",
@@ -138,9 +139,15 @@ async def id_handler(event):
     
     caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
     
-    pfp = await client.get_profile_photos(target_user, limit=1)
-    if pfp:
-        await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
+    # --- (مُعَدَّل) التحقق من إعدادات الصورة قبل الإرسال ---
+    is_photo_enabled = db.get(chat_id_str, {}).get("id_photo_enabled", True)
+
+    if is_photo_enabled:
+        pfp = await client.get_profile_photos(target_user, limit=1)
+        if pfp:
+            await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
+        else:
+            await event.reply(caption, reply_to=event.id)
     else:
         await event.reply(caption, reply_to=event.id)
 
@@ -160,17 +167,16 @@ async def kashf_handler(event):
     target_user = await replied_msg.get_sender()
     chat_id_str, user_id_str = str(event.chat_id), str(target_user.id)
     
-    # --- جلب البيانات ---
     user_id = target_user.id
     username = f"@{target_user.username}" if target_user.username else "لا يوجد"
     account_link = f"[{target_user.first_name}](tg://user?id={target_user.id})"
     
-    # --- (مُعَدَّل) جلب الرتبة واستخدام القاموس المحدث ---
     rank_int = await get_user_rank(target_user.id, event.chat_id)
     rank_map = {
         Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻",
         Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️",
-        Ranks.CREATOR: "المنشئ 👑",
+        Ranks.OWNER: "مالك المجموعة 👑",
+        Ranks.CREATOR: "المنشئ ⚜️",
         Ranks.ADMIN: "ادمن في البوت 🤖",
         Ranks.MOD: "مشرف في المجموعة 🛡️",
         Ranks.VIP: "عضو مميز ✨",
@@ -178,7 +184,6 @@ async def kashf_handler(event):
     }
     rank_str = rank_map.get(rank_int, "عضو 👤")
 
-    # جلب البيانات من قاعدة البيانات
     user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
     msg_count = user_data.get("msg_count", 0)
     sahaqat = user_data.get("sahaqat", 0)
@@ -186,7 +191,6 @@ async def kashf_handler(event):
 
     interaction_status = random.choice(RANDOM_TAFA3UL)
 
-    # --- تنسيق الرسالة ---
     kashf_text = (
         f"**◇ : ايديه :** `{user_id}`\n"
         f"**◇ : معرفه :** {username}\n"
