@@ -3,6 +3,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from telethon import events, Button
+from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from bot import client
 import config
 from .utils import (
@@ -17,7 +18,7 @@ from .services import TASBEEH_AZKAR, NAMES_OF_ALLAH, SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
 
 TASBEEH_COOLDOWN = {}
-TASBEEH_CLICK_COOLDOWN = 1 # تقليل مدة الانتظار لتجربة أفضل
+TASBEEH_CLICK_COOLDOWN = 1
 
 async def handle_interactive_callback(event):
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
@@ -84,6 +85,7 @@ async def handle_interactive_callback(event):
             await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
         return
 
+    # --- (تم التعديل) إصلاح منطق الفوز والتعادل ---
     if action == "xo":
         msg_id = event.message_id
         game = XO_GAMES.get(msg_id)
@@ -103,18 +105,21 @@ async def handle_interactive_callback(event):
         game['board'][pos] = game['symbol']
         winner = check_xo_winner(game['board'])
 
-        if winner:
+        # --- (التغيير هنا) تم تقسيم التحقق للفوز أو التعادل ---
+        if winner == 'X' or winner == 'O':
             winner_user_id = game['player_x'] if winner == 'X' else game['player_o']
             winner_name = game['p1_name'] if winner == 'X' else game['p2_name']
             add_points(chat_id, winner_user_id, 50)
             text = f"**🎉 الف مبروك!**\n\n**الفائز هو [{winner_name}](tg://user?id={winner_user_id}) ({winner})! 🏆**\n**لقد ربحت 50 نقطة.**"
             await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
-            del XO_GAMES[msg_id]
-        elif '-' not in game['board']:
+            if msg_id in XO_GAMES: del XO_GAMES[msg_id]
+        
+        elif winner == 'draw':
             text = "**انتهت اللعبة بالتعادل! 🤝**"
             await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
-            del XO_GAMES[msg_id]
-        else:
+            if msg_id in XO_GAMES: del XO_GAMES[msg_id]
+        
+        else: # Game continues
             game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
             game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
             turn_name = game['p2_name'] if game['turn'] == game['player_o'] else game['p1_name']
@@ -126,7 +131,6 @@ async def handle_interactive_callback(event):
         return
 
     if action == "tasbeeh":
-        # --- (تصحيح) طريقة قراءة البيانات المرسلة ---
         sub_action = data_parts[1]
         zikr = data_parts[2]
         goal = int(data_parts[3])
@@ -145,7 +149,10 @@ async def handle_interactive_callback(event):
             reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
             new_buttons = [[Button.inline(f"{zikr} [{current}]", data=new_data), 
                             Button.inline("🔄 إعادة التصفير", data=reset_data)]]
-            await event.edit(buttons=new_buttons)
+            try:
+                await event.edit(buttons=new_buttons)
+            except MessageNotModifiedError:
+                pass # تجاهل الخطأ إذا لم يتم تعديل الرسالة
 
             if current == goal:
                 await event.answer("تقبل الله طاعتك 🤲", alert=True)
@@ -247,18 +254,22 @@ async def handle_interactive_callback(event):
         await event.answer()
         return
 
+    # --- (تم التعديل) إضافة معالجة للخطأ ---
     if action == "asma_husna":
         sub_action = data_parts[1]
-        if sub_action == "random":
-            random_name = random.choice(NAMES_OF_ALLAH)
-            text = f"**✨ {random_name['name']} ✨**\n\n**المعنى:**\n**{random_name['meaning']}**"
-            buttons = [[Button.inline("💎 اسم آخر", data="asma_husna:random")], [Button.inline("📋 عرض القائمة كاملة", data="asma_husna:full_list")]]
-            await event.edit(text, buttons=buttons)
-        elif sub_action == "full_list":
-            full_list_text = "**✨ أسماء الله الحسنى ✨**\n\n"
-            for i, name_data in enumerate(NAMES_OF_ALLAH, 1):
-                full_list_text += f"**{i}. {name_data['name']}**\n"
-            await event.edit(full_list_text, buttons=Button.inline("💎 عرض اسم عشوائي مع الشرح", data="asma_husna:random"))
+        try:
+            if sub_action == "random":
+                random_name = random.choice(NAMES_OF_ALLAH)
+                text = f"**✨ {random_name['name']} ✨**\n\n**المعنى:**\n**{random_name['meaning']}**"
+                buttons = [[Button.inline("💎 اسم آخر", data="asma_husna:random")], [Button.inline("📋 عرض القائمة كاملة", data="asma_husna:full_list")]]
+                await event.edit(text, buttons=buttons)
+            elif sub_action == "full_list":
+                full_list_text = "**✨ أسماء الله الحسنى ✨**\n\n"
+                for i, name_data in enumerate(NAMES_OF_ALLAH, 1):
+                    full_list_text += f"**{i}. {name_data['name']}**\n"
+                await event.edit(full_list_text, buttons=Button.inline("💎 عرض اسم عشوائي مع الشرح", data="asma_husna:random"))
+        except MessageNotModifiedError:
+            pass # تجاهل الخطأ إذا لم يتم تعديل الرسالة
         await event.answer()
         return
         
@@ -292,4 +303,3 @@ async def handle_interactive_callback(event):
         me = await client.get_me()
         if not await is_admin(chat_id_to_activate, me.id): return await event.answer("**الرجاء رفعي مشرفاً أولاً.**", alert=True)
         if chat_id_str not in db: db[chat_id_str] = {}
-        # The rest of the activation logic was cut off in the original file, it has been removed to avoid confusion.
