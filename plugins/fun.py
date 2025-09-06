@@ -20,6 +20,28 @@ INTERACTIVE_ACTIONS = {
     "قتل": "🔪 | {user1} قام بقتل {user2} بدم بارد!",
     "رزالة": "😡 | {user1} أنطى رزالة محترمة لـ {user2}!",
 }
+KAT_QUESTIONS = [
+    "ما هي طريقتك في الحصول على الراحة النفسية؟",
+    "كم ساعة تنام في اليوم؟",
+    "ما هو رأيك بصداقة البنت والولد إلكترونياً؟",
+    "هل تمحي العشرة الطيبة عشان موقف ماعجبك أو سوء فهم؟",
+    "لو خيروك بين المال الوفير والحب الحقيقي، ماذا تختار؟",
+    "ما هو أكثر شيء تفتخر به في حياتك؟",
+    "ما هي أجمل ذكرى عالقة في ذهنك من الطفولة؟",
+    "ما هي العادة التي تتمنى أن تتخلص منها؟",
+    "ما هو الفيلم أو المسلسل الذي تستطيع مشاهدته مراراً وتكراراً؟",
+    "لو كان بإمكانك السفر إلى أي مكان في العالم الآن، أين ستذهب؟",
+    "ما هو الشيء الذي لا يمكن أن تسامح فيه أبداً؟",
+    "ما هي أهم صفة تبحث عنها في الصديق؟",
+    "ما هو أكبر حلم تتمنى تحقيقه؟",
+    "أفضل وجبة أكلتها في حياتك؟",
+    "هل تعتقد أن وسائل التواصل الاجتماعي قربت الناس أم أبعدتهم؟",
+    "ما هو الدرس الذي تعلمته بالطريقة الصعبة؟",
+    "لو امتلكت قوة خارقة ليوم واحد، ماذا ستكون وماذا ستفعل بها؟",
+    "ما هو الكتاب الذي أثر فيك كثيراً؟",
+    "هل تفضل أن تعرف المستقبل أم أن تغير الماضي؟",
+    "ما هو الشيء الذي يجعلك تبتسم دائماً؟"
+]
 WHO_IS_QUESTIONS = [
     "من هو أذكى شخص بالمجموعة؟ 🤓", "من هو أكثر واحد ينام؟ 😴",
     "من هو أكثر واحد يحب الأكل؟ 🍔", "من هو أغنى واحد راح يصير بالمستقبل؟ 💰",
@@ -155,16 +177,10 @@ async def kat_tweet_handler(event):
         return
     # --- نهاية التحقق ---
     if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
-    loading_msg = await event.reply("**🔄 دا أفكر بضحايا جدد...**")
-    try:
-        participants = await client.get_participants(event.chat_id)
-        users = [user for user in participants if not user.bot and not user.deleted]
-        if len(users) < 2: return await loading_msg.edit("**ماكو أعضاء كافيين حتى الزمهم لزمة حلوة. 😂**")
-        user1, user2 = random.sample(users, 2)
-        quote = random.choice(QUOTES)
-        kat_message = f"**{user1.first_name}**: ...\n**└ [{user2.first_name}](tg://user?id={user2.id})**: **{quote}**"
-        await loading_msg.edit(kat_message)
-    except Exception as e: await loading_msg.edit(f"**ماصارت اللعبة، اكو مشكلة: {e}**")
+    
+    # --- المنطق الجديد للأمر ---
+    question = random.choice(KAT_QUESTIONS)
+    await event.reply(f"**🤔 | سؤال للنقاش:**\n\n**- {question}**")
 
 @client.on(events.NewMessage(pattern=f"^({'|'.join(PERCENT_COMMANDS)})$"))
 async def percent_game_handler(event):
