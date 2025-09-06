@@ -3,8 +3,9 @@ import time
 import random
 from datetime import datetime, timedelta
 from telethon import events
-# from telethon.tl import types # تم حذف هذا السطر لأنه غير ضروري ويسبب الخطأ
 from bot import client
+# --- (مُعَدَّل) حذف استيراد غير ضروري ---
+# from telethon.tl import types
 # --- (مُعَدَّل) استيراد الدوال الجديدة ---
 from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks, get_rank_name
 
@@ -333,44 +334,56 @@ async def my_rank_handler(event):
     
     await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
 
-# --- (مُصحَّح) أمر صلاحياتي ---
+# --- (مُصحَّح) أمر صلاحياتي بمنطق جديد ---
 @client.on(events.NewMessage(pattern="^صلاحياتي$"))
 async def my_permissions_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
     
-    try:
-        participant = await client.get_permissions(event.chat_id, sender.id)
-    except Exception:
-        return await event.reply("**لا يمكنني عرض صلاحياتك.**")
+    # الخطوة 1: الحصول على رتبة المستخدم من نظام البوت
+    rank_level = await get_user_rank(sender.id, event.chat_id)
+    rank_name = get_rank_name(rank_level)
 
-    # التحقق بالطريقة الصحيحة من وجود صلاحيات إدارية
-    if not hasattr(participant, 'admin_rights') or not participant.admin_rights:
-        return await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
+    # الخطوة 2: التعامل مع الرتب الإدارية العليا في البوت
+    if rank_level >= Ranks.ADMIN:
+        permissions_text = (
+            f"**⚜️ | صلاحياتك يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
+            f"**رتبتك هي:** `{rank_name}`\n\n"
+            "**بصفتك بهذه الرتبة، لديك صلاحية استخدام أوامر الإدارة العليا الخاصة بالبوت.**"
+        )
+        return await event.reply(permissions_text)
 
-    perms = participant.admin_rights
-
-    PERMISSIONS_MAP = {
-        "change_info": "تغيير معلومات المجموعة",
-        "delete_messages": "حذف الرسائل",
-        "ban_users": "حظر/طرد المستخدمين",
-        "invite_users": "دعوة مستخدمين جدد",
-        "pin_messages": "تثبيت الرسائل",
-        "add_admins": "إضافة مشرفين جدد",
-        "manage_call": "إدارة المحادثات الصوتية"
-    }
-    
-    permissions_text = f"**⚜️ | صلاحياتك يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
-    
-    # التحقق من صلاحية المشرف المخفي
-    if hasattr(participant.participant, 'anonymous') and participant.participant.anonymous:
-        permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
-        
-    for key, description in PERMISSIONS_MAP.items():
-        if getattr(perms, key, False):
-            permissions_text += f"✅ **{description}**\n"
-        else:
-            permissions_text += f"❌ **{description}**\n"
+    # الخطوة 3: التعامل مع "المشرفين" وعرض صلاحياتهم من تيليجرام
+    if rank_level == Ranks.MOD:
+        try:
+            participant = await client.get_permissions(event.chat_id, sender.id)
+            if not hasattr(participant, 'admin_rights') or not participant.admin_rights:
+                return await event.reply(f"**رتبتك هي `{rank_name}`، لكن لا يمكنني قراءة صلاحياتك المحددة في المجموعة.**")
             
-    await event.reply(permissions_text)
+            perms = participant.admin_rights
+            PERMISSIONS_MAP = {
+                "change_info": "تغيير معلومات المجموعة",
+                "delete_messages": "حذف الرسائل",
+                "ban_users": "حظر/طرد المستخدمين",
+                "invite_users": "دعوة مستخدمين جدد",
+                "pin_messages": "تثبيت الرسائل",
+                "add_admins": "إضافة مشرفين جدد",
+                "manage_call": "إدارة المحادثات الصوتية"
+            }
+            
+            permissions_text = f"**⚜️ | صلاحياتك كمشرف يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
+            
+            if hasattr(participant, 'participant') and hasattr(participant.participant, 'anonymous') and participant.participant.anonymous:
+                permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
+            
+            for key, description in PERMISSIONS_MAP.items():
+                if getattr(perms, key, False):
+                    permissions_text += f"✅ **{description}**\n"
+                else:
+                    permissions_text += f"❌ **{description}**\n"
+            
+            return await event.reply(permissions_text)
+
+    # الخطوة 4: التعامل مع الرتب الأقل
+    await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
