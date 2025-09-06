@@ -56,7 +56,6 @@ async def kick_handler(event):
     user_to_kick = await reply.get_sender()
     actor = await event.get_sender()
     
-    # --- (جديد) التحقق إذا كان المستهدف هو البوت نفسه ---
     me = await client.get_me()
     if user_to_kick.id == me.id:
         return await event.reply("**تريدني اطرد نفسي شدتحس بله😒**")
@@ -222,7 +221,7 @@ async def welcome_handler(event):
             await event.reply("**🗑️ خوش، مسحت الترحيب المخصص.**")
         else:
             await event.reply("**هو أصلاً ماكو ترحيب مخصص حتى أحذفه.**")
-    else: # ضع ترحيب
+    else:
         try:
             async with client.conversation(event.sender_id, timeout=180) as conv:
                 await conv.send_message("**تمام، دزلي رسالة الترحيب الجديدة.\n\n💡 ملاحظة:\n`{user}` - لمنشن العضو الجديد.\n`{group}` - لاسم المجموعة.**")
@@ -234,9 +233,30 @@ async def welcome_handler(event):
         except asyncio.TimeoutError:
             await event.reply("**تأخرت هواي ومادزيت شي. حاول مرة لخ.**")
 
+@client.on(events.NewMessage(pattern="^(تشغيل|تعطيل) صورة ايدي$"))
+async def toggle_id_photo_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+
+    if not await has_bot_permission(event):
+        return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+    
+    action = event.pattern_match.group(1)
+    chat_id_str = str(event.chat_id)
+    
+    if chat_id_str not in db:
+        db[chat_id_str] = {}
+        
+    if action == "تشغيل":
+        db[chat_id_str]["id_photo_enabled"] = True
+        await event.reply("**✅ | تم تشغيل عرض الصورة في أمر ايدي.**")
+    else:
+        db[chat_id_str]["id_photo_enabled"] = False
+        await event.reply("**☑️ | تم تعطيل عرض الصورة في أمر ايدي.**")
+        
+    save_db(db)
+
 @client.on(events.NewMessage(pattern=r"^(رفع مشرف|تنزيل مشرف)$"))
 async def promote_demote_handler(event):
-    # ... الكود هنا يبقى كما هو ...
     pass
 
 @client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح الادمنيه)$"))
