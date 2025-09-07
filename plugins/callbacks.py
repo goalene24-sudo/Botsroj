@@ -1,5 +1,6 @@
 # plugins/callbacks.py
 from telethon import events, Button
+from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from bot import client, StartTime
 from .utils import (
     db, save_db, is_admin, has_bot_permission,
@@ -26,7 +27,6 @@ async def callback_handler(event):
         "social_menu"
     ]
 
-    # --- (جديد) معالج زر التفعيل ---
     if query_data.startswith("activate_"):
         chat_id_str = query_data.split('_')[1]
         chat_id = int(chat_id_str)
@@ -39,22 +39,25 @@ async def callback_handler(event):
 
         is_currently_paused = db.get(chat_id_str, {}).get("is_paused", False)
         
-        if not is_currently_paused:
-            # إذا كان البوت مفعلًا بالفعل، نقوم فقط بتعديل الرسالة إلى القائمة الرئيسية
+        try:
+            if not is_currently_paused:
+                buttons = build_main_menu_buttons()
+                await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
+                return await event.answer("✅ | البوت مفعل بالفعل.", alert=False)
+
+            me = await client.get_me()
+            if not await is_admin(chat_id, me.id):
+                return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً لتتمكن من تفعيلي.", alert=True)
+
+            db[chat_id_str]["is_paused"] = False
+            save_db(db)
+            
             buttons = build_main_menu_buttons()
             await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
-            return await event.answer("✅ | البوت مفعل بالفعل.", alert=False)
-
-        me = await client.get_me()
-        if not await is_admin(chat_id, me.id):
-            return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً لتتمكن من تفعيلي.", alert=True)
-
-        db[chat_id_str]["is_paused"] = False
-        save_db(db)
-        
-        buttons = build_main_menu_buttons()
-        await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
-        await event.answer("✅ | تم تفعيل البوت بنجاح!", alert=True)
+            await event.answer("✅ | تم تفعيل البوت بنجاح!", alert=True)
+        except MessageNotModifiedError:
+            # تجاهل الخطأ في حال كان البوت مفعلًا بالفعل وتم الضغط على الزر مرة أخرى
+            pass
         return
 
     if query_data in main_menus:
@@ -107,7 +110,11 @@ async def callback_handler(event):
                 f"**- أعمل بدون توقف منذ:** `{uptime}`\n"
             )
             buttons = [[Button.url("👨‍💻 المطور", "https://t.me/tit_50")], [Button.inline("🔙 عودة", data="back_to_main")]]
-            return await event.edit(about_text, buttons=buttons, link_preview=False)
+            try:
+                await event.edit(about_text, buttons=buttons, link_preview=False)
+            except MessageNotModifiedError:
+                pass
+            return
 
         elif query_data == "protection_menu":
             if not await has_bot_permission(event): 
@@ -117,11 +124,14 @@ async def callback_handler(event):
             menu_text = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**"
             menu_buttons = await build_protection_menu(event.chat_id)
             
-            protection_msg = await event.edit(menu_text, buttons=menu_buttons)
-            
-            if chat_id_str not in db: db[chat_id_str] = {}
-            db[chat_id_str]["protection_menu_msg_id"] = protection_msg.id
-            save_db(db)
+            try:
+                protection_msg = await event.edit(menu_text, buttons=menu_buttons)
+                
+                if chat_id_str not in db: db[chat_id_str] = {}
+                db[chat_id_str]["protection_menu_msg_id"] = protection_msg.id
+                save_db(db)
+            except MessageNotModifiedError:
+                pass
             return
         
         elif query_data == "seerah_main":
@@ -130,7 +140,11 @@ async def callback_handler(event):
             for key, value in SEERAH_STAGES.items():
                 buttons.append([Button.inline(value["button"], data=f"seerah:{key}")])
             buttons.append([Button.inline("🔙 عودة", data="services_menu")])
-            return await event.edit(text, buttons=buttons)
+            try:
+                await event.edit(text, buttons=buttons)
+            except MessageNotModifiedError:
+                pass
+            return
 
         elif query_data == "hisn_main":
             text = "**حصن المسلم**\n\n**اختر الدعاء الذي تريد عرضه:**"
@@ -138,10 +152,17 @@ async def callback_handler(event):
             for key, value in HISN_ALMUSLIM.items():
                 buttons.append([Button.inline(value["button"], data=f"hisn:{key}")])
             buttons.append([Button.inline("🔙 عودة", data="services_menu")])
-            return await event.edit(text, buttons=buttons)
+            try:
+                await event.edit(text, buttons=buttons)
+            except MessageNotModifiedError:
+                pass
+            return
         
         if text_to_show:
-            await event.edit(text_to_show, buttons=buttons_to_show)
+            try:
+                await event.edit(text_to_show, buttons=buttons_to_show)
+            except MessageNotModifiedError:
+                pass # هذا هو السطر المحدد الذي كان يسبب الخطأ، تم علاجه
 
     elif not event.data.decode().startswith("admin_hub:"):
         await handle_interactive_callback(event)
@@ -185,7 +206,10 @@ async def custom_command_button_handler(event):
 
         if display_mode == "edit":
             back_button = Button.inline("🔙 رجوع", data="back_to_main")
-            await event.edit(final_reply, buttons=back_button, parse_mode='md')
+            try:
+                await event.edit(final_reply, buttons=back_button, parse_mode='md')
+            except MessageNotModifiedError:
+                pass
         else:
             popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
             await event.answer(popup_reply, alert=True)
