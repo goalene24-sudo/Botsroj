@@ -10,10 +10,11 @@ from .utils import check_activation
 if not os.path.isdir("./temp"):
     os.makedirs("./temp")
 
+# --- (تم التعديل) تصحيح روابط الخطوط ---
 LOGO_STYLES = {
     "نار": {
         "bg_url": "https://i.imgur.com/2Qk4a2d.jpeg",
-        "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/space-age.ttf",
+        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/space-age.ttf",
         "color": "#FFC300",
         "stroke_color": "#C70039",
         "stroke_width": 4,
@@ -21,7 +22,7 @@ LOGO_STYLES = {
     },
     "فخم": {
         "bg_url": "https://i.imgur.com/s4p4a6M.jpeg",
-        "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/TheGreatVibes.ttf",
+        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/TheGreatVibes.ttf",
         "color": "#E7C581",
         "stroke_color": "#1C1C1C",
         "stroke_width": 2,
@@ -29,7 +30,7 @@ LOGO_STYLES = {
     },
     "كرتون": {
         "bg_url": "https://i.imgur.com/f04uC17.jpeg",
-        "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/Grobold.ttf",
+        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/Grobold.ttf",
         "color": "#FFFFFF",
         "stroke_color": "#000000",
         "stroke_width": 5,
@@ -37,7 +38,7 @@ LOGO_STYLES = {
     },
     "default": {
         "bg_url": "https://i.imgur.com/955gqE8.jpeg",
-        "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/Streamster.ttf",
+        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/Streamster.ttf",
         "color": "white",
         "stroke_color": "black",
         "stroke_width": 3,
@@ -50,7 +51,6 @@ async def download_file(url, output_path):
         try:
             async with httpx.AsyncClient() as http_client:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
-                # --- (تم التعديل) حذف الخيار الذي يسبب الخطأ ---
                 response = await http_client.get(url, headers=headers, timeout=20)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
