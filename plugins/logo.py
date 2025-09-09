@@ -1,39 +1,37 @@
 # plugins/logo.py
 import os
 from PIL import Image, ImageDraw, ImageFont
-import httpx # تم التغيير من requests إلى httpx
+import httpx
 from telethon import events
 from bot import client
 from .utils import check_activation
 
 # --- إعدادات اللوجو ---
-# إنشاء مجلد مؤقت لحفظ الخطوط والخلفيات
 if not os.path.isdir("./temp"):
     os.makedirs("./temp")
 
-# --- تعريف الأنماط (الستايلات) ---
 LOGO_STYLES = {
     "نار": {
         "bg_url": "https://i.imgur.com/2Qk4a2d.jpeg",
         "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/space-age.ttf",
-        "color": "#FFC300", # لون أصفر ناري
-        "stroke_color": "#C70039", # لون أحمر داكن للإطار
+        "color": "#FFC300",
+        "stroke_color": "#C70039",
         "stroke_width": 4,
         "size": 180
     },
     "فخم": {
         "bg_url": "https://i.imgur.com/s4p4a6M.jpeg",
         "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/TheGreatVibes.ttf",
-        "color": "#E7C581", # لون ذهبي
-        "stroke_color": "#1C1C1C", # لون أسود خفيف للإطار
+        "color": "#E7C581",
+        "stroke_color": "#1C1C1C",
         "stroke_width": 2,
         "size": 220
     },
     "كرتون": {
         "bg_url": "https://i.imgur.com/f04uC17.jpeg",
         "font_url": "https://github.com/Jisan09/Files/raw/main/fonts/Grobold.ttf",
-        "color": "#FFFFFF", # أبيض
-        "stroke_color": "#000000", # أسود
+        "color": "#FFFFFF",
+        "stroke_color": "#000000",
         "stroke_width": 5,
         "size": 200
     },
@@ -47,21 +45,24 @@ LOGO_STYLES = {
     }
 }
 
-# --- (تم التعديل) استخدام httpx للتحميل ---
+# --- (تم التعديل) الدالة الآن تعيد رسالة الخطأ لتشخيص المشكلة ---
 async def download_file(url, output_path):
-    """دالة لتحميل الملفات (خلفيات أو خطوط)"""
     if not os.path.exists(output_path):
         try:
             async with httpx.AsyncClient() as http_client:
-                response = await http_client.get(url)
+                # إضافة رأس متصفح لتجنب الحجب
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
+                response = await http_client.get(url, headers=headers, follow_redirects=True, timeout=20)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
-            return True
+            return True, None
         except Exception as e:
-            print(f"Error downloading {url}: {e}")
-            return False
-    return True
+            # طباعة الخطأ في السجل وإعادته كنص
+            error_message = f"فشل تحميل {url}: {e}"
+            print(error_message)
+            return False, str(e)
+    return True, None
 
 
 @client.on(events.NewMessage(pattern=r"^لوجو(?:\s+([\S]+))?\s+([\s\S]+)"))
@@ -79,14 +80,20 @@ async def logo_creator(event):
     else:
         text = f"{style_name} {text}" if style_name else text
         style = LOGO_STYLES["default"]
-        style_name = "default" # تحديد اسم الستايل للاستخدام في المسارات
+        style_name = "default"
 
     bg_path = f"./temp/{style_name}_bg.jpg"
     font_path = f"./temp/{style_name}_font.ttf"
 
-    # --- (تم التعديل) استخدام await لأن الدالة أصبحت async ---
-    if not await download_file(style["bg_url"], bg_path) or not await download_file(style["font_url"], font_path):
-        await zed.edit("**حدث خطأ أثناء تحميل موارد اللوجو. حاول مجدداً.**")
+    # --- (تم التعديل) التقاط رسالة الخطأ من الدالة ---
+    bg_success, bg_error = await download_file(style["bg_url"], bg_path)
+    if not bg_success:
+        await zed.edit(f"**- عذراً .. فشل تحميل الخلفية 🖼️**\n\n**- السبب:**\n`{bg_error}`")
+        return
+
+    font_success, font_error = await download_file(style["font_url"], font_path)
+    if not font_success:
+        await zed.edit(f"**- عذراً .. فشل تحميل الخط ✍️**\n\n**- السبب:**\n`{font_error}`")
         return
 
     try:
@@ -95,13 +102,12 @@ async def logo_creator(event):
         font = ImageFont.truetype(font_path, style["size"])
 
         img_width, img_height = img.size
-        # --- (تحسين) استخدام textbbox لحساب أدق ---
         text_bbox = draw.textbbox((0, 0), text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
         
         x = (img_width - text_width) / 2
-        y = (img_height - text_height) / 2 - (img_height * 0.05) # تعديل الارتفاع بشكل نسبي
+        y = (img_height - text_height) / 2 - (img_height * 0.05)
 
         draw.text(
             (x, y),
@@ -127,7 +133,7 @@ async def logo_creator(event):
         await zed.delete()
 
     except Exception as e:
-        await zed.edit(f"**عذراً، حدث خطأ فني:**\n`{e}`")
+        await zed.edit(f"**عذراً، حدث خطأ فني أثناء صناعة الصورة:**\n`{e}`")
 
 
 @client.on(events.NewMessage(pattern="^ستايلات اللوجو$"))
