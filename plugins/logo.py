@@ -1,7 +1,7 @@
 # plugins/logo.py
 import os
 from PIL import Image, ImageDraw, ImageFont
-import requests
+import httpx # تم التغيير من requests إلى httpx
 from telethon import events
 from bot import client
 from .utils import check_activation
@@ -47,15 +47,16 @@ LOGO_STYLES = {
     }
 }
 
-def download_file(url, output_path):
+# --- (تم التعديل) استخدام httpx للتحميل ---
+async def download_file(url, output_path):
     """دالة لتحميل الملفات (خلفيات أو خطوط)"""
     if not os.path.exists(output_path):
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            with open(output_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(url)
+                response.raise_for_status()
+                with open(output_path, 'wb') as f:
+                    f.write(response.content)
             return True
         except Exception as e:
             print(f"Error downloading {url}: {e}")
@@ -73,36 +74,35 @@ async def logo_creator(event):
     style_name = event.pattern_match.group(1)
     text = event.pattern_match.group(2)
 
-    # تحديد الستايل المطلوب أو استخدام الستايل الافتراضي
     if style_name and style_name in LOGO_STYLES:
         style = LOGO_STYLES[style_name]
     else:
-        # إذا لم يتم تحديد ستايل، نعتبر الكلمة الأولى جزء من النص
         text = f"{style_name} {text}" if style_name else text
         style = LOGO_STYLES["default"]
+        style_name = "default" # تحديد اسم الستايل للاستخدام في المسارات
 
-    # مسارات حفظ الملفات
-    bg_path = f"./temp/{style_name or 'default'}_bg.jpg"
-    font_path = f"./temp/{style_name or 'default'}_font.ttf"
+    bg_path = f"./temp/{style_name}_bg.jpg"
+    font_path = f"./temp/{style_name}_font.ttf"
 
-    # تحميل الخلفية والخط
-    if not download_file(style["bg_url"], bg_path) or not download_file(style["font_url"], font_path):
+    # --- (تم التعديل) استخدام await لأن الدالة أصبحت async ---
+    if not await download_file(style["bg_url"], bg_path) or not await download_file(style["font_url"], font_path):
         await zed.edit("**حدث خطأ أثناء تحميل موارد اللوجو. حاول مجدداً.**")
         return
 
     try:
-        # فتح الصورة والخط
         img = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(img)
         font = ImageFont.truetype(font_path, style["size"])
 
-        # حساب حجم النص وموقعه للتوسيط
         img_width, img_height = img.size
-        text_width, text_height = draw.textsize(text, font=font)
+        # --- (تحسين) استخدام textbbox لحساب أدق ---
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        
         x = (img_width - text_width) / 2
-        y = (img_height - text_height) / 2 - 30 # رفع النص للأعلى قليلاً
+        y = (img_height - text_height) / 2 - (img_height * 0.05) # تعديل الارتفاع بشكل نسبي
 
-        # رسم النص على الصورة
         draw.text(
             (x, y),
             text,
@@ -113,18 +113,15 @@ async def logo_creator(event):
             align="center"
         )
         
-        # حفظ الصورة النهائية
         output_path = f"./temp/{event.id}_logo.png"
         img.save(output_path, "PNG")
 
-        # إرسال الصورة
         await event.client.send_file(
             event.chat_id,
             output_path,
             reply_to=event.message.reply_to_msg_id or event.id
         )
         
-        # حذف الملفات المؤقتة
         if os.path.exists(output_path):
             os.remove(output_path)
         await zed.delete()
@@ -133,7 +130,6 @@ async def logo_creator(event):
         await zed.edit(f"**عذراً، حدث خطأ فني:**\n`{e}`")
 
 
-# --- أمر لعرض الستايلات المتاحة ---
 @client.on(events.NewMessage(pattern="^ستايلات اللوجو$"))
 async def list_logo_styles(event):
     if event.is_private or not await check_activation(event.chat_id):
@@ -144,5 +140,5 @@ async def list_logo_styles(event):
         if name != "default":
             styles_list += f"• `{name}`\n"
     
-    styles_list += "\n**للاستخدام، اكتب:** `لوجو <اسم الستايل> <النص>`"
+    styles_list += "\n**للاستخدام، اكتب:** `لوجو <اسم الستايل> <النص>`\n**مثال:** `لوجو نار بوت سروج`"
     await event.reply(styles_list)
