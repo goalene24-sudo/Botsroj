@@ -10,10 +10,10 @@ from .utils import check_activation
 if not os.path.isdir("./temp"):
     os.makedirs("./temp")
 
-# --- (تم التعديل) استخدام روابط مضمونة من سيرفرات تيليجرام ---
+# --- (تم التعديل) تصحيح جذري لجميع الروابط ---
 LOGO_STYLES = {
     "نار": {
-        "bg_url": "https://telegra.ph/file/3426c1171c75124f056d6.jpg",
+        "bg_url": "https://telegra.ph/file/5a54f0cb186851b68e99a.jpg",
         "font_url": "https://telegra.ph/file/a8041cacc293b6e89f38c.ttf", # space-age.ttf
         "color": "#FFC300",
         "stroke_color": "#C70039",
@@ -37,7 +37,7 @@ LOGO_STYLES = {
         "size": 200
     },
     "default": {
-        "bg_url": "https://telegra.ph/file/5a54f0cb186851b68e99a.jpg",
+        "bg_url": "https://telegra.ph/file/3426c1171c75124f056d6.jpg",
         "font_url": "https://telegra.ph/file/c3c2f2162a5b672a9121a.ttf", # Streamster.ttf
         "color": "white",
         "stroke_color": "black",
