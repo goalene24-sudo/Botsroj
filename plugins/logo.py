@@ -13,7 +13,7 @@ if not os.path.isdir("./temp"):
 # --- (تم التعديل) تصحيح جذري لجميع الروابط ---
 LOGO_STYLES = {
     "نار": {
-        "bg_url": "https://telegra.ph/file/5a54f0cb186851b68e99a.jpg",
+        "bg_url": "https://telegra.ph/file/a2a297e6f8885061517f8.jpg", # <-- تم تغيير هذا الرابط
         "font_url": "https://telegra.ph/file/a8041cacc293b6e89f38c.ttf", # space-age.ttf
         "color": "#FFC300",
         "stroke_color": "#C70039",
@@ -21,7 +21,7 @@ LOGO_STYLES = {
         "size": 180
     },
     "فخم": {
-        "bg_url": "https://telegra.ph/file/629472305a4175f7000e4.jpg", # <-- تم تغيير هذا الرابط
+        "bg_url": "https://telegra.ph/file/b724f8d5843b748281313.jpg", # <-- تم تغيير هذا الرابط
         "font_url": "https://telegra.ph/file/c822e4c2b9f65a443a296.ttf", # TheGreatVibes.ttf
         "color": "#E7C581",
         "stroke_color": "#1C1C1C",
