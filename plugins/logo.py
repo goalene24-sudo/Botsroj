@@ -21,7 +21,7 @@ LOGO_STYLES = {
         "size": 180
     },
     "فخم": {
-        "bg_url": "https://telegra.ph/file/f1604b38d8a39de816f9f.jpg",
+        "bg_url": "https://telegra.ph/file/629472305a4175f7000e4.jpg", # <-- تم تغيير هذا الرابط
         "font_url": "https://telegra.ph/file/c822e4c2b9f65a443a296.ttf", # TheGreatVibes.ttf
         "color": "#E7C581",
         "stroke_color": "#1C1C1C",
