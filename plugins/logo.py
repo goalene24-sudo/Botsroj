@@ -10,35 +10,35 @@ from .utils import check_activation
 if not os.path.isdir("./temp"):
     os.makedirs("./temp")
 
-# --- (تم التعديل) تصحيح روابط الخطوط ---
+# --- (تم التعديل) استخدام روابط مضمونة من سيرفرات تيليجرام ---
 LOGO_STYLES = {
     "نار": {
-        "bg_url": "https://i.imgur.com/2Qk4a2d.jpeg",
-        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/space-age.ttf",
+        "bg_url": "https://telegra.ph/file/3426c1171c75124f056d6.jpg",
+        "font_url": "https://telegra.ph/file/a8041cacc293b6e89f38c.ttf", # space-age.ttf
         "color": "#FFC300",
         "stroke_color": "#C70039",
         "stroke_width": 4,
         "size": 180
     },
     "فخم": {
-        "bg_url": "https://i.imgur.com/s4p4a6M.jpeg",
-        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/TheGreatVibes.ttf",
+        "bg_url": "https://telegra.ph/file/f1604b38d8a39de816f9f.jpg",
+        "font_url": "https://telegra.ph/file/c822e4c2b9f65a443a296.ttf", # TheGreatVibes.ttf
         "color": "#E7C581",
         "stroke_color": "#1C1C1C",
         "stroke_width": 2,
         "size": 220
     },
     "كرتون": {
-        "bg_url": "https://i.imgur.com/f04uC17.jpeg",
-        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/Grobold.ttf",
+        "bg_url": "https://telegra.ph/file/69d107a71f76d43e2de3a.jpg",
+        "font_url": "https://telegra.ph/file/a534fe247c7c1a84f4a3e.ttf", # Grobold.ttf
         "color": "#FFFFFF",
         "stroke_color": "#000000",
         "stroke_width": 5,
         "size": 200
     },
     "default": {
-        "bg_url": "https://i.imgur.com/955gqE8.jpeg",
-        "font_url": "https://raw.githubusercontent.com/Jisan09/Files/main/fonts/Streamster.ttf",
+        "bg_url": "https://telegra.ph/file/5a54f0cb186851b68e99a.jpg",
+        "font_url": "https://telegra.ph/file/c3c2f2162a5b672a9121a.ttf", # Streamster.ttf
         "color": "white",
         "stroke_color": "black",
         "stroke_width": 3,
