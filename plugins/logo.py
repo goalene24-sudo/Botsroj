@@ -45,20 +45,18 @@ LOGO_STYLES = {
     }
 }
 
-# --- (تم التعديل) الدالة الآن تعيد رسالة الخطأ لتشخيص المشكلة ---
 async def download_file(url, output_path):
     if not os.path.exists(output_path):
         try:
             async with httpx.AsyncClient() as http_client:
-                # إضافة رأس متصفح لتجنب الحجب
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
-                response = await http_client.get(url, headers=headers, follow_redirects=True, timeout=20)
+                # --- (تم التعديل) حذف الخيار الذي يسبب الخطأ ---
+                response = await http_client.get(url, headers=headers, timeout=20)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
             return True, None
         except Exception as e:
-            # طباعة الخطأ في السجل وإعادته كنص
             error_message = f"فشل تحميل {url}: {e}"
             print(error_message)
             return False, str(e)
@@ -85,7 +83,6 @@ async def logo_creator(event):
     bg_path = f"./temp/{style_name}_bg.jpg"
     font_path = f"./temp/{style_name}_font.ttf"
 
-    # --- (تم التعديل) التقاط رسالة الخطأ من الدالة ---
     bg_success, bg_error = await download_file(style["bg_url"], bg_path)
     if not bg_success:
         await zed.edit(f"**- عذراً .. فشل تحميل الخلفية 🖼️**\n\n**- السبب:**\n`{bg_error}`")
