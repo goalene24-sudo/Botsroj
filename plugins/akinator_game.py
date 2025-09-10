@@ -45,9 +45,8 @@ async def start_akinator(event):
     zed = await event.reply("`جارِ استدعاء المارد... 🧞`")
     
     try:
-        # استخدام النسخة غير المتزامنة من المكتبة الجديدة
-        aki = akinator.AsyncAkinator()
-        # بدء اللعبة باللغة العربية مع تفعيل وضع الأطفال
+        # استخدام الكلاس الرئيسي من المكتبة الجديدة
+        aki = akinator.Akinator()
         q = await aki.start_game(language='ar', child_mode=True)
         
         game_state = {
@@ -101,7 +100,6 @@ async def handle_akinator_answer(event):
                 q = await aki.back()
             except akinator.exceptions.CantGoBackAnyFurther:
                 await event.answer("لا يمكنك الرجوع أكثر!", alert=True)
-                #
                 q = aki.question
         else:
             q = await aki.answer(answer_str)
