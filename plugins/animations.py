@@ -1,21 +1,17 @@
 # plugins/animations.py
 import asyncio
-from collections import deque
 from telethon import events
-from . import zedub
-from ..core.managers import edit_or_reply
-from ..helpers.utils import _format
-from . import ALIVE_NAME
+from bot import client # استيراد الـ client الصحيح
+from .utils import check_activation
 
-DEFAULTUSER = str(ALIVE_NAME) if ALIVE_NAME else "Zed"
-
-@zedub.zed_cmd(pattern="غبي$")
+@client.on(events.NewMessage(pattern="^غبي$"))
 async def ghabe(event):
+    if not await check_activation(event.chat_id): return
     if event.fwd_from:
         return
     animation_interval = 0.3
     animation_ttl = range(14)
-    zdd = await edit_or_reply(event, "🧠.")
+    zed = await event.reply("🧠.")
     animation_chars = [
         "**- عقلك** ⬅️ 🧠\n\n🧠           <(^.^ <) 🗑",
         "**- عقلك** ⬅️ 🧠\n\n🧠         <(^.^ <)   🗑",
@@ -34,15 +30,16 @@ async def ghabe(event):
     ]
     for i in animation_ttl:
         await asyncio.sleep(animation_interval)
-        await zdd.edit(animation_chars[i % 14])
+        await zed.edit(animation_chars[i % 14])
 
-@zedub.zed_cmd(pattern="قنابل$")
+@client.on(events.NewMessage(pattern="^قنابل$"))
 async def bomd(event):
+    if not await check_activation(event.chat_id): return
     if event.fwd_from:
         return
     animation_interval = 0.4
     animation_ttl = range(13)
-    zdd = await edit_or_reply(event, "💣")
+    zed = await event.reply("💣")
     animation_chars = [
         "💣\n\n\n\n\n",
         "💣\n💣\n\n\n\n",
@@ -60,27 +57,30 @@ async def bomd(event):
     ]
     for i in animation_ttl:
         await asyncio.sleep(animation_interval)
-        await zdd.edit(animation_chars[i % 13])
+        await zed.edit(animation_chars[i % 13])
 
-@zedub.zed_cmd(pattern="اتصل$")
+@client.on(events.NewMessage(pattern="^اتصل$"))
 async def call(event):
+    if not await check_activation(event.chat_id): return
     if event.fwd_from:
         return
+    user = await event.get_sender()
+    name = user.first_name
     animation_interval = 2
     animation_ttl = range(18)
-    zdd = await edit_or_reply(event, "📞")
+    zed = await event.reply("📞")
     await asyncio.sleep(animation_interval)
     animation_chars = [
         "**- جاري الاتصال ...**",
         "**- تم الاتصال.**",
         "**- تيليجرام : مرحبًا، هنا مقر شركة تيليجرام. من معي؟**",
-        f"**- أنا: معكم {DEFAULTUSER}، أريد التحدث مع بافل دوروف.**",
+        f"**- أنا: معكم {name}، أريد التحدث مع بافل دوروف.**",
         "**- المستخدم مُصرّح له.**",
         "**- جاري الاتصال ببافل دوروف على الرقم +916969696969**",
         "**- تم الاتصال...**",
         "**- أنا: مرحبًا سيدي، الرجاء حظر هذا الشخص.**",
         "**- بافل دوروف: من معي؟**",
-        f"**- أنا: {DEFAULTUSER} يا صاح.**",
+        f"**- أنا: {name} يا صاح.**",
         "**- بافل دوروف: يا إلهي!!! لم نرك منذ وقت طويل، كيف حالك يا صديقي...\nسأتأكد من حظر حساب ذلك الشخص خلال 24 ساعة.**",
         "**- أنا: شكرًا، أراك لاحقًا.**",
         "**- بافل دوروف: لا داعي للشكر يا صديقي، تيليجرام لنا. فقط اتصل بي عندما تكون متفرغًا.**",
@@ -91,23 +91,31 @@ async def call(event):
         "**- تم إنهاء المكالمة الخاصة.**",
     ]
     for i in animation_ttl:
-        await zdd.edit(animation_chars[i % 18])
+        await zed.edit(animation_chars[i % 18])
         await asyncio.sleep(animation_interval)
 
-@zedub.zed_cmd(pattern="قتل$")
+@client.on(events.NewMessage(pattern="^قتل$"))
 async def kill(event):
+    if not await check_activation(event.chat_id): return
     if event.fwd_from:
         return
+    reply = await event.get_reply_message()
+    if not reply:
+        return await event.reply("**الرجاء الرد على المستخدم الذي تريد قتله.**")
+    
+    victim = await event.client.get_entity(reply.sender_id)
+    killer = await event.get_sender()
+    
     animation_interval = 0.4
     animation_ttl = range(12)
-    zdd = await edit_or_reply(event, "...")
+    zed = await event.reply("...")
     animation_chars = [
-        "**تم العثور على الهدف**",
+        f"**تم تحديد الهدف: [{victim.first_name}](tg://user?id={victim.id})**",
         "**...جارِ إطلاق النار**",
         "**💥...**",
         "**تمت الإصابة ✔️**",
-        "**الضحية:** [user](tg://user?id=1)",
-        "**القاتل:** أنت",
+        f"**الضحية:** [{victim.first_name}](tg://user?id={victim.id})",
+        f"**القاتل:** [{killer.first_name}](tg://user?id={killer.id})",
         "**النتيجة:** مات ☠️",
         "**الناجي:** أنت 😎",
         "**الخاسر:** الضحية 😂",
@@ -116,40 +124,40 @@ async def kill(event):
     ]
     for i in animation_ttl:
         await asyncio.sleep(animation_interval)
-        await zdd.edit(animation_chars[i % 11])
+        await zed.edit(animation_chars[i % 11])
 
-@zedub.zed_cmd(pattern="انميشن(?: |$)(.*)")
+@client.on(events.NewMessage(pattern="^انميشن$"))
 async def anm(event):
-    await edit_or_reply(event, """**- قائمــة اوامــر الانميشن 🎆🏖**
+    if not await check_activation(event.chat_id): return
+    await event.reply("""**- قائمــة اوامــر الانميشن 🎆🏖**
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-**⎞𝟏⎝** `.غبي`
+`غبي`
 **لـ الاشاراة الـى ان الشخـص غبـي**
 
-**⎞𝟐⎝**`.قنابل`
+`قنابل`
 **لـ رمـي قنبلـه عـلى الشخـص**
 
-**⎞𝟑⎝** `.اتصل`
+`اتصل`
 **لـ الاتصـال بـ بافـل**
 
-**⎞𝟒⎝** `.قتل`
+`قتل`
 **لـ قتـل الشخـص**
  
-**⎞5⎝** `.شحن`
+`شحن`
 **لـ شحـن الهـاتف**
  
-**⎞6⎝** `.طوبه`
+`طوبه`
 **لعبـة طوبـه**
 
-**⎞7⎝** `.شطرنج`
+`شطرنج`
 **لعبـة شطرنج**
 
-**⎞8⎝** `.حلويات`
+`حلويات`
 **لـ عرض الحلويـات**
  
-**⎞9⎝** `.جانجست`
+`جانجست`
 **انـا الاقـوى**
 
-**⎞10⎝** `.شنو`
+`شنو`
 **لـ التعجـب**
- 
- 𓆩 [𝙎𝙊𝙐𝙍𝘾𝞝 𝙎𝞝𝙍𝙊𝙐𝙅](t.me/KKC8C) 𓆪""")
+""")
