@@ -15,6 +15,7 @@ ALL_MODULES = [
     "plugins.fun",
     "plugins.games",
     "plugins.animal",
+    "plugins.animations", # --- (تمت الإضافة هنا) ---
     "plugins.fast_games",
     "plugins.replies",
     "plugins.default_replies",
