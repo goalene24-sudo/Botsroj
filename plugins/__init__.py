@@ -14,7 +14,6 @@ ALL_MODULES = [
     "plugins.achievements",
     "plugins.fun",
     "plugins.games",
-    "plugins.akinator_game", # --- (تمت الإضافة هنا) ---
     "plugins.animal",
     "plugins.fast_games",
     "plugins.replies",
