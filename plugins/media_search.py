@@ -2,11 +2,42 @@
 import os
 import random
 import asyncio
+import json
+import urllib.request
+from urllib.parse import quote_plus
 from telethon import events
 from bot import client
 from .utils import check_activation
-from duckduckgo_search import DDGS
 import yt_dlp
+
+# --- (جديد) قائمة هويات المتصفحات لتجنب الحظر ---
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
+]
+
+# --- (مُعدل بالكامل) دالة البحث عن الصور الجديدة ---
+async def search_images(query):
+    """
+    يبحث عن الصور باستخدام DuckDuckGo بطريقة تحاكي المتصفح لتجنب الحظر.
+    """
+    url = f"https://duckduckgo.com/i.js?l=us-en&o=json&q={quote_plus(query)}&vqd_required=1"
+    headers = {'User-Agent': random.choice(USER_AGENTS)}
+    
+    request = urllib.request.Request(url, headers=headers)
+    
+    # محاولة لـ3 مرات في حال فشل الاتصال
+    for _ in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                data = json.loads(response.read())
+                return [img['image'] for img in data.get('results', [])]
+        except Exception:
+            await asyncio.sleep(0.5) # انتظار بسيط قبل المحاولة التالية
+    return []
+
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
 async def image_search_handler(event):
@@ -20,14 +51,13 @@ async def image_search_handler(event):
     loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
 
     try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.images(search_term, max_results=50)]
+        # استخدام دالة البحث الجديدة والمحسّنة
+        results = await search_images(search_term)
         
         if not results:
             return await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term}'.\nحاول بكلمات بحث مختلفة.**")
         
-        image_to_send = random.choice(results)
-        image_url = image_to_send['image']
+        image_url = random.choice(results)
         
         await client.send_file(
             event.chat_id,
@@ -53,20 +83,17 @@ async def youtube_search_handler(event):
     msg = await event.reply(f"**🔎 | جاري البحث عن `{search_term}` في يوتيوب...**")
     
     output_path = "downloads/audio.mp3"
-
-    # --- [تمت الإضافة] --- تحديد مسار ملف الكوكيز ---
     cookies_file = "cookies.txt"
+
     if not os.path.exists(cookies_file):
         return await msg.edit("**❌ | خطأ إعداد!**\n\n**ملف `cookies.txt` غير موجود. يرجى رفعه إلى ملفات البوت لحل مشكلة التحميل من يوتيوب.**")
 
-
     try:
-        # البحث باستخدام yt-dlp مع ملف الكوكيز
         ydl_opts_search = {
-            'quiet': True, 
-            'default_search': 'ytsearch1', 
+            'quiet': True,
+            'default_search': 'ytsearch1',
             'extract_flat': 'in_playlist',
-            'cookiefile': cookies_file  # <-- تمت الإضافة
+            'cookiefile': cookies_file
         }
         with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
             info = ydl.extract_info(f"ytsearch1:{search_term}", download=False)
@@ -86,14 +113,13 @@ async def youtube_search_handler(event):
         if not os.path.isdir('downloads'):
             os.makedirs('downloads')
         
-        # إعدادات التحميل كملف صوتي مع ملف الكوكيز
         ydl_opts_download = {
             'format': 'bestaudio/best',
             'outtmpl': 'downloads/audio',
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
             'quiet': True,
             'noplaylist': True,
-            'cookiefile': cookies_file # <-- تمت الإضافة
+            'cookiefile': cookies_file
         }
 
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
