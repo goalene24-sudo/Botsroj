@@ -1,24 +1,30 @@
 import os
 import shutil
-import asyncio
+from telethon import events
+from telethon.tl.types import InputMediaPhoto
 
 # استيراد مكتبة البحث التي أنشأناها في الملف الأول
 from helpers.gimage_scraper import googleimagesdownload
 
-# استيراد وحدات البوت الضرورية - قد تحتاج لتعديلها حسب بوتك
-from telethon.tl.types import InputMediaPhoto
-from . import zq_lo # اسم البوت الخاص بك
-from ..core.managers import edit_or_reply
+# استيراد متغير البوت بالطريقة الصحيحة
+from bot import client
+
+# استيراد الوحدات المساعدة من بوتك
+from .utils import check_activation
 
 # تعريف الأمر الجديد
-@zq_lo.rep_cmd(pattern=r"^\.صور(?: (\d+))? (.*)$")
+@client.on(events.NewMessage(pattern=r"^\.صور(?: (\d+))? (.*)$"))
 async def google_image_search(event):
     """
     .صور [العدد] <نص البحث>
     يبحث عن الصور في جوجل ويرسلها. العدد اختياري، الافتراضي هو 1.
     """
+    # التحقق مما إذا كان البوت مفعل في المجموعة
+    if not await check_activation(event.chat_id):
+        return
+
     # رسالة أولية لإعلام المستخدم بالبدء
-    reply_msg = await edit_or_reply(event, "**... جاري البحث عن الصور، يرجى الانتظار**")
+    reply_msg = await event.reply("**... جاري البحث عن الصور، يرجى الانتظار**")
 
     # تحديد مجلد مؤقت لتنزيل الصور
     temp_download_dir = "./temp_gimages/"
@@ -62,12 +68,13 @@ async def google_image_search(event):
             return
 
         # إرسال الصور التي تم تنزيلها
+        reply_to_id = event.message.reply_to_msg_id or event.id
         if limit == 1:
-            await event.client.send_file(event.chat_id, downloaded_paths[0], reply_to=event.reply_to_msg_id)
+            await client.send_file(event.chat_id, downloaded_paths[0], reply_to=reply_to_id)
         else:
             # استخدام ألبوم إذا كان العدد أكثر من صورة
             media_album = [InputMediaPhoto(path) for path in downloaded_paths]
-            await event.client.send_file(event.chat_id, media_album, reply_to=event.reply_to_msg_id)
+            await client.send_file(event.chat_id, media_album, reply_to=reply_to_id)
         
         # حذف الرسالة الأولية
         await reply_msg.delete()
