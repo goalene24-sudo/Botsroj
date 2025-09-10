@@ -45,11 +45,10 @@ async def start_akinator(event):
     zed = await event.reply("`جارِ استدعاء المارد... 🧞`")
     
     try:
-        # --- تم التعديل هنا ---
-        # نقل الإعدادات إلى دالة التهيئة الرئيسية
-        aki = akinator.Akinator(language='ar', child_mode=True)
-        # بدء اللعبة بدون أي معاملات إضافية
-        q = await aki.start_game()
+        # استخدام النسخة غير المتزامنة من المكتبة الجديدة
+        aki = akinator.AsyncAkinator()
+        # بدء اللعبة باللغة العربية مع تفعيل وضع الأطفال
+        q = await aki.start_game(language='ar', child_mode=True)
         
         game_state = {
             "aki": aki,
@@ -70,7 +69,7 @@ async def start_akinator(event):
 @client.on(events.CallbackQuery(pattern=b"aki_ans:(.*)"))
 async def handle_akinator_answer(event):
     data_str = event.data.decode('utf-8')
-    _, chat_id_str, user_id_str, answer = data_str.split(':')
+    _, chat_id_str, user_id_str, answer_str = data_str.split(':')
     
     chat_id = int(chat_id_str)
     user_id = int(user_id_str)
@@ -89,7 +88,7 @@ async def handle_akinator_answer(event):
     game_state = ACTIVE_AKI_GAMES[game_key]
     aki = game_state["aki"]
     
-    if answer == "end":
+    if answer_str == "end":
         del ACTIVE_AKI_GAMES[game_key]
         await event.edit("**🧞‍♂️ | تم إنهاء اللعبة بناءً على طلبك.**")
         return
@@ -97,18 +96,20 @@ async def handle_akinator_answer(event):
     await event.edit("`جاري تحليل إجابتك...`")
     
     try:
-        if answer == "b":
-            # الرجوع للسؤال السابق
-            q = await aki.back()
+        if answer_str == "b":
+            try:
+                q = await aki.back()
+            except akinator.exceptions.CantGoBackAnyFurther:
+                await event.answer("لا يمكنك الرجوع أكثر!", alert=True)
+                #
+                q = aki.question
         else:
-            # إرسال الإجابة
-            q = await aki.answer(answer)
+            q = await aki.answer(answer_str)
 
         if aki.progression >= 80:
             await aki.win()
             guess = aki.first_guess
             
-            # بناء الرسالة النهائية
             result_text = (
                 f"**🧞‍♂️ | أعتقد أنك تفكر في...**\n\n"
                 f"**الشخصية: {guess['name']}**\n"
@@ -116,7 +117,6 @@ async def handle_akinator_answer(event):
                 f"**هل كان تخميني صحيحًا؟**"
             )
             
-            # إرسال الصورة إذا كانت متوفرة
             try:
                 await event.client.send_file(
                     event.chat_id,
@@ -130,7 +130,6 @@ async def handle_akinator_answer(event):
             del ACTIVE_AKI_GAMES[game_key]
             return
 
-        # عرض السؤال التالي
         buttons = build_aki_buttons(chat_id, user_id)
         await event.edit(f"**🧞‍♂️ | المارد يسأل (التقدم: {int(aki.progression)}%):**\n\n**- {q}**", buttons=buttons)
 
