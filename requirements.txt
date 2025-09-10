@@ -10,3 +10,4 @@ Flask
 google-generativeai
 yt-dlp
 akinator.py-async
+
