@@ -8,6 +8,7 @@ ALL_MODULES = [
     "plugins.protection",
     "plugins.cleaning",
     "plugins.admin",
+    "plugins.tagging", # --- (تمت الإضافة هنا) ---
     "plugins.aliases",
     "plugins.dictionary",
     "plugins.achievements",
