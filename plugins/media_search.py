@@ -2,12 +2,10 @@
 import os
 import random
 import asyncio
-import json
-import urllib.request
-from urllib.parse import quote_plus
 from telethon import events
 from bot import client
 from .utils import check_activation
+from duckduckgo_search import DDGS  # --- (تمت إعادة المكتبة) ---
 import yt_dlp
 
 # --- (جديد) قائمة هويات المتصفحات لتجنب الحظر ---
@@ -17,27 +15,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
 ]
-
-# --- (مُعدل بالكامل) دالة البحث عن الصور الجديدة ---
-async def search_images(query):
-    """
-    يبحث عن الصور باستخدام DuckDuckGo بطريقة تحاكي المتصفح لتجنب الحظر.
-    """
-    url = f"https://duckduckgo.com/i.js?l=us-en&o=json&q={quote_plus(query)}&vqd_required=1"
-    headers = {'User-Agent': random.choice(USER_AGENTS)}
-    
-    request = urllib.request.Request(url, headers=headers)
-    
-    # محاولة لـ3 مرات في حال فشل الاتصال
-    for _ in range(3):
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                data = json.loads(response.read())
-                return [img['image'] for img in data.get('results', [])]
-        except Exception:
-            await asyncio.sleep(0.5) # انتظار بسيط قبل المحاولة التالية
-    return []
-
 
 @client.on(events.NewMessage(pattern=r"^صورة (.+)"))
 async def image_search_handler(event):
@@ -51,13 +28,18 @@ async def image_search_handler(event):
     loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
 
     try:
-        # استخدام دالة البحث الجديدة والمحسّنة
-        results = await search_images(search_term)
+        # --- (مُعدل) استخدام المكتبة مع هيدر عشوائي لتجنب الحظر ---
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
+        # ملاحظة: قد تحتاج إلى ضبط بروكسي إذا كنت تواجه حظرًا شديدًا
+        # with DDGS(headers=headers, proxies="socks5://user:pass@host:port") as ddgs:
+        with DDGS(headers=headers) as ddgs:
+            results = [r for r in ddgs.images(search_term, max_results=50)]
         
         if not results:
             return await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term}'.\nحاول بكلمات بحث مختلفة.**")
         
-        image_url = random.choice(results)
+        image_to_send = random.choice(results)
+        image_url = image_to_send['image']
         
         await client.send_file(
             event.chat_id,
