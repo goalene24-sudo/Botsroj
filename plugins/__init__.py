@@ -39,7 +39,6 @@ ALL_MODULES = [
     "plugins.owner",
     "plugins.sudo_panel",
     "plugins.media_search",
-    "plugins.google_images", # تمت الإضافة هنا
     "plugins.custom_commands",
     "plugins.admin_menus",
     "plugins.settings",
