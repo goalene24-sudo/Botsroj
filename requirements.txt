@@ -9,4 +9,3 @@ duckduckgo-search
 Flask
 google-generativeai
 yt-dlp
-Pillow
