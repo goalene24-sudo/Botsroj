@@ -48,7 +48,7 @@ async def start_akinator(event):
     try:
         # استخدام الصيغة التي تتوافق مع النسخة القديمة لديك
         aki = akinator.Akinator(
-            language=Language.ARABIC,
+            language=Language.AR,
             child_mode=True
         )
         q = await aki.start_game()
