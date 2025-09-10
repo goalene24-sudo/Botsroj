@@ -45,9 +45,11 @@ async def start_akinator(event):
     zed = await event.reply("`جارِ استدعاء المارد... 🧞`")
     
     try:
-        aki = akinator.Akinator()
-        # بدء اللعبة باللغة العربية - تم تصحيح اسم المتغير
-        q = await aki.start_game(language='ar', child_mode_enabled=True)
+        # --- تم التعديل هنا ---
+        # نقل الإعدادات إلى دالة التهيئة الرئيسية
+        aki = akinator.Akinator(language='ar', child_mode=True)
+        # بدء اللعبة بدون أي معاملات إضافية
+        q = await aki.start_game()
         
         game_state = {
             "aki": aki,
