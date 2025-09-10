@@ -15,7 +15,7 @@ ALL_MODULES = [
     "plugins.fun",
     "plugins.games",
     "plugins.animal",
-    "plugins.animations", # --- (تمت الإضافة هنا) ---
+    "plugins.animations",
     "plugins.fast_games",
     "plugins.replies",
     "plugins.default_replies",
@@ -39,6 +39,7 @@ ALL_MODULES = [
     "plugins.owner",
     "plugins.sudo_panel",
     "plugins.media_search",
+    "plugins.google_images", # تمت الإضافة هنا
     "plugins.custom_commands",
     "plugins.admin_menus",
     "plugins.settings",
