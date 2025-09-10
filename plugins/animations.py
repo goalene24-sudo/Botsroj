@@ -1,7 +1,8 @@
 # plugins/animations.py
 import asyncio
+from collections import deque
 from telethon import events
-from bot import client # استيراد الـ client الصحيح
+from bot import client
 from .utils import check_activation
 
 @client.on(events.NewMessage(pattern="^غبي$"))
@@ -125,6 +126,141 @@ async def kill(event):
     for i in animation_ttl:
         await asyncio.sleep(animation_interval)
         await zed.edit(animation_chars[i % 11])
+
+@client.on(events.NewMessage(pattern="^شنو$"))
+async def wht(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    animation_interval = 0.8
+    animation_ttl = range(5)
+    zed = await event.reply("شنو")
+    animation_chars = [
+        "هاي شنو",
+        "هاي شنو هاي",
+        "هاي شنو هاي يمعود",
+        "هاي شنو هاي يمعود!!",
+        "هاي شنو هاي يمعود!!\nhttps://telegra.ph/file/f3b760e4a99340d331f9b.jpg",
+    ]
+    for i in animation_ttl:
+        await asyncio.sleep(animation_interval)
+        await zed.edit(animation_chars[i % 5], link_preview=True)
+
+@client.on(events.NewMessage(pattern="^طوبه$"))
+async def toba(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    animation_interval = 0.3
+    animation_ttl = range(30)
+    zed = await event.reply("طوبة.. طبت.. طوبة.. طبت.. بيك...")
+    animation_chars = [
+        "🔴⬛⬛⬜⬜\n⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜",
+        "⬜⬜⬛⬜⬜\n⬜⬛⬜⬜⬜\n🔴⬜⬜⬜⬜",
+        "⬜⬜⬛⬜⬜\n⬜⬜⬛⬜⬜\n⬜⬜🔴⬜⬜",
+        "⬜⬜⬛⬜⬜\n⬜⬜⬜⬛⬜\n⬜⬜⬜⬜🔴",
+        "⬜⬜⬛⬛🔴\n⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜",
+        "⬜⬜⬛⬜⬜\n⬜⬜⬜⬛⬜\n⬜⬜⬜⬜🔴",
+        "⬜⬜⬛⬜⬜\n⬜⬜⬛⬜⬜\n⬜⬜🔴⬜⬜",
+        "⬜⬜⬛⬜⬜\n⬜⬛⬜⬜⬜\n🔴⬜⬜⬜⬜",
+        "🔴⬛⬛⬜⬜\n⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜",
+    ]
+    await asyncio.sleep(3)
+    for i in animation_ttl:
+        await asyncio.sleep(animation_interval)
+        await zed.edit(animation_chars[i % 9])
+
+@client.on(events.NewMessage(pattern="^شطرنج$"))
+async def chess(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    animation_interval = 0.3
+    animation_ttl = range(15)
+    zed = await event.reply("شطرنج....")
+    animation_chars = [
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬛⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬛⬛⬛⬜⬜\n⬜⬜⬛⬜⬛⬜⬜\n⬜⬜⬛⬛⬛⬜⬜\n⬜⬜⬜⬜⬜⬜⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬛⬛⬛⬛⬛⬛⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬛⬛⬛⬛⬛⬛",
+        "⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛",
+        "⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛⬜",
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬛⬛⬛⬛⬛⬛⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬛⬛⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬛⬛⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬛⬛⬛⬛⬛⬛",
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬛⬛⬛⬛⬛⬛⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬜⬛⬛⬛⬜⬛\n⬛⬜⬛⬜⬛⬜⬛\n⬛⬜⬛⬛⬛⬜⬛\n⬛⬜⬜⬜⬜⬜⬛\n⬛⬛⬛⬛⬛⬛⬛",
+        "⬜⬜⬜⬜⬜⬜⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬜⬛⬜⬛⬜\n⬜⬛⬜⬜⬜⬛⬜\n⬜⬛⬛⬛⬛⬛⬜\n⬜⬜⬜⬜⬜⬜⬜",
+        "⬛⬛⬛⬛⬛\n⬛⬜⬜⬜⬛\n⬛⬜⬛⬜⬛\n⬛⬜⬜⬜⬛\n⬛⬛⬛⬛⬛",
+        "⬜⬜⬜\n⬜⬛⬜\n⬜⬜⬜",
+        "🔴",
+        "لقد فزت ♚",
+    ]
+    for i in animation_ttl:
+        await asyncio.sleep(animation_interval)
+        await zed.edit(animation_chars[i % 15])
+
+@client.on(events.NewMessage(pattern="^حلويات$"))
+async def candi(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    zed = await event.reply("🍦")
+    deq = deque(list("🍦🍧🍩🍪🎂🍰🧁🍫🍬🍭"))
+    for _ in range(30):
+        await asyncio.sleep(0.4)
+        await zed.edit("".join(deq))
+        deq.rotate(1)
+
+@client.on(events.NewMessage(pattern="^جانجست$"))
+async def gangasta(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    zed = await event.reply("gangasta")
+    await zed.edit("EVERyBOdy")
+    await asyncio.sleep(0.3)
+    await zed.edit("iZ")
+    await asyncio.sleep(0.2)
+    await zed.edit("GangSTur")
+    await asyncio.sleep(0.5)
+    await zed.edit("UNtIL ")
+    await asyncio.sleep(0.2)
+    await zed.edit("I")
+    await asyncio.sleep(0.3)
+    await zed.edit("ArRivE")
+    await asyncio.sleep(0.3)
+    await zed.edit("🔥🔥🔥")
+    await asyncio.sleep(0.3)
+    await zed.edit("EVERyBOdy iZ GangSTur UNtIL I ArRivE 🔥🔥🔥")
+
+@client.on(events.NewMessage(pattern="^شحن$"))
+async def charging(event):
+    if not await check_activation(event.chat_id): return
+    if event.fwd_from:
+        return
+    zed = await event.reply("...جارِ الشحن")
+    await asyncio.sleep(1)
+    await zed.edit("█▒▒▒▒▒▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("██▒▒▒▒▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("███▒▒▒▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("████▒▒▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("█████▒▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("██████▒▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("███████▒▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("████████▒▒")
+    await asyncio.sleep(1)
+    await zed.edit("█████████▒")
+    await asyncio.sleep(1)
+    await zed.edit("██████████")
+    await asyncio.sleep(1)
+    await zed.edit("اكتمل الشحن بنجاح ✓")
 
 @client.on(events.NewMessage(pattern="^انميشن$"))
 async def anm(event):
