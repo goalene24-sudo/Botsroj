@@ -6,9 +6,10 @@ from telethon.tl.types import InputMediaPoll, Poll, PollAnswer
 from bot import client
 from .utils import check_activation, is_admin
 
+# --- (تم التعديل) تغيير "data" إلى "option" ---
 def build_poll_options(options_list):
     """Helper function to build PollAnswer objects."""
-    return [PollAnswer(text=option.strip(), data=i.to_bytes(1, 'big')) for i, option in enumerate(options_list)]
+    return [PollAnswer(text=option.strip(), option=i.to_bytes(1, 'big')) for i, option in enumerate(options_list)]
 
 @client.on(events.NewMessage(pattern=r"^استفتاء(?:\s|$)([\s\S]*)"))
 async def poll_creator(event):
