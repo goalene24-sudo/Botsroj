@@ -1,6 +1,7 @@
 # plugins/akinator_game.py
 import asyncio
 import akinator
+from akinator.utils import Language  # <-- تم إضافة هذا السطر الضروري
 from telethon import events, Button
 from bot import client
 from .utils import check_activation
@@ -45,9 +46,12 @@ async def start_akinator(event):
     zed = await event.reply("`جارِ استدعاء المارد... 🧞`")
     
     try:
-        # استخدام الكلاس الرئيسي من المكتبة الجديدة
-        aki = akinator.Akinator()
-        q = await aki.start_game(language='ar', child_mode=True)
+        # --- تم التعديل هنا ليناسب النسخة القديمة ---
+        aki = akinator.Akinator(
+            language=Language.ARABIC,  # استخدام الصيغة الصحيحة للغة
+            child_mode=True
+        )
+        q = await aki.start_game()  # بدء اللعبة بدون إعدادات هنا
         
         game_state = {
             "aki": aki,
