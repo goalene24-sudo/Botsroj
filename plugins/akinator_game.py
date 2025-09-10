@@ -12,19 +12,19 @@ ACTIVE_AKI_GAMES = {}
 def build_aki_buttons(chat_id, user_id):
     buttons = [
         [
-            Button.inline("✅ Yes", data=f"aki_ans:{chat_id}:{user_id}:y"),
-            Button.inline("❌ No", data=f"aki_ans:{chat_id}:{user_id}:n"),
-            Button.inline("❓ I don't know", data=f"aki_ans:{chat_id}:{user_id}:i"),
+            Button.inline("✅ نعم", data=f"aki_ans:{chat_id}:{user_id}:y"),
+            Button.inline("❌ لا", data=f"aki_ans:{chat_id}:{user_id}:n"),
+            Button.inline("❓ لا أعرف", data=f"aki_ans:{chat_id}:{user_id}:i"),
         ],
         [
-            Button.inline("👍 Probably", data=f"aki_ans:{chat_id}:{user_id}:p"),
-            Button.inline("👎 Probably not", data=f"aki_ans:{chat_id}:{user_id}:pn"),
+            Button.inline("👍 ربما", data=f"aki_ans:{chat_id}:{user_id}:p"),
+            Button.inline("👎 ربما لا", data=f"aki_ans:{chat_id}:{user_id}:pn"),
         ],
         [
-            Button.inline("🔙 Back", data=f"aki_ans:{chat_id}:{user_id}:b"),
+            Button.inline("🔙 رجوع للسؤال السابق", data=f"aki_ans:{chat_id}:{user_id}:b"),
         ],
         [
-            Button.inline("🚫 End Game", data=f"aki_ans:{chat_id}:{user_id}:end"),
+            Button.inline("🚫 إنهاء اللعبة", data=f"aki_ans:{chat_id}:{user_id}:end"),
         ]
     ]
     return buttons
@@ -46,8 +46,8 @@ async def start_akinator(event):
     
     try:
         aki = akinator.Akinator()
-        # --- (تم التعديل) إزالة تحديد اللغة من هنا ليتوافق مع المكتبة ---
-        q = await aki.start_game(child_mode=True)
+        # بدء اللعبة باللغة العربية - تم تصحيح اسم المتغير
+        q = await aki.start_game(language='ar', child_mode_enabled=True)
         
         game_state = {
             "aki": aki,
@@ -56,8 +56,7 @@ async def start_akinator(event):
         }
         
         buttons = build_aki_buttons(chat_id, user_id)
-        # تم تغيير النص ليناسب اللغة الإنجليزية المؤقتة
-        msg = await zed.edit(f"**🧞‍♂️ | Akinator asks:**\n\n**- {q}**", buttons=buttons)
+        msg = await zed.edit(f"**🧞‍♂️ | المارد يسأل:**\n\n**- {q}**", buttons=buttons)
         
         game_state["message_id"] = msg.id
         ACTIVE_AKI_GAMES[game_key] = game_state
@@ -69,56 +68,53 @@ async def start_akinator(event):
 @client.on(events.CallbackQuery(pattern=b"aki_ans:(.*)"))
 async def handle_akinator_answer(event):
     data_str = event.data.decode('utf-8')
-    _, chat_id_str, user_id_str, answer_code = data_str.split(':')
+    _, chat_id_str, user_id_str, answer = data_str.split(':')
     
     chat_id = int(chat_id_str)
     user_id = int(user_id_str)
 
     if event.sender_id != user_id:
-        await event.answer("🚫 | This game is not for you!", alert=True)
+        await event.answer("🚫 | هذه اللعبة ليست لك!", alert=True)
         return
 
     game_key = (chat_id, user_id)
 
     if game_key not in ACTIVE_AKI_GAMES:
-        await event.answer("This game has ended or been deleted.", alert=True)
-        await event.edit("`This game has ended.`")
+        await event.answer("هذه اللعبة قد انتهت أو تم حذفها.", alert=True)
+        await event.edit("`تم إنهاء هذه اللعبة.`")
         return
         
     game_state = ACTIVE_AKI_GAMES[game_key]
     aki = game_state["aki"]
     
-    # تحويل الرموز إلى الإجابات النصية التي تفهمها المكتبة
-    answer_map = {
-        'y': 'yes', 'n': 'no', 'i': "i don't know",
-        'p': 'probably', 'pn': 'probably not', 'b': 'back'
-    }
-    answer_text = answer_map.get(answer_code)
-
-    if answer_code == "end":
+    if answer == "end":
         del ACTIVE_AKI_GAMES[game_key]
-        await event.edit("**🧞‍♂️ | The game was ended at your request.**")
+        await event.edit("**🧞‍♂️ | تم إنهاء اللعبة بناءً على طلبك.**")
         return
         
-    await event.edit("`Analyzing your answer...`")
+    await event.edit("`جاري تحليل إجابتك...`")
     
     try:
-        if answer_text == "back":
+        if answer == "b":
+            # الرجوع للسؤال السابق
             q = await aki.back()
         else:
-            q = await aki.answer(answer_text)
+            # إرسال الإجابة
+            q = await aki.answer(answer)
 
         if aki.progression >= 80:
             await aki.win()
             guess = aki.first_guess
             
+            # بناء الرسالة النهائية
             result_text = (
-                f"**🧞‍♂️ | I think you are thinking of...**\n\n"
-                f"**Character: {guess['name']}**\n"
-                f"**Description:** {guess['description']}\n\n"
-                f"**Was my guess correct?**"
+                f"**🧞‍♂️ | أعتقد أنك تفكر في...**\n\n"
+                f"**الشخصية: {guess['name']}**\n"
+                f"**الوصف:** {guess['description']}\n\n"
+                f"**هل كان تخميني صحيحًا؟**"
             )
             
+            # إرسال الصورة إذا كانت متوفرة
             try:
                 await event.client.send_file(
                     event.chat_id,
@@ -132,13 +128,14 @@ async def handle_akinator_answer(event):
             del ACTIVE_AKI_GAMES[game_key]
             return
 
+        # عرض السؤال التالي
         buttons = build_aki_buttons(chat_id, user_id)
-        await event.edit(f"**🧞‍♂️ | Akinator asks (Progress: {int(aki.progression)}%):**\n\n**- {q}**", buttons=buttons)
+        await event.edit(f"**🧞‍♂️ | المارد يسأل (التقدم: {int(aki.progression)}%):**\n\n**- {q}**", buttons=buttons)
 
     except akinator.exceptions.AkiTimedOut:
         del ACTIVE_AKI_GAMES[game_key]
-        await event.edit("**Session with the genie has timed out. Try starting a new game.**")
+        await event.edit("**انتهى وقت الجلسة مع المارد. حاول بدء لعبة جديدة.**")
     except Exception as e:
-        await event.edit(f"**Sorry, an error occurred:**\n`{e}`")
+        await event.edit(f"**عذرًا، حدث خطأ:**\n`{e}`")
         if game_key in ACTIVE_AKI_GAMES:
             del ACTIVE_AKI_GAMES[game_key]
