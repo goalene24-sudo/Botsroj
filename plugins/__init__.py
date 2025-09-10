@@ -8,7 +8,7 @@ ALL_MODULES = [
     "plugins.protection",
     "plugins.cleaning",
     "plugins.admin",
-    "plugins.tagging", # --- (تمت الإضافة هنا) ---
+    "plugins.tagging",
     "plugins.aliases",
     "plugins.dictionary",
     "plugins.achievements",
@@ -20,6 +20,7 @@ ALL_MODULES = [
     "plugins.default_replies",
     "plugins.services",
     "plugins.tools",
+    "plugins.poll", # --- (تمت الإضافة هنا) ---
     "plugins.web_tools",
     "plugins.confess",
     "plugins.private",
