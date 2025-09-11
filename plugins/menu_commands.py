@@ -1,9 +1,18 @@
 from telethon import events, Button
 from bot import client, StartTime
+
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from sqlalchemy import func
+from database import DBSession
+from models import Chat, User
+
+# --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
-    check_activation, db, is_admin, get_uptime_string, 
+    check_activation, get_uptime_string, 
     GEMINI_ENABLED, has_bot_permission, build_protection_menu
 )
+# --- استيراد نصوص القوائم ---
 from .menu_texts import (
     FUN_MENU_TEXT, PROFILE_MENU_TEXT, SOCIAL_MENU_TEXT, TOOLS_MENU_TEXT,
     SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, SHOP_MENU_TEXT
@@ -61,13 +70,21 @@ async def protection_menu_command(event):
 @client.on(events.NewMessage(pattern=r"(?i)^\.?(م9|حول البوت)$"))
 async def about_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    total_groups, all_users = 0, set()
-    for chat_id_str in db:
-        if not chat_id_str.startswith('-'): continue
-        chat_info = db[chat_id_str]
-        if not chat_info.get("is_paused", False) and await is_admin(int(chat_id_str), 'me'):
-            total_groups += 1
-            all_users.update(chat_info.get("users", {}).keys())
+    
+    # --- جلب الإحصائيات من قاعدة البيانات الجديدة ---
+    async with DBSession() as session:
+        # حساب عدد المجموعات النشطة
+        total_groups_res = await session.execute(
+            select(func.count(Chat.id)).where(Chat.is_active == True)
+        )
+        total_groups = total_groups_res.scalar_one_or_none() or 0
+
+        # حساب عدد المستخدمين الفريدين في كل قاعدة البيانات
+        total_users_res = await session.execute(
+            select(func.count(func.distinct(User.user_id)))
+        )
+        total_users = total_users_res.scalar_one_or_none() or 0
+
     uptime = get_uptime_string(StartTime)
     description = "أنا بوت خدمي وترفيهي وإداري،\nتم تطويري لكي البي جميع احتياجاتك."
     about_text = (
@@ -75,7 +92,7 @@ async def about_menu_command(event):
         f"**{description}**\n\n"
         f"**📈 إحصائياتي الحالية:**\n"
         f"**- أخدم حالياً في:** `{total_groups}` **مجموعة.**\n"
-        f"**- أتفاعل مع:** `{len(all_users)}` **مستخدم.**\n"
+        f"**- أتفاعل مع:** `{total_users}` **مستخدم.**\n"
         f"**- أعمل بدون توقف منذ:** `{uptime}`\n"
     )
     buttons = [[Button.url("👨‍💻 المطور", "https://t.me/tit_50")]]
