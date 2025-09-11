@@ -1,8 +1,24 @@
-# plugins/custom_commands.py
-
+import json
 from telethon import events
 from bot import client
-from .utils import db
+
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from database import DBSession
+from models import User, GlobalSetting
+
+async def get_global_setting(key, default=None):
+    """جلب قيمة إعداد عام من قاعدة البيانات."""
+    async with DBSession() as session:
+        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting and setting.value:
+            try:
+                # محاولة فك تشفير JSON، إذا فشل، أرجع القيمة كنص عادي
+                return json.loads(setting.value)
+            except (json.JSONDecodeError, TypeError):
+                return setting.value
+        return default
 
 @client.on(events.NewMessage(pattern=r"^[!/](.*)"))
 async def custom_command_handler(event):
@@ -13,22 +29,26 @@ async def custom_command_handler(event):
     command = event.pattern_match.group(1).lower().strip().split()[0]
     
     # البحث عن الأمر في قاعدة البيانات
-    custom_commands = db.get("custom_commands", {})
+    custom_commands = await get_global_setting("custom_commands", {})
     
     if command in custom_commands:
-        reply_template = custom_commands[command].get("reply")
+        command_data = custom_commands[command]
+        reply_template = command_data.get("reply")
         
         if reply_template:
             # --- جلب البيانات الديناميكية ---
             sender = await event.get_sender()
             chat = await event.get_chat()
             
-            chat_id_str = str(chat.id)
-            sender_id_str = str(sender.id)
-            user_data = db.get(chat_id_str, {}).get("users", {}).get(sender_id_str, {})
+            # جلب بيانات المستخدم من قاعدة البيانات الجديدة
+            async with DBSession() as session:
+                result = await session.execute(
+                    select(User).where(User.chat_id == chat.id, User.user_id == sender.id)
+                )
+                user_data = result.scalar_one_or_none()
             
-            msg_count = user_data.get("msg_count", 0)
-            points = user_data.get("points", 0)
+            msg_count = user_data.msg_count if user_data else 0
+            points = user_data.points if user_data else 0
             
             # --- استبدال المتغيرات بالبيانات الحقيقية ---
             try:
