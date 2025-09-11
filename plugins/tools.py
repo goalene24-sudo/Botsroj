@@ -1,11 +1,19 @@
 import os
 import pytz
+import json
 from gtts import gTTS
 from datetime import datetime
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
+from sqlalchemy.future import select
+
 from bot import client
-from .utils import check_activation, db
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from database import DBSession
+from models import GlobalSetting, User
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import check_activation
+from .admin import get_or_create_chat
 
 # --- قواميس مساعدة ---
 TIMEZONE_MAP = {
@@ -27,23 +35,40 @@ DAYS_AR = {
     "Friday": "الجمعة"
 }
 
+# --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
+async def is_globally_disabled(command_name):
+    """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
+    async with DBSession() as session:
+        result = await session.execute(
+            select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
+        )
+        setting = result.scalar_one_or_none()
+        if setting and setting.value:
+            try:
+                disabled_list = json.loads(setting.value)
+                return command_name in disabled_list
+            except json.JSONDecodeError:
+                return False
+        return False
+
 @client.on(events.NewMessage(pattern="^معلومات المجموعة$"))
 async def group_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "معلومات المجموعة" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
+    if await is_globally_disabled("معلومات المجموعة"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        
     chat = await event.get_chat()
-    chat_id_str = str(event.chat_id)
     loading_msg = await event.reply("**جاي أحسب... 🤓**")
+    
     try:
         members_count = (await client.get_participants(event.chat_id, limit=0)).total
         admins = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
         admins_count = len(admins)
-        total_msgs = db.get(chat_id_str, {}).get("total_msgs", 0)
+        
+        async with DBSession() as session:
+            chat_obj = await get_or_create_chat(session, event.chat_id)
+            total_msgs = chat_obj.total_msgs
+            
         info_text = (
             f"**📊 هاي شنو وضع مجموعتكم... خل نشوف:**\n\n"
             f"**الاسم:** {chat.title}\n**الآيدي:** `{event.chat_id}`\n"
@@ -59,25 +84,26 @@ async def group_info_handler(event):
 @client.on(events.NewMessage(pattern="^احصائيات$"))
 async def group_stats_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "احصائيات" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    chat_id_str = str(event.chat_id)
-    users_data = db.get(chat_id_str, {}).get("users", {})
-    if not users_data:
+    if await is_globally_disabled("احصائيات"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+
+    async with DBSession() as session:
+        result = await session.execute(
+            select(User)
+            .where(User.chat_id == event.chat_id)
+            .order_by(User.msg_count.desc())
+            .limit(1)
+        )
+        most_active_user_obj = result.scalar_one_or_none()
+
+    if not most_active_user_obj or most_active_user_obj.msg_count == 0:
         return await event.reply("**ماكو احصائيات بعد، المجموعة جديدة لو محد يسولف؟ 🤔**")
-    most_active_id, max_msgs = None, -1
-    for user_id, data in users_data.items():
-        if data.get("msg_count", 0) > max_msgs:
-            max_msgs = data["msg_count"]
-            most_active_id = user_id
-    if not most_active_id:
-        return await event.reply("**ماكو أي نشاط مسجل حتى الآن.**")
+
+    max_msgs = most_active_user_obj.msg_count
+    most_active_id = most_active_user_obj.user_id
+    
     try:
-        user = await client.get_entity(int(most_active_id))
+        user = await client.get_entity(most_active_id)
         stats_text = (
             f"**🏆 نجم المجموعة (الأكثر حچياً):**\n\n"
             f"**هو البطل [{user.first_name}](tg://user?id={user.id})! 👑**\n"
@@ -91,15 +117,13 @@ async def group_stats_handler(event):
 @client.on(events.NewMessage(pattern=r"^احجي(?: (.*))?$"))
 async def tts_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "احجي" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
+    if await is_globally_disabled("احجي"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+
     text_to_say = event.pattern_match.group(1)
     if not text_to_say:
         return await event.reply("**شحچي؟ لازم تكتبلي كلام.\nمثال: `احجي صباح الخير`**")
+        
     loading_msg = await event.reply("**لحظة دا أسجل البصمة... 🎙️**")
     file_name = f"voice_{event.id}.ogg"
     try:
@@ -118,12 +142,9 @@ async def tts_handler(event):
 @client.on(events.NewMessage(pattern=r"^وقت(?: (.*))?$"))
 async def world_clock_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "وقت" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
+    if await is_globally_disabled("وقت"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        
     city_name_raw = event.pattern_match.group(1)
     if not city_name_raw:
         return await event.reply("**لمعرفة الوقت، اكتب اسم مدينة رئيسية.\nمثال: `وقت لندن`**")
@@ -153,15 +174,13 @@ async def world_clock_handler(event):
     except Exception as e:
         await event.reply(f"**صارت مشكلة وما گدرت أجيب الوقت.\n`{e}`**")
 
+
 @client.on(events.NewMessage(pattern=r"^عمري (.+)"))
 async def age_calculator_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "عمري" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
+    if await is_globally_disabled("عمري"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        
     date_str = event.pattern_match.group(1)
     try:
         birth_date = None
@@ -200,18 +219,14 @@ async def age_calculator_handler(event):
     except Exception as e:
         await event.reply(f"**صارت مشكلة وما گدرت أحسب عمرك.\n`{e}`**")
 
-# --- Developer Info Command ---
+
 @client.on(events.NewMessage(pattern=r"^المطور$"))
 async def developer_info_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "المطور" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    # --- معلومات المطور ---
-    DEV_USER_ID = 196351880
+    if await is_globally_disabled("المطور"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+        
+    DEV_USER_ID = 196351880 # معرف المطور
     dev_name = "وِهےـِمِے"
     dev_user = "@tit_50"
     dev_bio = "أڪبـر عِبـارة مُـريحـة مـا أحـزن اللـه عبـداً إِلا ليُـسعـدﮪ💙"
@@ -227,19 +242,15 @@ async def developer_info_handler(event):
     dev_button = Button.url(dev_button_text, dev_button_url)
     
     try:
-        # جلب الصورة الشخصية للمطور بشكل ديناميكي
         dev_photos = await client.get_profile_photos(DEV_USER_ID, limit=1)
         if not dev_photos:
-            # في حال لم تكن هناك صورة، يتم إرسال النص فقط
             await event.reply(caption_text, buttons=[[dev_button]])
             return
         
-        # إرسال الصورة مع النص والزر
         await event.reply(
             file=dev_photos[0],
             message=caption_text,
             buttons=[[dev_button]]
         )
     except Exception as e:
-        # في حال حدوث أي خطأ آخر، يتم إرسال النص فقط مع رسالة الخطأ
         await event.reply(f"{caption_text}\n\n⚠️ **تعذر جلب الصورة:** `{e}`", buttons=[[dev_button]])
