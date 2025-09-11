@@ -30,4 +30,9 @@ sudo_users_str = os.environ.get("SUDO_USERS", "").split(',')
 SUDO_USERS = [int(user_id) for user_id in sudo_users_str if user_id]
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# --- (تمت الإضافة) متغيرات بحث جوجل ---
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", None)
+GOOGLE_CX_ID = os.environ.get("GOOGLE_CX_ID", None)
+
+
 LOGGER.info(">> تم تحميل متغيرات الإعدادات بنجاح. <<")
