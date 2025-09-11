@@ -1,108 +1,139 @@
 import asyncio
-import re
 from datetime import datetime, timedelta
 from telethon import events, Button
+from sqlalchemy.future import select
+from sqlalchemy.orm.attributes import flag_modified
+
 from bot import client
-from .utils import check_activation, db, save_db, get_user_rank, Ranks
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from database import DBSession
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import check_activation, get_user_rank, Ranks
+from .admin import get_or_create_chat, get_or_create_user
 
-# --- إعدادات نظام التحذيرات ---
-MAX_WARNS = 3
-MUTE_DURATION_ON_MAX_WARNS = 1440
+# --- معالج الكتم المؤقت عبر الأزرار ---
+@client.on(events.CallbackQuery(pattern=b"^mute_"))
+async def mute_callback_handler(event):
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD:
+        return await event.answer("🚫 | هذا الأمر للمشرفين فقط.", alert=True)
 
-# --- دوال مساعدة لنظام التحذيرات ---
-def add_user_warn(chat_id, user_id):
-    chat_id_str, user_id_str = str(chat_id), str(user_id)
-    if "warns" not in db.get(chat_id_str, {}): db[chat_id_str]["warns"] = {}
-    new_warns = db[chat_id_str]["warns"].get(user_id_str, 0) + 1
-    db[chat_id_str]["warns"][user_id_str] = new_warns
-    save_db(db)
-    return new_warns
+    try:
+        data = event.data.decode().split('_')
+        user_id_to_mute = int(data[1])
+        duration_minutes = int(data[2])
+    except (ValueError, IndexError):
+        return await event.edit("❌ | بيانات الزر غير صالحة.")
 
-def reset_user_warns(chat_id, user_id):
-    chat_id_str, user_id_str = str(chat_id), str(user_id)
-    if "warns" in db.get(chat_id_str, {}) and user_id_str in db[chat_id_str]["warns"]:
-        del db[chat_id_str]["warns"][user_id_str]
-        save_db(db)
-        return True
-    return False
+    if duration_minutes == -1: # إلغاء
+        return await event.edit("✅ | تم إلغاء أمر الكتم.")
+
+    try:
+        user_to_mute_entity = await client.get_entity(user_id_to_mute)
+    except Exception:
+        return await event.edit("❌ | لا يمكن العثور على المستخدم لكتمه.")
+
+    target_rank = await get_user_rank(user_id_to_mute, event.chat_id)
+    if target_rank >= actor_rank:
+        return await event.answer("❌ | لا يمكنك كتم شخص رتبته أعلى منك أو تساوي رتبتك!", alert=True)
+
+    until_date = None
+    duration_text = "دائم"
+    if duration_minutes > 0:
+        until_date = datetime.now() + timedelta(minutes=duration_minutes)
+        if duration_minutes == 60: duration_text = "لمدة ساعة"
+        elif duration_minutes == 1440: duration_text = "لمدة يوم"
+
+    try:
+        await client.edit_permissions(event.chat_id, user_to_mute_entity, send_messages=False, until_date=until_date)
+        await event.edit(f"**🤫 تم كتم [{user_to_mute_entity.first_name}](tg://user?id={user_id_to_mute}) {duration_text}.**")
+    except Exception as e:
+        await event.edit(f"**❌ | حدث خطأ أثناء الكتم:**\n`{e}`")
+
 
 # --- أوامر فلتر الكلمات ---
 @client.on(events.NewMessage(pattern=r"^اضف كلمة ممنوعة(?: (.*))?$"))
 async def add_filtered_word(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    actor_rank = await get_user_rank(event.sender_id, event)
-    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
 
     word = event.pattern_match.group(1)
     if not word:
         return await event.reply("**الأمر يحتاج كلمة. الاستخدام الصحيح:\n`اضف كلمة ممنوعة [الكلمة اللي تريد تمنعها]`**")
 
     word = word.strip()
-    chat_id_str = str(event.chat_id)
+    async with DBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
+        filtered_words = chat.filtered_words or []
 
-    if "filtered_words" not in db.get(chat_id_str, {}):
-        db[chat_id_str]["filtered_words"] = []
-
-    if word.lower() in [w.lower() for w in db[chat_id_str]["filtered_words"]]:
-        return await event.reply(f"**الكلمة '{word}' هي أصلاً ممنوعة يمعود.**")
+        if word.lower() in [w.lower() for w in filtered_words]:
+            return await event.reply(f"**الكلمة '{word}' هي أصلاً ممنوعة يمعود.**")
+        
+        filtered_words.append(word)
+        chat.filtered_words = filtered_words
+        flag_modified(chat, "filtered_words")
+        await session.commit()
     
-    db[chat_id_str]["filtered_words"].append(word)
-    save_db(db)
     await event.reply(f"**✅ تمام، ضفت الكلمة '{word}' لقائمة الممنوعات.**")
+
 
 @client.on(events.NewMessage(pattern=r"^حذف كلمة ممنوعة(?: (.*))?$"))
 async def remove_filtered_word(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    actor_rank = await get_user_rank(event.sender_id, event)
-    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
 
     word_to_remove = event.pattern_match.group(1)
     if not word_to_remove:
         return await event.reply("**الأمر يحتاج كلمة. الاستخدام الصحيح:\n`حذف كلمة ممنوعة [الكلمة اللي تريد تحذفها]`**")
 
-    word_to_remove = word_to_remove.strip()
-    chat_id_str = str(event.chat_id)
-    
-    filtered_words = db.get(chat_id_str, {}).get("filtered_words", [])
-    
+    word_to_remove = word_to_remove.strip().lower()
     word_found = None
-    for w in filtered_words:
-        if w.lower() == word_to_remove.lower():
-            word_found = w
-            break
 
-    if word_found:
-        filtered_words.remove(word_found)
-        save_db(db)
-        await event.reply(f"**✅ خوش، حذفت الكلمة '{word_found}' من قائمة الممنوعات.**")
-    else:
-        await event.reply(f"**الكلمة '{word_to_remove}' هي أصلاً مموجودة بقائمة الممنوعات.**")
+    async with DBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
+        filtered_words = chat.filtered_words or []
+        
+        for w in filtered_words:
+            if w.lower() == word_to_remove:
+                word_found = w
+                break
+
+        if word_found:
+            filtered_words.remove(word_found)
+            chat.filtered_words = filtered_words
+            flag_modified(chat, "filtered_words")
+            await session.commit()
+            await event.reply(f"**✅ خوش، حذفت الكلمة '{word_found}' من قائمة الممنوعات.**")
+        else:
+            await event.reply(f"**الكلمة '{word_to_remove}' هي أصلاً مموجودة بقائمة الممنوعات.**")
+
 
 @client.on(events.NewMessage(pattern="^الكلمات الممنوعة$"))
 async def list_filtered_words(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    actor_rank = await get_user_rank(event.sender_id, event)
-    if actor_rank < Ranks.GROUP_ADMIN: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
     
-    chat_id_str = str(event.chat_id)
-    words = db.get(chat_id_str, {}).get("filtered_words", [])
+    async with DBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
+        words = chat.filtered_words or []
 
     if not words:
         return await event.reply("**قائمة الكلمات الممنوعة فارغة حالياً. كلشي مسموح 😉**")
 
-    message = "**🚫 قائمة الكلمات الممنوعة:**\n\n"
-    for word in words:
-        message += f"- `{word}`\n"
-    
+    message = "**🚫 قائمة الكلمات الممنوعة:**\n\n" + "\n".join(f"- `{word}`" for word in words)
     await event.reply(message)
 
-# --- المعالج الموحد لأوامر الإدارة مع حماية هرمية ---
+
+# --- المعالج الموحد لأوامر الإدارة ---
 @client.on(events.NewMessage(pattern=r"^(حظر|الغاء الحظر|كتم|الغاء الكتم|تحذير|حذف التحذيرات)$"))
 async def consolidated_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    actor_rank = await get_user_rank(event.sender_id, event)
-    if actor_rank < Ranks.GROUP_ADMIN:
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD:
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق. 😒**")
 
     reply = await event.get_reply_message()
@@ -113,7 +144,7 @@ async def consolidated_admin_handler(event):
     if user_to_manage.id == me.id:
         return await event.reply("**لا يمكنك استخدام هذا الأمر على البوت نفسه.**")
     
-    target_rank = await get_user_rank(user_to_manage.id, event)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
     
     if target_rank >= actor_rank:
         return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
@@ -137,19 +168,32 @@ async def consolidated_admin_handler(event):
             await client.edit_permissions(event.chat_id, user_to_manage, send_messages=True)
             await event.reply(f"**🗣️ يلا احچي [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
         elif action == "تحذير":
-            new_warn_count = add_user_warn(event.chat_id, user_to_manage.id)
-            if new_warn_count >= MAX_WARNS:
-                until_date = datetime.now() + timedelta(minutes=MUTE_DURATION_ON_MAX_WARNS)
-                await client.edit_permissions(event.chat_id, user_to_manage, send_messages=False, until_date=until_date)
-                await event.reply(f"**❗️وصل للحد الأقصى!❗️**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) وصل {new_warn_count}/{MAX_WARNS} تحذيرات.**\n\n**تم كتمه تلقائياً لمدة 24 ساعة. 🤫**")
-                reset_user_warns(event.chat_id, user_to_manage.id)
-            else:
-                await event.reply(f"**⚠️ تم توجيه تحذير!**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) استلم تحذيراً.**\n\n**صار عنده هسه {new_warn_count}/{MAX_WARNS} تحذيرات. دير بالك مرة لخ!**")
+            async with DBSession() as session:
+                user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
+                chat_obj = await get_or_create_chat(session, event.chat_id)
+                
+                user_obj.warns += 1
+                new_warn_count = user_obj.warns
+                max_warns = chat_obj.settings.get("max_warns", 3)
+                
+                if new_warn_count >= max_warns:
+                    until_date = datetime.now() + timedelta(minutes=1440) # 24 hours
+                    await client.edit_permissions(event.chat_id, user_to_manage, send_messages=False, until_date=until_date)
+                    await event.reply(f"**❗️وصل للحد الأقصى!❗️**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) وصل {new_warn_count}/{max_warns} تحذيرات.**\n\n**تم كتمه تلقائياً لمدة 24 ساعة. 🤫**")
+                    user_obj.warns = 0 # Reset warns after punishment
+                else:
+                    await event.reply(f"**⚠️ تم توجيه تحذير!**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) استلم تحذيراً.**\n\n**صار عنده هسه {new_warn_count}/{max_warns} تحذيرات. دير بالك مرة لخ!**")
+                
+                await session.commit()
         elif action == "حذف التحذيرات":
-            if reset_user_warns(event.chat_id, user_to_manage.id):
-                await event.reply(f"**✅ تم تصفير العداد.**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) رجع خوش آدمي وما عنده أي تحذير.**")
-            else:
-                await event.reply(f"**هذا العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) أصلاً ما عنده أي تحذيرات. 😇**")
+            async with DBSession() as session:
+                user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
+                if user_obj.warns > 0:
+                    user_obj.warns = 0
+                    await session.commit()
+                    await event.reply(f"**✅ تم تصفير العداد.**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) رجع خوش آدمي وما عنده أي تحذير.**")
+                else:
+                    await event.reply(f"**هذا العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) أصلاً ما عنده أي تحذيرات. 😇**")
     except Exception as e:
         await event.reply(f"**ماگدرت اسويها، اكو مشكلة: `{str(e)}`**")
 
@@ -157,8 +201,8 @@ async def consolidated_admin_handler(event):
 async def timed_mute_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
-    actor_rank = await get_user_rank(event.sender_id, event)
-    if actor_rank < Ranks.GROUP_ADMIN:
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    if actor_rank < Ranks.MOD:
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق. 😒**")
 
     reply = await event.get_reply_message()
@@ -169,7 +213,7 @@ async def timed_mute_handler(event):
     if user_to_mute.id == me.id:
         return await event.reply("**لا يمكنك استخدام هذا الأمر على البوت نفسه.**")
     
-    target_rank = await get_user_rank(user_to_mute.id, event)
+    target_rank = await get_user_rank(user_to_mute.id, event.chat_id)
     if target_rank >= actor_rank:
         return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
         
