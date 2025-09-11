@@ -1,45 +1,39 @@
-# plugins/profile.py
 import time
 import random
 from datetime import datetime, timedelta
 from telethon import events
+from sqlalchemy.future import select
+from sqlalchemy.orm.attributes import flag_modified
+
 from bot import client
-# --- (مُعَدَّل) حذف استيراد غير ضروري ---
-# from telethon.tl import types
-# --- (مُعَدَّل) استيراد الدوال الجديدة ---
-from .utils import check_activation, db, add_points, save_db, get_user_rank, Ranks, get_rank_name
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from database import DBSession
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import check_activation, add_points, get_user_rank, Ranks, get_rank_name
+from .admin import get_or_create_user
+
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
 async def my_stats_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    points = user_data.get("points", 0)
-    msg_count = user_data.get("msg_count", 0)
-    bio = user_data.get("bio")
-    join_date = user_data.get("join_date")
-    gifted_points = user_data.get("gifted_points", 0)
-    married_to = user_data.get("married_to")
-    best_friend = user_data.get("best_friend")
-    
-    inventory = user_data.get("inventory", {})
-    title = None
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
+        
+        married_to = inventory.get("married_to")
+        best_friend = inventory.get("best_friend")
+        gifted_points = inventory.get("gifted_points", 0)
+        
+        title = None
+        custom_title_item = inventory.get("تخصيص لقب")
+        if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400:
+            title = user_obj.custom_title
 
-    custom_title_item = inventory.get("تخصيص لقب")
-    if custom_title_item:
-        purchase_time = custom_title_item.get("purchase_time", 0)
-        duration_seconds = custom_title_item.get("duration_days", 0) * 86400
-        if time.time() - purchase_time < duration_seconds:
-            title = user_data.get("custom_title")
-
-    if not title:
-        vip_item = inventory.get("لقب vip")
-        if vip_item:
-            purchase_time = vip_item.get("purchase_time", 0)
-            duration_seconds = vip_item.get("duration_days", 0) * 86400
-            if time.time() - purchase_time < duration_seconds:
+        if not title:
+            vip_item = inventory.get("لقب vip")
+            if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
                 title = "عضو مميز 🎖️"
 
     profile_text = f"**📈 سجلك الشخصي يا [{sender.first_name}](tg://user?id={sender.id})**\n\n"
@@ -56,8 +50,8 @@ async def my_stats_handler(event):
         bff_name = best_friend.get("name")
         profile_text += f"**🫂 الصديق المفضل:** [{bff_name}](tg://user?id={bff_id})\n"
 
-    if join_date:
-        profile_text += f"**📅 تاريخ الانضمام:** {join_date}\n"
+    if user_obj.join_date:
+        profile_text += f"**📅 تاريخ الانضمام:** {user_obj.join_date}\n"
         
     if title:
         profile_text += f"**🎖️ اللقب:** {title}\n"
@@ -69,6 +63,7 @@ async def my_stats_handler(event):
     
     await event.reply(profile_text)
 
+
 @client.on(events.NewMessage(pattern=r"^اهداء (\d+)$"))
 async def gift_points_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -77,7 +72,6 @@ async def gift_points_handler(event):
     
     sender = await event.get_sender()
     receiver = await reply.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
 
     if sender.id == receiver.id:
         return await event.reply("**ما يصير تهدي نقاط لنفسك!**")
@@ -89,18 +83,22 @@ async def gift_points_handler(event):
     except (ValueError, IndexError):
         return await event.reply("**الأمر غلط. اكتب `اهداء` وبعدها عدد النقاط.**")
 
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    sender_points = user_data.get("points", 0)
+    async with DBSession() as session:
+        sender_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        
+        if sender_obj.points < amount:
+            return await event.reply(f"**مع الأسف، ما عندك نقاط كافية. نقاطك الحالية: {sender_obj.points}**")
 
-    if sender_points < amount:
-        return await event.reply(f"**مع الأسف، ما عندك نقاط كافية. نقاطك الحالية: {sender_points}**")
-
-    add_points(event.chat_id, sender.id, -amount)
-    add_points(event.chat_id, receiver.id, amount)
-    
-    user_data["gifted_points"] = user_data.get("gifted_points", 0) + amount
-    db[chat_id_str]["users"][user_id_str] = user_data
-    save_db(db)
+        # دوال add_points تتعامل مع الجلسات الخاصة بها
+        await add_points(event.chat_id, sender.id, -amount)
+        await add_points(event.chat_id, receiver.id, amount)
+        
+        # تحديث النقاط المهدَاة
+        sender_inventory = sender_obj.inventory or {}
+        sender_inventory["gifted_points"] = sender_inventory.get("gifted_points", 0) + amount
+        sender_obj.inventory = sender_inventory
+        flag_modified(sender_obj, "inventory")
+        await session.commit()
 
     await event.reply(
         f"**🎁 تمت الهدية بنجاح!**\n\n"
@@ -114,34 +112,33 @@ async def daily_reward_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-    
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    last_reward_time = user_data.get("last_reward", 0)
+    cooldown = 24 * 60 * 60
     current_time = int(time.time())
     
-    cooldown = 24 * 60 * 60 
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
+        last_reward_time = inventory.get("last_reward", 0)
+        
+        if current_time - last_reward_time < cooldown:
+            remaining_seconds = cooldown - (current_time - last_reward_time)
+            remaining_time = str(timedelta(seconds=remaining_seconds)).split('.')[0]
+            return await event.reply(f"**ما تستلم راتبك بعد! تعال باچر. 😅\n\nالوقت المتبقي: {remaining_time}**")
 
-    if current_time - last_reward_time < cooldown:
-        remaining_seconds = cooldown - (current_time - last_reward_time)
-        remaining_time = str(timedelta(seconds=remaining_seconds)).split('.')[0]
-        return await event.reply(f"**ما تستلم راتبك بعد! تعال باچر. 😅\n\nالوقت المتبقي: {remaining_time}**")
-
-    reward = random.randint(100, 500)
-    add_points(event.chat_id, sender.id, reward)
-    
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_db.setdefault(user_id_str, {})["last_reward"] = current_time
-    save_db(db)
+        reward = random.randint(100, 500)
+        await add_points(event.chat_id, sender.id, reward)
+        
+        inventory["last_reward"] = current_time
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        await session.commit()
     
     await event.reply(f"**🎉 استلمت راتبك اليومي! 🎉**\n\n**تمت إضافة {reward} نقطة إلى رصيدك. تعال باچر حتى تستلم بعد!**")
+
 
 @client.on(events.NewMessage(pattern=r"^ضع نبذة(?: (.*))?$"))
 async def set_bio_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-        
-    sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
     bio_text = event.pattern_match.group(1)
     
@@ -151,46 +148,58 @@ async def set_bio_handler(event):
     if len(bio_text) > 70:
         return await event.reply("**النبذة طويلة جداً! لازم تكون أقل من 70 حرف.**")
 
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_db.setdefault(user_id_str, {})["bio"] = bio_text
-    save_db(db)
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
+        user_obj.bio = bio_text
+        await session.commit()
     
     await event.reply("**✅ تم حفظ نبذتك بنجاح. ستظهر الآن في ملفك الشخصي عند استخدام أمر `ايدي`.**")
+
 
 @client.on(events.NewMessage(pattern="^طلاق$"))
 async def divorce_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    married_to = user_data.get("married_to")
-    
-    if not married_to:
-        return await event.reply("**انت أصلاً أعزب/عزباء، منو تطلگ؟ 😂**")
+    async with DBSession() as session:
+        sender_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        sender_inventory = sender_obj.inventory or {}
+        married_to = sender_inventory.get("married_to")
         
-    partner_id = married_to.get("id")
-    partner_name = married_to.get("name")
-    partner_id_str = str(partner_id)
-    
-    del db[chat_id_str]["users"][user_id_str]["married_to"]
-    if partner_id_str in db[chat_id_str]["users"] and "married_to" in db[chat_id_str]["users"][partner_id_str]:
-        del db[chat_id_str]["users"][partner_id_str]["married_to"]
-    
-    save_db(db)
+        if not married_to:
+            return await event.reply("**انت أصلاً أعزب/عزباء، منو تطلگ؟ 😂**")
+            
+        partner_id = married_to.get("id")
+        partner_name = married_to.get("name")
+        
+        # حذف بيانات الزواج من الطرف الأول
+        del sender_inventory["married_to"]
+        sender_obj.inventory = sender_inventory
+        flag_modified(sender_obj, "inventory")
+        
+        # حذف بيانات الزواج من الطرف الثاني
+        partner_obj = await get_or_create_user(session, event.chat_id, partner_id)
+        partner_inventory = partner_obj.inventory or {}
+        if "married_to" in partner_inventory:
+            del partner_inventory["married_to"]
+            partner_obj.inventory = partner_inventory
+            flag_modified(partner_obj, "inventory")
+            
+        await session.commit()
     
     await event.reply(f"**💔 تم الطلاق رسمياً!**\n\n**انفصل [{sender.first_name}](tg://user?id={sender.id}) عن [{partner_name}](tg://user?id={partner_id}). كلمن راح بطريقه.**")
+
 
 @client.on(events.NewMessage(pattern="^ممتلكاتي$"))
 async def my_inventory_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    inventory = user_data.get("inventory", {})
+    
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
 
     if not inventory:
         return await event.reply("**حقيبة ممتلكاتك فارغة! قم بشراء بعض الأغراض من `المتجر`.**")
@@ -199,9 +208,10 @@ async def my_inventory_handler(event):
     current_time = int(time.time())
 
     for item_name, data in inventory.items():
+        if not isinstance(data, dict): continue # تجاهل البيانات غير الصالحة
+        
         duration_days = data.get("duration_days")
-        if duration_days is None:
-            continue
+        if duration_days is None: continue
 
         purchase_time = data.get("purchase_time", 0)
         duration_seconds = duration_days * 86400
@@ -228,12 +238,10 @@ async def my_inventory_handler(event):
 
     await event.reply(inventory_text)
 
+
 @client.on(events.NewMessage(pattern=r"^ضع ميلادي (.*)$"))
 async def set_birthday_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-        
-    sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
     date_str = event.pattern_match.group(1).strip()
     
@@ -241,7 +249,7 @@ async def set_birthday_handler(event):
         day, month = map(int, date_str.replace('/', '-').split('-'))
         if not (1 <= day <= 31 and 1 <= month <= 12):
             raise ValueError("Invalid day or month")
-        datetime(year=2024, month=month, day=day)
+        datetime(year=2024, month=month, day=day) # للتحقق من صحة التاريخ
     except (ValueError, IndexError):
         return await event.reply(
             "**الصيغة غلط! ❌**\n"
@@ -249,23 +257,29 @@ async def set_birthday_handler(event):
             "**مثال:** `ضع ميلادي 25-12`"
         )
 
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_db.setdefault(user_id_str, {})["birthday"] = {"day": day, "month": month}
-    save_db(db)
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
+        inventory = user_obj.inventory or {}
+        inventory["birthday"] = {"day": day, "month": month}
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        await session.commit()
     
     await event.reply(f"**✅ تم حفظ تاريخ ميلادك بنجاح:** `{day}-{month}`")
+
 
 @client.on(events.NewMessage(pattern="^نقاطي$"))
 async def my_points_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    points = user_data.get("points", 0)
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        points = user_obj.points
     
     await event.reply(f"**💰 نقاطك الحالية يا [{sender.first_name}](tg://user?id={sender.id}) هي:** `{points}` **نقطة.**")
+
 
 @client.on(events.NewMessage(pattern="^صديقي المفضل$"))
 async def set_best_friend_handler(event):
@@ -277,7 +291,6 @@ async def set_best_friend_handler(event):
         
     sender = await event.get_sender()
     bff = await reply.get_sender()
-    chat_id_str, sender_id_str = str(event.chat_id), str(sender.id)
     
     if sender.id == bff.id:
         return await event.reply("**ما يصير تختار نفسك! 😂**")
@@ -285,33 +298,40 @@ async def set_best_friend_handler(event):
     if bff.bot:
         return await event.reply("**لا يمكنك اختيار بوت كصديقك المفضل.**")
         
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    sender_data = user_db.setdefault(sender_id_str, {})
-    
-    sender_data["best_friend"] = {"id": bff.id, "name": bff.first_name}
-    save_db(db)
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
+        inventory["best_friend"] = {"id": bff.id, "name": bff.first_name}
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        await session.commit()
     
     await event.reply(
         f"**💖 صداقة جديدة! 💖**\n\n"
         f"**أعلن [{sender.first_name}](tg://user?id={sender.id}) أن [{bff.first_name}](tg://user?id={bff.id}) هو صديقه المفضل!**"
     )
 
+
 @client.on(events.NewMessage(pattern="^حذف صديقي المفضل$"))
 async def delete_best_friend_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-        
+    
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    
-    if "best_friend" in user_data:
-        bff_name = user_data["best_friend"].get("name", "صديقك")
-        del db[chat_id_str]["users"][user_id_str]["best_friend"]
-        save_db(db)
-        await event.reply(f"**🗑️ تم حذف {bff_name} من قائمة أصدقائك المفضلين.**")
-    else:
-        await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
+        
+        if "best_friend" in inventory:
+            bff_name = inventory["best_friend"].get("name", "صديقك")
+            del inventory["best_friend"]
+            user_obj.inventory = inventory
+            flag_modified(user_obj, "inventory")
+            await session.commit()
+            await event.reply(f"**🗑️ تم حذف {bff_name} من قائمة أصدقائك المفضلين.**")
+        else:
+            await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
+
 
 @client.on(events.NewMessage(pattern=r"^\.?رتبتي$"))
 async def my_rank_handler(event):
@@ -321,31 +341,24 @@ async def my_rank_handler(event):
     rank_name = get_rank_name(rank_level)
     
     rank_emoji_map = {
-        Ranks.MAIN_DEV: "👨‍💻",
-        Ranks.SECONDARY_DEV: "🛠️",
-        Ranks.OWNER: "👑",
-        Ranks.CREATOR: "⚜️",
-        Ranks.ADMIN: "🤖",
-        Ranks.MOD: "🛡️",
-        Ranks.VIP: "✨",
-        Ranks.MEMBER: "👤"
+        Ranks.MAIN_DEV: "👨‍💻", Ranks.SECONDARY_DEV: "🛠️", Ranks.OWNER: "👑",
+        Ranks.CREATOR: "⚜️", Ranks.ADMIN: "🤖", Ranks.MOD: "🛡️",
+        Ranks.VIP: "✨", Ranks.MEMBER: "👤"
     }
     emoji = rank_emoji_map.get(rank_level, "👤")
     
     await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
 
-# --- (مُصحَّح) أمر صلاحياتي بمنطق جديد ---
+
 @client.on(events.NewMessage(pattern="^صلاحياتي$"))
 async def my_permissions_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
     
-    # الخطوة 1: الحصول على رتبة المستخدم من نظام البوت
     rank_level = await get_user_rank(sender.id, event.chat_id)
     rank_name = get_rank_name(rank_level)
 
-    # الخطوة 2: التعامل مع الرتب الإدارية العليا في البوت
     if rank_level >= Ranks.ADMIN:
         permissions_text = (
             f"**⚜️ | صلاحياتك يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
@@ -354,7 +367,6 @@ async def my_permissions_handler(event):
         )
         return await event.reply(permissions_text)
 
-    # الخطوة 3: التعامل مع "المشرفين" وعرض صلاحياتهم من تيليجرام
     if rank_level == Ranks.MOD:
         try:
             participant = await client.get_permissions(event.chat_id, sender.id)
@@ -363,17 +375,15 @@ async def my_permissions_handler(event):
             
             perms = participant.admin_rights
             PERMISSIONS_MAP = {
-                "change_info": "تغيير معلومات المجموعة",
-                "delete_messages": "حذف الرسائل",
-                "ban_users": "حظر/طرد المستخدمين",
-                "invite_users": "دعوة مستخدمين جدد",
-                "pin_messages": "تثبيت الرسائل",
-                "add_admins": "إضافة مشرفين جدد",
+                "change_info": "تغيير معلومات المجموعة", "delete_messages": "حذف الرسائل",
+                "ban_users": "حظر/طرد المستخدمين", "invite_users": "دعوة مستخدمين جدد",
+                "pin_messages": "تثبيت الرسائل", "add_admins": "إضافة مشرفين جدد",
                 "manage_call": "إدارة المحادثات الصوتية"
             }
             
             permissions_text = f"**⚜️ | صلاحياتك كمشرف يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
             
+            # This part for anonymous admins might need adjustment based on telethon version
             if hasattr(participant, 'participant') and hasattr(participant.participant, 'anonymous') and participant.participant.anonymous:
                 permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
             
@@ -387,5 +397,4 @@ async def my_permissions_handler(event):
         except Exception:
              return await event.reply(f"**رتبتك هي `{rank_name}`، لكن حدث خطأ أثناء محاولة قراءة صلاحياتك.**")
 
-    # الخطوة 4: التعامل مع الرتب الأقل
     await event.reply("**ليس لديك أي صلاحيات إدارية خاصة في هذه المجموعة.**")
