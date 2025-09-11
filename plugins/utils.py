@@ -9,7 +9,8 @@ from telethon.errors.rpcerrorlist import UserNotParticipantError
 
 # --- (تم التعديل) استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import User, Vip, SecondaryDev, Creator, BotAdmin, Group, CommandSetting, Lock, CustomCommand, GlobalSetting, Chat
 
 # --- تعريف مستويات الرتب ---
@@ -66,14 +67,14 @@ async def get_or_create_user(session, chat_id, user_id):
     return user
 
 async def is_vip(chat_id, user_id):
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id)
         )
         return result.scalar_one_or_none() is not None
 
 async def is_secondary_dev(chat_id, user_id):
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id)
         )
@@ -93,7 +94,7 @@ async def get_user_rank(user_id, chat_id):
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         if (await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))).scalar_one_or_none():
             return Ranks.SECONDARY_DEV
 
@@ -104,7 +105,7 @@ async def get_user_rank(user_id, chat_id):
     except UserNotParticipantError: pass
     except Exception: pass
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         if (await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))).scalar_one_or_none():
             return Ranks.CREATOR
         
@@ -118,7 +119,7 @@ async def get_user_rank(user_id, chat_id):
     except (UserNotParticipantError, ChatAdminRequiredError): pass
     except Exception: pass
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         if (await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))).scalar_one_or_none():
             return Ranks.VIP
 
@@ -153,7 +154,7 @@ async def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(CustomCommand))
         custom_commands = result.scalars().all()
     
@@ -169,7 +170,7 @@ GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "
 ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
 
 async def is_command_enabled(chat_id, command_key):
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(CommandSetting).where(CommandSetting.chat_id == chat_id, CommandSetting.command == command_key)
         )
@@ -190,20 +191,20 @@ async def has_bot_permission(event):
     return rank >= Ranks.MOD
 
 async def check_activation(chat_id):
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
         return group.is_active if group else True
 
 async def add_points(chat_id, user_id, points_to_add):
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user = await get_or_create_user(session, chat_id, user_id)
         user.points += points_to_add
         await session.commit()
 
 async def build_protection_menu(chat_id):
     buttons, row = [], []
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(Lock).where(Lock.chat_id == chat_id))
         locks = {lock.lock_type: lock.is_locked for lock in result.scalars().all()}
 
