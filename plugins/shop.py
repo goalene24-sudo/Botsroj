@@ -6,10 +6,12 @@ from sqlalchemy.orm.attributes import flag_modified
 from bot import client
 import config
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points
-from .admin import get_or_create_chat, get_or_create_user
+# (ملاحظة: get_or_create_user موجودة في utils، لذا تم تبسيط الاستيراد)
+from .utils import get_or_create_user, get_or_create_chat
+
 
 # تعريف أغراض المتجر
 SHOP_ITEMS = {
@@ -59,7 +61,7 @@ async def buy_item_handler(event):
     price = item_details["price"]
     is_developer = sender.id in config.SUDO_USERS
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
 
         if not is_developer and user_obj.points < price:
@@ -120,7 +122,7 @@ async def set_custom_title_handler(event):
     
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         
@@ -161,7 +163,7 @@ async def deposit_handler(event):
     except (ValueError, IndexError):
         return await event.reply("**الرجاء إدخال مبلغ صحيح.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         
         if user_obj.points < amount:
@@ -191,7 +193,7 @@ async def withdraw_handler(event):
     except (ValueError, IndexError):
         return await event.reply("**الرجاء إدخال مبلغ صحيح.**")
         
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         bank_balance = inventory.get("bank_balance", 0)
@@ -216,7 +218,7 @@ async def bank_balance_handler(event):
 
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
 
