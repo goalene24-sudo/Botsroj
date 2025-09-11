@@ -3,7 +3,8 @@ from bot import client
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import Chat
 
 # --- استيراد الدوال المساعدة المحدثة ---
@@ -22,7 +23,7 @@ TOGGLEABLE_SETTINGS = {
 # --- دوال مساعدة جديدة لإدارة إعدادات المجموعة ---
 async def get_chat_setting(chat_id, key, default=None):
     """تجلب إعدادًا معينًا من حقل الإعدادات للمجموعة."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         # نبحث عن المجموعة باستخدام chat_id
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         chat = result.scalar_one_or_none()
@@ -34,7 +35,7 @@ async def get_chat_setting(chat_id, key, default=None):
 
 async def set_chat_setting(chat_id, key, value):
     """تُعيّن إعدادًا معينًا في حقل الإعدادات للمجموعة."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         chat = result.scalar_one_or_none()
         
