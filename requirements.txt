@@ -11,3 +11,4 @@ google-generativeai
 yt-dlp
 aiohttp
 SQLAlchemy
+aiosqlite
