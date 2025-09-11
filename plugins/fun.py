@@ -1,17 +1,28 @@
-# plugins/fun.py
 import random
 import time
+import asyncio
+import json
 from telethon import events, Button
-from telethon.tl.types import InputMediaDice
-from bot import client
-from .utils import check_activation, add_points, PERCENT_COMMANDS, JOKES, RIDDLES, QUOTES, is_admin, db, save_db, BLESS_COUNTERS, is_command_enabled
 from telethon.errors.rpcerrorlist import UserNotParticipantError
-import config
 
-# --- بيانات الألعاب والهمس ---
+from bot import client
+
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from database import DBSession
+from models import User, GlobalSetting
+
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import check_activation, add_points, PERCENT_COMMANDS, JOKES, RIDDLES, QUOTES, is_command_enabled
+from .admin import get_or_create_user
+
+# --- بيانات الألعاب والهمس (لا تحتاج قاعدة بيانات) ---
 WHISPERS = {}
 PROPOSALS = {}
 DICE_GAMES = {}
+BLESS_COUNTERS = {}
+WYR_GAMES = {}
+
 INTERACTIVE_ACTIONS = {
     "صفعة": "👋 | {user1} قام بصفع {user2}!",
     "بوسة": "😘 | {user1} أرسل قبلة إلى {user2}!",
@@ -58,15 +69,7 @@ WOULD_YOU_RATHER_QUESTIONS = [
     {"q": "القدرة على الطيران لو القدرة على أن تكون غير مرئي؟", "o1": "الطيران 🕊️", "o2": "غير مرئي 👻"},
     {"q": "أن تتكلم مع الحيوانات لو أن تتكلم كل لغات العالم؟", "o1": "كلام الحيوانات 🐕", "o2": "كل اللغات 🗣️"},
     {"q": "أن تمتلك 10 مليون دولار الآن لو أن تعود لسن 10 سنوات مع كل معرفتك الحالية؟", "o1": "10 مليون دولار 💰", "o2": "أعود طفل 👶"},
-    {"q": "أن لا تستحم لمدة سنة لو أن لا تنظف أسنانك لمدة سنة؟", "o1": "بدون استحمام 🚿", "o2": "بدون تفريش أسنان 🦷"},
-    {"q": "أن تفقد حاسة التذوق لو أن تفقد حاسة الشم؟", "o1": "فقدان التذوق 👅", "o2": "فقدان الشم 👃"},
-    {"q": "أن يكون لديك القدرة على إيقاف الزمن لو السفر عبر الزمن؟", "o1": "إيقاف الزمن ⏸️", "o2": "السفر عبر الزمن ⏳"},
-    {"q": "أن تعيش في كوخ صغير على البحر لو في قصر فخم في الصحراء؟", "o1": "كوخ على البحر 🌊", "o2": "قصر بالصحراء 🏜️"},
-    {"q": "أن يكون كل طعامك حار جداً لو مالح جداً؟", "o1": "حار جداً 🌶️", "o2": "مالح جداً 🧂"},
-    {"q": "أن تعرف تاريخ وفاتك لو سبب وفاتك؟", "o1": "تاريخ الوفاة 🗓️", "o2": "سبب الوفاة 📝"},
-    {"q": "أن تشاهد نفس الفيلم للأبد لو أن تأكل نفس الوجبة للأبد؟", "o1": "نفس الفيلم 🎬", "o2": "نفس الوجبة 🍔"}
 ]
-WYR_GAMES = {}
 PERSONALITY_ANALYSIS = [
     "انت شخصية قيادية بالفطرة، بس مشكلتك تضيع الشاحن مالتك بكل مكان.",
     "قلبك طيب وحنون، بس من تجوع تصير شخص ثاني مندري منين جاي.",
@@ -74,35 +77,37 @@ PERSONALITY_ANALYSIS = [
     "انت ذكي وتلقطها عالطاير، بس اذا لگفتها لا ترجعها.",
     "عندك حس فكاهي عالي، بس محد يضحك غيرك على نكاتك.",
     "طموح وتحب توصل لأهدافك، خصوصاً اذا الهدف هو الثلاجة بالليل.",
-    "انت إنسان عملي، اذا شفت اثنين يتعاركون تصورهم ستوري بدل متفاككهم.",
-    "كريم وتحب تنطي، وأكثر شي تحب تنطيه هو رأيك بالمواضيع اللي متعرفها.",
-    "تتميز بالهدوء والصبر، خصوصاً من تنتظر النت يحمّل.",
-    "عندك كاريزما وجاذبية، بس للأسف بس البعوض ينجذبلك.",
-    "انت شخص اجتماعي وتحب الطلعات، بس من يجي وقت الحساب تسوي نفسك ميت.",
-    "مخلص لأصدقائك، ومستعد توگفلهم بأي مشكلة... طالما هي مو مشكلة فلوس."
 ]
 
+# --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
+async def is_globally_disabled(command_name):
+    """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
+    async with DBSession() as session:
+        result = await session.execute(
+            select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
+        )
+        setting = result.scalar_one_or_none()
+        if setting and setting.value:
+            try:
+                disabled_list = json.loads(setting.value)
+                return command_name in disabled_list
+            except json.JSONDecodeError:
+                return False
+        return False
 
 # --- معالجات الأوامر الترفيهية ---
 @client.on(events.NewMessage(pattern="^لو خيروك$"))
 async def wyr_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "لو خيروك" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("لو خيروك"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     question_data = random.choice(WOULD_YOU_RATHER_QUESTIONS)
     q, o1, o2 = question_data["q"], question_data["o1"], question_data["o2"]
     
-    message_text = f"""- - - - - - - - - - - - - - - - -
-🤔 **لعبة لو خيروك** 🤔
-- - - - - - - - - - - - - - - - -
-
-**{q}**"""
-    
+    message_text = f"🤔 **لعبة لو خيروك** 🤔\n\n**{q}**"
     buttons = [
         [Button.inline(f"{o1} (0)", data=f"wyr:1")],
         [Button.inline(f"{o2} (0)", data=f"wyr:2")]
@@ -114,13 +119,11 @@ async def wyr_handler(event):
 @client.on(events.NewMessage(pattern=r"^حللني$"))
 async def analyze_me_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "حللني" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("حللني"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     sender = await event.get_sender()
     analysis = random.choice(PERSONALITY_ANALYSIS)
     await event.reply(f"**🤔 جاري تحليل شخصيتك يا [{sender.first_name}](tg://user?id={sender.id})...**\n\n**النتيجة:**\n**{analysis}**")
@@ -128,13 +131,11 @@ async def analyze_me_handler(event):
 @client.on(events.NewMessage(pattern=r"^حلل$"))
 async def analyze_user_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "حلل" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("حلل"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص حتى أحلله.**")
     user_to_analyze = await reply.get_sender()
@@ -144,25 +145,20 @@ async def analyze_user_handler(event):
 @client.on(events.NewMessage(pattern="^نكتة$"))
 async def joke_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "نكتة" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("نكتة"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
     await event.reply(f"**{random.choice(JOKES)}**")
 
 @client.on(events.NewMessage(pattern="^حزورة$"))
 async def riddle_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "حزورة" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("حزورة"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     riddle_index, (riddle_q, riddle_a) = random.choice(list(enumerate(RIDDLES)))
     buttons = Button.inline("إظهار الجواب", data=f"riddle:{riddle_index}")
     await event.reply(f"**🤔 حزورة اليوم:**\n\n**{riddle_q}**", buttons=buttons)
@@ -170,29 +166,23 @@ async def riddle_handler(event):
 @client.on(events.NewMessage(pattern="^كت$"))
 async def kat_tweet_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "كت" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
-    
-    # --- المنطق الجديد للأمر ---
+    if await is_globally_disabled("كت"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     question = random.choice(KAT_QUESTIONS)
     await event.reply(f"**🤔 | سؤال للنقاش:**\n\n**- {question}**")
 
 @client.on(events.NewMessage(pattern=f"^({'|'.join(PERCENT_COMMANDS)})$"))
 async def percent_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     command_name = event.raw_text.lower()
-    if command_name in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "social_commands_enabled"): return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled(command_name):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**رپلَي على واحد حتى اگلك شگد النسبة.**")
     sender, replied_user = await event.get_sender(), await reply.get_sender()
@@ -203,41 +193,48 @@ async def percent_game_handler(event):
 @client.on(events.NewMessage(pattern="^الترتيب$"))
 async def leaderboard_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "الترتيب" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
-    chat_id_str = str(event.chat_id)
-    users_data = db.get(chat_id_str, {}).get("users", {})
-    if not users_data: return await event.reply("**بعدكم كلكم صفر، منو ارتبه؟ 🤔**")
-    sorted_users = sorted(users_data.items(), key=lambda item: item[1].get("points", 0), reverse=True)
+    if await is_globally_disabled("الترتيب"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+
+    async with DBSession() as session:
+        result = await session.execute(
+            select(User)
+            .where(User.chat_id == event.chat_id, User.points > 0)
+            .order_by(User.points.desc())
+            .limit(10)
+        )
+        sorted_users = result.scalars().all()
+
+    if not sorted_users: 
+        return await event.reply("**بعدكم كلكم صفر، منو ارتبه؟ 🤔**")
+
     leaderboard_text = "**🌟 أبطال المجموعة (حسب النقاط):** 🌟\n\n"
-    for i, (user_id, data) in enumerate(sorted_users[:10], 1):
+    for i, user_data in enumerate(sorted_users, 1):
         try:
-            user = await client.get_entity(int(user_id))
-            user_name = user.first_name
-        except (ValueError, UserNotParticipantError): user_name = f"عضو سابق"
-        points = data.get("points", 0)
+            user_entity = await client.get_entity(user_data.user_id)
+            user_name = user_entity.first_name
+        except (ValueError, UserNotParticipantError):
+            user_name = f"عضو سابق"
+            
+        points = user_data.points
         if i == 1: medal = "🥇"
         elif i == 2: medal = "🥈"
         elif i == 3: medal = "🥉"
         else: medal = f"`{i}`."
-        leaderboard_text += f"**{medal} [{user_name}](tg://user?id={user_id}) - `{points}` نقطة**\n"
+        leaderboard_text += f"**{medal} [{user_name}](tg://user?id={user_data.user_id}) - `{points}` نقطة**\n"
+        
     await event.reply(leaderboard_text)
 
 @client.on(events.NewMessage(pattern="^زواج$"))
 async def ship_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "زواج" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "social_commands_enabled"): return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("زواج"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
     loading_msg = await event.reply("**💍 دا أشوف منو متوالم... لحظة...**")
     try:
         participants = await client.get_participants(event.chat_id)
@@ -247,31 +244,28 @@ async def ship_game_handler(event):
         ship_msg = await event.reply(f"**💍 إعلان زواج رسمي!** 💍\n\n**بعد دراسة وتفكير عميق، تم تزويج:**\n\n**العريس:** [{p1.first_name}](tg://user?id={p1.id})\n**العروس:** [{p2.first_name}](tg://user?id={p2.id})\n\n**باركولهم يمعودين! 🥳**", buttons=Button.inline("مباركين 🎉 (0)", data=f"bless:{event.chat_id}:{event.id}"))
         await loading_msg.delete()
         BLESS_COUNTERS[ship_msg.id] = {"count": 0, "users": set()}
-    except Exception as e: await loading_msg.edit(f"**ماصارت القسمة، اكو مشكلة: {e}**")
+    except Exception as e: 
+        await loading_msg.edit(f"**ماصارت القسمة، اكو مشكلة: {e}**")
 
 @client.on(events.NewMessage(pattern="^اقتباس$"))
 async def quote_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "اقتباس" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("اقتباس"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     quote = random.choice(QUOTES)
     await event.reply(f"**حكمة اليوم من سُـرُوچ تقول:**\n\n**📜 {quote}**\n\n**شلونها هاي؟ 😉**")
 
 @client.on(events.NewMessage(pattern=r"^همس(?: (.*))?$"))
 async def whisper_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "همس" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "social_commands_enabled"): return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("همس"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**لازم ترد على رسالة الشخص اللي تريد تهمسله.**")
     sender, receiver = await event.get_sender(), await reply.get_sender()
@@ -293,14 +287,12 @@ async def whisper_handler(event):
 @client.on(events.NewMessage(pattern=f"^(?:{'|'.join(INTERACTIVE_ACTIONS.keys())})$"))
 async def interactive_action_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     command_name = event.raw_text.lower()
-    if command_name in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "social_commands_enabled"): return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled(command_name):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**هذا الأمر لازم تستخدمه بالرد على شخص.**")
     
@@ -310,16 +302,15 @@ async def interactive_action_handler(event):
     if sender.id == receiver.id:
         return await event.reply("**شدعوة هالنرجسية! متگدر تسويها لنفسك.**")
     
-    chat_id_str = str(event.chat_id)
-    receiver_id_str = str(receiver.id)
-    receiver_data = db.get(chat_id_str, {}).get("users", {}).get(receiver_id_str, {})
-    inventory = receiver_data.get("inventory", {})
+    async with DBSession() as session:
+        receiver_user_obj = await get_or_create_user(session, event.chat_id, receiver.id)
+
+    inventory = receiver_user_obj.inventory or {}
     immunity_data = inventory.get("حصانة")
 
     if immunity_data:
         purchase_time = immunity_data.get("purchase_time", 0)
         duration_seconds = immunity_data.get("duration_days", 0) * 86400
-
         if time.time() - purchase_time < duration_seconds:
             return await event.reply(f"**لا يمكن استخدام هذا الأمر ضد [{receiver.first_name}](tg://user?id={receiver.id})، فهو يمتلك درع حصانة! 🛡️**")
 
@@ -335,14 +326,12 @@ async def interactive_action_handler(event):
 @client.on(events.NewMessage(pattern=r"^(تزوجني|اخطبني)$"))
 async def propose_marriage_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
     command_name = event.pattern_match.group(1).lower()
-    if command_name in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "social_commands_enabled"): return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled(command_name):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**لمن تطلب الزواج؟ لازم ترد على رسالة الشخص.**")
 
@@ -369,22 +358,17 @@ async def propose_marriage_handler(event):
     
     proposal_msg = await event.reply(proposal_text, buttons=buttons)
     PROPOSALS[proposal_msg.id] = {
-        "proposer_id": proposer.id,
-        "proposer_name": proposer.first_name,
-        "proposed_id": proposed.id,
-        "proposed_name": proposed.name
+        "proposer_id": proposer.id, "proposer_name": proposer.first_name,
+        "proposed_id": proposed.id, "proposed_name": proposed.first_name
     }
 
 @client.on(events.NewMessage(pattern=r"^من هو$"))
 async def who_is_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "من هو" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("من هو"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
     
     loading_msg = await event.reply("**دا أفكر وأختار... 🤔**")
     
@@ -407,13 +391,11 @@ async def who_is_handler(event):
 @client.on(events.NewMessage(pattern="^تحدي نرد$"))
 async def dice_challenge_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # --- التحقق إذا كان الأمر معطلاً بشكل عام ---
-    disabled_cmds = db.get("global_settings", {}).get("disabled_cmds", [])
-    if "تحدي نرد" in disabled_cmds:
-        await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-        return
-    # --- نهاية التحقق ---
-    if not is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+    if await is_globally_disabled("تحدي نرد"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "games_enabled"): 
+        return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**تتحدى منو؟ لازم ترد على رسالة شخص.**")
     
@@ -460,7 +442,6 @@ async def wyr_callback_handler(event):
     else: # choice == 2
         game["v2"] += 1
 
-    # تنسيق الأزرار الجديد
     new_buttons = [
         [Button.inline(f'{game["o1"]} ({game["v1"]})', data="wyr:1")],
         [Button.inline(f'{game["o2"]} ({game["v2"]})', data="wyr:2")]
@@ -469,5 +450,4 @@ async def wyr_callback_handler(event):
     try:
         await event.edit(buttons=new_buttons)
     except Exception:
-        # Ignore MessageNotModified error if multiple people click at once
         pass
