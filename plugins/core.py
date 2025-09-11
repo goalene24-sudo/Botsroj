@@ -1,15 +1,20 @@
-# plugins/core.py
 import asyncio
-from datetime import datetime
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
-import config
-# --- [تم التحديث] ---
+
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from sqlalchemy import delete
+from database import DBSession
+from models import Chat, Vip, BotAdmin, Creator, SecondaryDev
+
+# --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
-    db, save_db, is_admin, check_activation, MAIN_MENU_MESSAGE,
-    is_command_enabled, build_main_menu_buttons # استبدال MAIN_MENU_BUTTONS بالدالة
+    check_activation, is_command_enabled, build_main_menu_buttons, 
+    MAIN_MENU_MESSAGE, is_admin
 )
+from .admin import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
 
 WELCOMED_RECENTLY = set()
 
@@ -17,41 +22,57 @@ WELCOMED_RECENTLY = set()
 async def chat_action_handler(event):
     me = await client.get_me()
     chat_id = event.chat_id
+
+    # عند إضافة البوت إلى مجموعة جديدة
     if event.user_added and event.user_id == me.id:
         if chat_id in WELCOMED_RECENTLY: return
         WELCOMED_RECENTLY.add(chat_id)
-        chat = await event.get_chat()
-        chat_id_str = str(chat_id)
-        if chat_id_str not in db: db[chat_id_str] = {}
+        
+        async with DBSession() as session:
+            # التأكد من وجود سجل للمجموعة في قاعدة البيانات
+            await get_or_create_chat(session, chat_id)
+
         try:
+            chat = await event.get_chat()
             member_count = (await client.get_participants(chat_id, limit=0)).total
             admin_list = await client.get_participants(chat_id, filter=ChannelParticipantsAdmins)
             admin_count = len(admin_list)
             bot_pfp = await client.get_profile_photos('me', limit=1)
-        except Exception as e: print(f"لا يمكن جلب معلومات المجموعة {chat_id}: {e}"); return
+        except Exception as e:
+            print(f"لا يمكن جلب معلومات المجموعة {chat_id}: {e}")
+            return
+            
         welcome_text = (f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
                         f"**📊 اسم المجموعة: {chat.title}**\n"
                         f"**👥 عددكم: {member_count} نفر**\n"
                         f"**🛡️ المشرفين: {admin_count} مدير**\n"
                         f"**💻 المطور مالتي: @tit_50**\n\n"
                         "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**")
+        
         activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
-        if bot_pfp: await client.send_file(chat_id, bot_pfp[0], caption=welcome_text, buttons=activate_button)
-        else: await client.send_message(chat_id, welcome_text, buttons=activate_button)
+        
+        if bot_pfp:
+            await client.send_file(chat_id, bot_pfp[0], caption=welcome_text, buttons=activate_button)
+        else:
+            await client.send_message(chat_id, welcome_text, buttons=activate_button)
+        
         await asyncio.sleep(10)
-        if chat_id in WELCOMED_RECENTLY: WELCOMED_RECENTLY.remove(chat_id)
+        if chat_id in WELCOMED_RECENTLY:
+            WELCOMED_RECENTLY.remove(chat_id)
     
+    # عند انضمام عضو جديد
     elif event.user_joined and not event.user_id == me.id:
         if not await check_activation(event.chat_id): return
+        
         # التحقق إذا كان الترحيب مفعلاً
-        if not is_command_enabled(event.chat_id, "welcome_enabled"):
+        if not await is_command_enabled(event.chat_id, "welcome_enabled"):
             return
 
         chat = await event.get_chat()
         new_user = await event.get_user()
-        chat_id_str = str(event.chat_id)
         
-        custom_welcome = db.get(chat_id_str, {}).get("welcome_message")
+        custom_welcome = await get_chat_setting(event.chat_id, "welcome_message")
+        
         if custom_welcome:
             welcome_text = custom_welcome.format(
                 user=f"[{new_user.first_name}](tg://user?id={new_user.id})",
@@ -62,72 +83,59 @@ async def chat_action_handler(event):
         
         buttons = Button.inline("📜 عرض القوانين", data="show_rules")
         await client.send_message(event.chat_id, f"**{welcome_text}**", buttons=buttons)
-        
-    # --- (مُعَدَّل) منطق حذف الرتب عند الطرد أو الحظر أو المغادرة ---
+    
+    # عند مغادرة/طرد/حظر عضو
     elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
-        chat_id_str = str(event.chat_id)
         user_id_to_clear = event.user_id
-        
-        if chat_id_str not in db:
-            return
+        async with DBSession() as session:
+            # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
+            await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
+            await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
+            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
+            await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
+            await session.commit()
+            print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
 
-        chat_data = db[chat_id_str]
-        ranks_removed = False
-        
-        rank_lists_to_check = ["vips", "bot_admins", "creators", "secondary_devs"]
-        
-        for rank_list in rank_lists_to_check:
-            if rank_list in chat_data and user_id_to_clear in chat_data[rank_list]:
-                chat_data[rank_list].remove(user_id_to_clear)
-                ranks_removed = True
-                print(f"User {user_id_to_clear} removed from '{rank_list}' in chat {chat_id_str} due to leaving/being kicked.")
-
-        if ranks_removed:
-            save_db(db)
-
+    # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
-        chat_id_str = str(event.chat_id)
-        if chat_id_str in db:
-            db[chat_id_str]["is_paused"] = True
-            save_db(db)
+        async with DBSession() as session:
+            chat = await get_or_create_chat(session, event.chat_id)
+            chat.is_active = False # تعطيل المجموعة
+            await session.commit()
         print(f"تمت إزالة البوت من المجموعة {event.chat_id} وتم إيقافه فيها تلقائياً.")
 
-# --- (مُعَدَّل) تعديل منطق أمر تفعيل/ايقاف ---
+# أمر تفعيل/ايقاف البوت
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
 async def toggle_bot_status(event):
     if event.is_private: return
     if not await is_admin(event.chat_id, event.sender_id):
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
         
-    chat_id_str = str(event.chat_id)
     action = event.raw_text
     me = await client.get_me()
     
-    if chat_id_str not in db: 
-        db[chat_id_str] = {}
-
-    is_currently_paused = db.get(chat_id_str, {}).get("is_paused", False)
-
-    if action == "ايقاف":
-        if is_currently_paused:
-            return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
-        db[chat_id_str]["is_paused"] = True
-        save_db(db)
-        await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
-    else: # تفعيل
-        if not is_currently_paused:
-            return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
+    async with DBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
         
-        if not await is_admin(event.chat_id, me.id): 
-            return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
+        if action == "ايقاف":
+            if not chat.is_active:
+                return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
+            chat.is_active = False
+            await session.commit()
+            await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
+        else: # تفعيل
+            if chat.is_active:
+                return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
             
-        db[chat_id_str]["is_paused"] = False
-        save_db(db)
-        await event.reply("**🟢 رجعتلكم! يلا شنو الأوامر؟**")
+            if not await is_admin(event.chat_id, me.id): 
+                return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
+                
+            chat.is_active = True
+            await session.commit()
+            await event.reply("**🟢 رجعتلكم! يلا شنو الأوامر؟**")
 
 @client.on(events.NewMessage(pattern='^الاوامر$'))
 async def main_menu_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    # استدعاء الدالة لبناء الأزرار بشكل ديناميكي
-    buttons = build_main_menu_buttons()
+    buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
