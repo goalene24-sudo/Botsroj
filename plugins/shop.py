@@ -1,8 +1,15 @@
 import time
+import asyncio
 from telethon import events
+from sqlalchemy.orm.attributes import flag_modified
+
 from bot import client
 import config
-from .utils import check_activation, db, add_points, save_db
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from database import DBSession
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import check_activation, add_points
+from .admin import get_or_create_chat, get_or_create_user
 
 # تعريف أغراض المتجر
 SHOP_ITEMS = {
@@ -43,8 +50,6 @@ async def buy_item_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-    
     item_name_to_buy = event.pattern_match.group(1).strip().lower()
     
     if item_name_to_buy not in SHOP_ITEMS:
@@ -52,47 +57,51 @@ async def buy_item_handler(event):
         
     item_details = SHOP_ITEMS[item_name_to_buy]
     price = item_details["price"]
-    
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    user_points = user_data.get("points", 0)
-    
     is_developer = sender.id in config.SUDO_USERS
 
-    if not is_developer and user_points < price:
-        return await event.reply(f"عذراً، نقاطك غير كافية! 😢\n- سعر هذا الغرض: **{price}**\n- نقاطك الحالية: **{user_points}**")
-        
-    if item_name_to_buy == "تذكرة يانصيب":
-        if not is_developer:
-            add_points(event.chat_id, sender.id, -price)
-        
-        if "lottery_players" not in db.get(chat_id_str, {}):
-            db.setdefault(chat_id_str, {})["lottery_players"] = []
-            
-        db[chat_id_str]["lottery_players"].append(user_id_str)
-        save_db(db)
-        
-        total_tickets = len(db[chat_id_str]["lottery_players"])
-        return await event.reply(f"**🎟️ تم شراء تذكرة يانصيب بنجاح!**\n\nحظاً موفقاً في السحب القادم. إجمالي عدد التذاكر المباعة حتى الآن: **{total_tickets}** تذكرة.")
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
 
-    inventory = user_data.get("inventory", {})
-    if item_name_to_buy in inventory:
-        purchase_time = inventory[item_name_to_buy].get("purchase_time", 0)
-        duration_seconds = inventory[item_name_to_buy].get("duration_days", 0) * 24 * 60 * 60
-        if time.time() - purchase_time < duration_seconds:
-            return await event.reply("لديك هذا الامتياز فعالاً بالفعل! انتظر حتى ينتهي لتتمكن من شرائه مجدداً.")
+        if not is_developer and user_obj.points < price:
+            return await event.reply(f"عذراً، نقاطك غير كافية! 😢\n- سعر هذا الغرض: **{price}**\n- نقاطك الحالية: **{user_obj.points}**")
             
-    if not is_developer:
-        add_points(event.chat_id, sender.id, -price)
-    
-    purchase_timestamp = int(time.time())
-    
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    inventory_db = user_db.setdefault(user_id_str, {}).setdefault("inventory", {})
-    inventory_db[item_name_to_buy] = {
-        "purchase_time": purchase_timestamp,
-        "duration_days": item_details["duration_days"]
-    }
-    save_db(db)
+        if item_name_to_buy == "تذكرة يانصيب":
+            if not is_developer:
+                user_obj.points -= price
+            
+            chat_obj = await get_or_create_chat(session, event.chat_id)
+            settings = chat_obj.settings or {}
+            lottery_players = settings.get("lottery_players", [])
+            lottery_players.append(str(sender.id))
+            settings["lottery_players"] = lottery_players
+            chat_obj.settings = settings
+            flag_modified(chat_obj, "settings")
+            
+            await session.commit()
+            
+            total_tickets = len(lottery_players)
+            return await event.reply(f"**🎟️ تم شراء تذكرة يانصيب بنجاح!**\n\nحظاً موفقاً في السحب القادم. إجمالي عدد التذاكر المباعة حتى الآن: **{total_tickets}** تذكرة.")
+
+        inventory = user_obj.inventory or {}
+        if item_name_to_buy in inventory:
+            purchase_time = inventory[item_name_to_buy].get("purchase_time", 0)
+            duration_seconds = inventory[item_name_to_buy].get("duration_days", 0) * 24 * 60 * 60
+            if time.time() - purchase_time < duration_seconds:
+                return await event.reply("لديك هذا الامتياز فعالاً بالفعل! انتظر حتى ينتهي لتتمكن من شرائه مجدداً.")
+                
+        if not is_developer:
+            user_obj.points -= price
+        
+        purchase_timestamp = int(time.time())
+        
+        inventory[item_name_to_buy] = {
+            "purchase_time": purchase_timestamp,
+            "duration_days": item_details["duration_days"]
+        }
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        
+        await session.commit()
     
     success_message = f"✅ **تم شراء '{item_name_to_buy.title()}' بنجاح!**\n\n"
     if not is_developer:
@@ -104,39 +113,40 @@ async def buy_item_handler(event):
     
     await event.reply(success_message)
 
+
 @client.on(events.NewMessage(pattern=r"^ضع لقبي (.+)"))
 async def set_custom_title_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
     
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    inventory = user_data.get("inventory", {})
-    
-    item_name = "تخصيص لقب"
-    if item_name not in inventory and sender.id not in config.SUDO_USERS:
-        return await event.reply(f"**ليس لديك الصلاحية لوضع لقب مخصص. يجب عليك شراء '{item_name}' من `المتجر` أولاً.**")
-    
-    if sender.id not in config.SUDO_USERS:
-        purchase_info = inventory[item_name]
-        purchase_time = purchase_info.get("purchase_time", 0)
-        duration_days = purchase_info.get("duration_days", 0)
-        duration_seconds = duration_days * 24 * 60 * 60
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
         
-        if time.time() - purchase_time > duration_seconds:
-            return await event.reply(f"**لقد انتهت صلاحية امتياز '{item_name}' لديك. قم بشرائه مجدداً من `المتجر` لتتمكن من وضع لقب جديد.**")
+        item_name = "تخصيص لقب"
+        if item_name not in inventory and sender.id not in config.SUDO_USERS:
+            return await event.reply(f"**ليس لديك الصلاحية لوضع لقب مخصص. يجب عليك شراء '{item_name}' من `المتجر` أولاً.**")
         
-    custom_title = event.pattern_match.group(1).strip()
-    
-    if len(custom_title) > 20:
-        return await event.reply("**عذراً، يجب أن لا يتجاوز اللقب 20 حرفاً.**")
+        if sender.id not in config.SUDO_USERS:
+            purchase_info = inventory[item_name]
+            purchase_time = purchase_info.get("purchase_time", 0)
+            duration_days = purchase_info.get("duration_days", 0)
+            duration_seconds = duration_days * 24 * 60 * 60
+            
+            if time.time() - purchase_time > duration_seconds:
+                return await event.reply(f"**لقد انتهت صلاحية امتياز '{item_name}' لديك. قم بشرائه مجدداً من `المتجر` لتتمكن من وضع لقب جديد.**")
+            
+        custom_title = event.pattern_match.group(1).strip()
         
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_db.setdefault(user_id_str, {})["custom_title"] = custom_title
-    save_db(db)
+        if len(custom_title) > 20:
+            return await event.reply("**عذراً، يجب أن لا يتجاوز اللقب 20 حرفاً.**")
+            
+        user_obj.custom_title = custom_title
+        await session.commit()
     
     await event.reply(f"**✅ تم وضع لقبك المخصص بنجاح إلى:** `{custom_title}`")
+
 
 # --- أوامر البنك ---
 @client.on(events.NewMessage(pattern=r"^ايداع (\d+)$"))
@@ -144,83 +154,96 @@ async def deposit_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
 
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-    amount = int(event.pattern_match.group(1))
+    try:
+        amount = int(event.pattern_match.group(1))
+        if amount <= 0:
+            return await event.reply("**لازم تودع مبلغ أكبر من صفر.**")
+    except (ValueError, IndexError):
+        return await event.reply("**الرجاء إدخال مبلغ صحيح.**")
 
-    if amount <= 0:
-        return await event.reply("**لازم تودع مبلغ أكبر من صفر.**")
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        
+        if user_obj.points < amount:
+            return await event.reply(f"**ما عندك نقاط كافية للإيداع. رصيدك الحالي: {user_obj.points}**")
 
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    user_points = user_data.get("points", 0)
+        user_obj.points -= amount
+        inventory = user_obj.inventory or {}
+        inventory["bank_balance"] = inventory.get("bank_balance", 0) + amount
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        await session.commit()
+        
+        new_balance = inventory["bank_balance"]
 
-    if user_points < amount:
-        return await event.reply(f"**ما عندك نقاط كافية للإيداع. رصيدك الحالي: {user_points}**")
+    await event.reply(f"**💰 تم إيداع `{amount}` نقطة في حسابك البنكي بنجاح.**\n**رصيدك في البنك الآن:** `{new_balance}`")
 
-    # خصم النقاط من الرصيد العام وإضافتها للبنك
-    add_points(event.chat_id, sender.id, -amount)
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_data = user_db.setdefault(user_id_str, {})
-    user_data["bank_balance"] = user_data.get("bank_balance", 0) + amount
-    save_db(db)
-
-    await event.reply(f"**💰 تم إيداع `{amount}` نقطة في حسابك البنكي بنجاح.**\n**رصيدك في البنك الآن:** `{user_data['bank_balance']}`")
 
 @client.on(events.NewMessage(pattern=r"^سحب (\d+)$"))
 async def withdraw_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
         
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-    amount = int(event.pattern_match.group(1))
-
-    if amount <= 0:
-        return await event.reply("**لازم تسحب مبلغ أكبر من صفر.**")
+    try:
+        amount = int(event.pattern_match.group(1))
+        if amount <= 0:
+            return await event.reply("**لازم تسحب مبلغ أكبر من صفر.**")
+    except (ValueError, IndexError):
+        return await event.reply("**الرجاء إدخال مبلغ صحيح.**")
         
-    user_data = db.get(chat_id_str, {}).get("users", {}).get(user_id_str, {})
-    bank_balance = user_data.get("bank_balance", 0)
-    
-    if bank_balance < amount:
-        return await event.reply(f"**رصيدك في البنك غير كافٍ. رصيدك البنكي: {bank_balance}**")
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
+        bank_balance = inventory.get("bank_balance", 0)
+        
+        if bank_balance < amount:
+            return await event.reply(f"**رصيدك في البنك غير كافٍ. رصيدك البنكي: {bank_balance}**")
 
-    # خصم النقاط من البنك وإضافتها للرصيد العام
-    user_data["bank_balance"] -= amount
-    add_points(event.chat_id, sender.id, amount)
-    save_db(db)
+        inventory["bank_balance"] -= amount
+        user_obj.points += amount
+        user_obj.inventory = inventory
+        flag_modified(user_obj, "inventory")
+        await session.commit()
+        
+        new_balance = inventory["bank_balance"]
 
-    await event.reply(f"**💸 تم سحب `{amount}` نقطة من حسابك البنكي بنجاح.**\n**رصيدك في البنك الآن:** `{user_data['bank_balance']}`")
+    await event.reply(f"**💸 تم سحب `{amount}` نقطة من حسابك البنكي بنجاح.**\n**رصيدك في البنك الآن:** `{new_balance}`")
+
 
 @client.on(events.NewMessage(pattern="^رصيدي بالبنك$"))
 async def bank_balance_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
 
     sender = await event.get_sender()
-    chat_id_str, user_id_str = str(event.chat_id), str(sender.id)
-
-    user_db = db.setdefault(chat_id_str, {}).setdefault("users", {})
-    user_data = user_db.setdefault(user_id_str, {})
-
-    bank_balance = user_data.get("bank_balance", 0)
-    last_interest_time = user_data.get("last_interest_time", int(time.time()))
     
-    current_time = int(time.time())
-    interest_rate = 0.01  # 1% daily interest
-    interest_period = 86400  # 24 hours in seconds
+    async with DBSession() as session:
+        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
+        inventory = user_obj.inventory or {}
 
-    time_diff = current_time - last_interest_time
-    interest_earned = 0
+        bank_balance = inventory.get("bank_balance", 0)
+        last_interest_time = inventory.get("last_interest_time", int(time.time()))
+        
+        current_time = int(time.time())
+        interest_rate = 0.01  # 1% daily interest
+        interest_period = 86400  # 24 hours in seconds
 
-    if time_diff >= interest_period and bank_balance > 0:
-        periods_passed = time_diff // interest_period
-        initial_balance = bank_balance
-        for _ in range(periods_passed):
-            bank_balance += bank_balance * interest_rate
-        
-        bank_balance = int(bank_balance)
-        interest_earned = bank_balance - initial_balance
-        
-        user_data["bank_balance"] = bank_balance
-        user_data["last_interest_time"] = last_interest_time + periods_passed * interest_period
-        save_db(db)
+        time_diff = current_time - last_interest_time
+        interest_earned = 0
+
+        if time_diff >= interest_period and bank_balance > 0:
+            periods_passed = time_diff // interest_period
+            initial_balance = bank_balance
+            for _ in range(periods_passed):
+                bank_balance += bank_balance * interest_rate
+            
+            bank_balance = int(bank_balance)
+            interest_earned = bank_balance - initial_balance
+            
+            inventory["bank_balance"] = bank_balance
+            inventory["last_interest_time"] = last_interest_time + periods_passed * interest_period
+            user_obj.inventory = inventory
+            flag_modified(user_obj, "inventory")
+            await session.commit()
 
     text = f"**🏦 رصيدك في بنك سُـرُوچ**\n\n**- الرصيد الحالي:** `{bank_balance}` نقطة.\n"
     if interest_earned > 0:
