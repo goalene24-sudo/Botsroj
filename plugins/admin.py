@@ -6,7 +6,8 @@ import json
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, SecondaryDev, Vip
 
 # --- استيراد الدوال والرتب المحدثة ---
@@ -26,7 +27,7 @@ async def get_or_create_chat(session, chat_id):
 
 async def get_chat_setting(chat_id, key, default=None):
     """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         # تأكد من أن settings ليس None قبل الوصول إليه
         if chat.settings is None:
@@ -35,7 +36,7 @@ async def get_chat_setting(chat_id, key, default=None):
 
 async def set_chat_setting(chat_id, key, value):
     """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         # تأكد من أن settings ليس None
         if chat.settings is None:
@@ -50,7 +51,7 @@ async def set_chat_setting(chat_id, key, value):
 
 async def del_chat_setting(chat_id, key):
     """حذف إعداد معين من حقل JSON."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         if chat.settings and key in chat.settings:
             new_settings = chat.settings.copy()
@@ -129,7 +130,7 @@ async def lock_unlock_handler(event):
     if not lock_key:
         return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         if chat.lock_settings is None:
             chat.lock_settings = {}
@@ -281,7 +282,7 @@ async def bot_admin_handler(event):
         if actor_rank < Ranks.CREATOR:
             return await event.reply("**فقط المنشئ والمطور يستطيعون استخدام هذا الأمر.**")
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             if action == "مسح الادمنيه":
                 await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id))
                 await session.commit()
@@ -311,7 +312,7 @@ async def bot_admin_handler(event):
     
     elif action == "الادمنيه":
         if actor_rank < Ranks.MOD: return
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             result = await session.execute(select(BotAdmin.user_id).where(BotAdmin.chat_id == event.chat_id))
             bot_admins_ids = result.scalars().all()
 
@@ -344,7 +345,7 @@ async def creator_admin_handler(event):
         if actor_rank < Ranks.OWNER:
             return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             if action == "مسح المنشئين":
                 await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id))
                 await session.commit()
@@ -374,7 +375,7 @@ async def creator_admin_handler(event):
 
     elif action == "المنشئين":
         if actor_rank < Ranks.MOD: return
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             result = await session.execute(select(Creator.user_id).where(Creator.chat_id == event.chat_id))
             creator_ids = result.scalars().all()
         
@@ -399,7 +400,7 @@ async def secondary_dev_handler(event):
         if actor_rank not in [Ranks.MAIN_DEV, Ranks.OWNER]:
             return await event.reply("**فقط المطور الرئيسي ومالك المجموعة يستطيعون استخدام هذا الأمر.**")
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             if action == "مسح المطورين الثانويين":
                 await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id))
                 await session.commit()
@@ -429,7 +430,7 @@ async def secondary_dev_handler(event):
 
     elif action == "المطورين الثانويين":
         if actor_rank < Ranks.ADMIN: return
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             result = await session.execute(select(SecondaryDev.user_id).where(SecondaryDev.chat_id == event.chat_id))
             dev_ids = result.scalars().all()
         
@@ -454,7 +455,7 @@ async def vip_handler(event):
         if actor_rank < Ranks.ADMIN:
             return await event.reply("**هذا الأمر للادمنية فما فوق.**")
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             if action == "مسح المميزين":
                 await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id))
                 await session.commit()
@@ -484,7 +485,7 @@ async def vip_handler(event):
 
     elif action == "المميزين":
         if actor_rank < Ranks.MOD: return
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             result = await session.execute(select(Vip.user_id).where(Vip.chat_id == event.chat_id))
             vip_ids = result.scalars().all()
         
