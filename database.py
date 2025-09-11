@@ -1,30 +1,36 @@
 # database.py
 
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, scoped_session
+# (تم التعديل) استيراد المكتبات الغير متزامنة
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import declarative_base
 
 # --- إعدادات قاعدة البيانات ---
 DB_NAME = "surooj.db"
-DB_URI = f"sqlite:///{DB_NAME}"
+# (تم التعديل) استخدام محرك aiosqlite للعمل الغير متزامن
+DB_URI = f"sqlite+aiosqlite:///{DB_NAME}"
 
-# --- تهيئة SQLAlchemy ---
-engine = create_engine(DB_URI, connect_args={'check_same_thread': False})
-session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-SESSION = scoped_session(session_factory)
+# --- تهيئة SQLAlchemy (بطريقة غير متزامنة) ---
+# (تم التعديل) إنشاء محرك غير متزامن
+engine = create_async_engine(DB_URI)
+
+# (تم التعديل) إنشاء مُصنِّع جلسات غير متزامن
+# expire_on_commit=False مهم للتعامل مع البوتات لتجنب أخطاء الوصول للكائنات بعد إغلاق الجلسة
+AsyncDBSession = async_sessionmaker(
+    bind=engine, expire_on_commit=False, class_=AsyncSession
+)
 
 Base = declarative_base()
-Base.query = SESSION.query_property()
 
-def init_db():
+# (تم التعديل) تحويل الدالة إلى غير متزامنة
+async def init_db():
     """
     يقوم بإنشاء جميع الجداول في قاعدة البيانات إذا لم تكن موجودة.
     """
-    # --- (تم التعديل هنا) ---
-    # استيراد النماذج من ملف models.py لجعلها معروفة لـ SQLAlchemy
+    # استيراد النماذج هنا لتجنب الاستيراد الدائري
     import models
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 # --- رسالة تأكيد عند تحميل الملف ---
-print(">> تم تحميل إعدادات قاعدة البيانات SQLAlchemy بنجاح. <<")
+print(">> تم تحميل إعدادات قاعدة البيانات SQLAlchemy (الغير متزامنة) بنجاح. <<")
