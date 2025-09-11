@@ -1,5 +1,3 @@
-# plugins/utils.py
-
 import json
 from telethon import Button
 import config
@@ -9,10 +7,10 @@ from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
-# --- استيراد مكونات قاعدة البيانات الجديدة ---
+# --- (تم التعديل) استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
 from database import DBSession
-from models import User, Vip, SecondaryDev, Creator, BotAdmin, Group, CommandSetting, Lock, CustomCommand
+from models import User, Vip, SecondaryDev, Creator, BotAdmin, Group, CommandSetting, Lock, CustomCommand, GlobalSetting, Chat
 
 # --- تعريف مستويات الرتب ---
 class Ranks:
@@ -40,59 +38,18 @@ XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
 
-# --- (تم التعديل) توسيع قائمة النكت ---
+# --- قوائم ثابتة ---
 JOKES = [
     "اكو واحد راح للطبيب گاله دكتور عندي إسهال، الطبيب گاله حلّل، گال لعد شعبالك قابل مخثر؟",
     "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح.",
-    "محشش سأل واحد: الساعة بيش؟ گاله: مدري. المحشش گله: غريبة، آني عندي مدري إلا خمسة.",
-    "واحد غبي اشترى تكسي، الناس تصيحله 'تكسي! تكسي!'، يباوع عليهم ويضحك ويگلهم: أدري بي تكسي.",
-    "محشش فتح محل سماه 'بقالة الأقمشة الكهربائية لحلاقة الشعر'، سألوه شنو تبيع؟ گال: والله بعدني ما مقرر.",
-    "اكو فد واحد سأل صديقه: ليش اليهود خشومهم كبار؟ جاوبه صديقه: لأن الهوا ببلاش.",
-    "واحد خبيث راح يعزي، سأل أهل الميت: يعني ماكو أمل يرجع؟",
-    "واحد راح يخطب، أبو البنية گاله: ابني يدخن؟ گال: لا الحمدلله، بس مرات يسكر ويحشش.",
-    "مدرس سأل طالب: شنو برج أمك؟ گاله: يمكن برج إيفل.",
-    "واحد گال لصاحبه: أريد أخطب. صاحبه گاله: بس إنت أصلع! گال: عادي، هي هم لابسة حجاب.",
-    "محشش وگف ورا الإمام بالصلاة، الإمام گال: استقيموا واعتدلوا. المحشش صاح: أوكي، فديتك.",
-    "دليمي راح لأمريكا، شاف الناس لابسين تيشيرتات مكتوب عليها 'بيبسي'، ثاني يوم كتب على دشداشته 'شربت'.",
-    "واحد سأل أبوه: بابا شنو الفرق بين القدر والنصيب؟ الأب: القدر هو أن تموت عطشان، والنصيب هو أن تشرب ماء مالح.",
-    "محشش اشترى موبايل جديد، خابر صاحبه وگاله: دير بالك تتصل على رقمي القديم، تره بعته.",
-    "فار سكران گال: كل القطط تحت سيطرتي. التفت شاف بزونة سودة، گال: إلا ست الحبايب.",
-    "واحد غبي راد يفتح شباك الثلاجة حتى يشوف الضوه شلون يطفى.",
-    "مرة مدرس رياضيات خلف ولدين واستنتج الثالث.",
-    "واحد اشترى بطانية Made in China، من تغطه بيها حس بالبرد.",
-    "اكو واحد بنه بيت مدور، مرته گالتله: وين القبلة؟ گاللها: بكل مكان.",
-    "واحد سأل محشش: شنو أصعب شي بالحياة؟ گاله: من تحاول تذكر ليش دخلت للغرفة.",
-    "بخيل وگع من السطح، وهو ونازل شاف مرته تطبخ، گاللها: لا تسوين عشا."
 ]
-
-# --- (تم التعديل) توسيع قائمة الحزازير ---
 RIDDLES = [
     ("شنو الشي اللي كلما تاخذ منه يكبر؟", "الحفرة"),
     ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة"),
-    ("شي عنده عين وحدة بس ميشوف بيها؟", "الإبرة"),
-    ("شنو الشي اللي عنده رجلين بس ميمشي؟", "البنطرون"),
-    ("بيت مابي لا بيبان ولا شبابيك، شنو هو؟", "بيضة الدجاجة"),
-    ("شنو الشي اللي يكتب بس ميقرأ؟", "القلم"),
-    ("شنو الشي اللي يصعد بس مينزل؟", "العمر"),
-    ("شنو الشي اللي تذبحه وتبچي عليه؟", "البصل"),
-    ("شنو الشي اللي بالليل يجي بلا ما واحد يعزمه، وبالنهار يضيع بلا ما واحد يبوگه؟", "النجم"),
-    ("شنو الشي اللي عنده خمس صوابع بس مابي لحم وعظم؟", "الچف (الكفوف)"),
-    ("شنو الشي اللي كل جسمه أسود وگلبه أبيض وراسه أخضر؟", "الباذنجان"),
-    ("يمشي ويگف بلا رجلين، شنو هو؟", "الساعة"),
-    ("أخت خالك ومو خالتك، منو هي؟", "أمك"),
-    ("شنو الشي اللي يگدر يحچي كل لغات العالم؟", "الصدى"),
-    ("شنو الشي اللي تاكل منه بس متاكله؟", "الماعون (الصحن)"),
-    ("شنو الشي اللي عنده أسنان بس ما ياكل؟", "المشط"),
-    ("اني طويل من اگعد، وگصير من اوگف. منو آني؟", "الكلب"),
-    ("شنو الشي اللي عنده رقبة بس ما عنده راس؟", "البطل (الزجاجة)"),
-    ("شنو الشي اللي يمر عبر المدن والحقول بس ما يتحرك؟", "الطريق"),
-    ("شنو الشي اللي بيه هواي مفاتيح بس ما يفتح أي قفل؟", "البيانو")
 ]
-
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
 # --- دوال قاعدة البيانات الجديدة ---
-
 async def get_or_create_user(session, chat_id, user_id):
     """
     الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا.
@@ -170,16 +127,15 @@ async def get_user_rank(user_id, chat_id):
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
     days = uptime_delta.days
-    hours, rem_seconds = divmod(uptime_delta.seconds, 3600)
-    minutes, _ = divmod(rem_seconds, 60)
+    hours, rem = divmod(uptime_delta.seconds, 3600)
+    minutes, _ = divmod(rem, 60)
     
-    uptime_str = ""
-    if days > 0: uptime_str += f"{days} يوم و "
-    if hours > 0: uptime_str += f"{hours} ساعة و "
-    if minutes > 0: uptime_str += f"{minutes} دقيقة"
+    parts = []
+    if days > 0: parts.append(f"{days} يوم")
+    if hours > 0: parts.append(f"{hours} ساعة")
+    if minutes > 0: parts.append(f"{minutes} دقيقة")
     
-    final_str = uptime_str.strip().strip('و ')
-    return final_str if final_str else "بضع ثواني"
+    return " و ".join(parts) if parts else "بضع ثواني"
 
 MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 ⚜️ **قائمة أوامر سُرُوچ الرئيسية** ⚜️
@@ -198,10 +154,10 @@ async def build_main_menu_buttons():
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
     async with DBSession() as session:
-        result = await session.execute(select(CustomCommand).where(CustomCommand.show_button == True))
+        result = await session.execute(select(CustomCommand))
         custom_commands = result.scalars().all()
     
-    custom_buttons_row = [Button.inline(cmd.name.capitalize(), data=f"ccmd:{cmd.name}") for cmd in custom_commands]
+    custom_buttons_row = [Button.inline(cmd.name.capitalize(), data=f"ccmd:{cmd.name}") for cmd in custom_commands if cmd.show_button]
     if custom_buttons_row:
         for i in range(0, len(custom_buttons_row), 2):
             buttons.append(custom_buttons_row[i:i + 2])
@@ -235,9 +191,9 @@ async def has_bot_permission(event):
 
 async def check_activation(chat_id):
     async with DBSession() as session:
-        result = await session.execute(select(Group).where(Group.chat_id == chat_id))
+        result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
-        return not group.is_paused if group else True
+        return group.is_active if group else True
 
 async def add_points(chat_id, user_id, points_to_add):
     async with DBSession() as session:
