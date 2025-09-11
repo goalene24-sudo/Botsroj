@@ -81,4 +81,60 @@ class MessageHistory(Base):
     msg_type = Column(String)
     chat = relationship("Chat", back_populates="message_history")
 
+# --- (تمت الإضافة) الجداول المفقودة التي تم استنتاجها ---
+
+class Vip(Base):
+    __tablename__ = "vips"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_vip_user_chat_uc'),)
+
+class SecondaryDev(Base):
+    __tablename__ = "secondary_devs"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_secondarydev_user_chat_uc'),)
+
+class Creator(Base):
+    __tablename__ = "creators"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_creator_user_chat_uc'),)
+
+class BotAdmin(Base):
+    __tablename__ = "bot_admins"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_botadmin_user_chat_uc'),)
+
+class CommandSetting(Base):
+    __tablename__ = "command_settings"
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    command = Column(String, nullable=False)
+    is_enabled = Column(Boolean, default=True)
+    __table_args__ = (UniqueConstraint('chat_id', 'command', name='_cmdsetting_chat_command_uc'),)
+
+class CustomCommand(Base):
+    __tablename__ = "custom_commands"
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    response = Column(String, nullable=False)
+    show_button = Column(Boolean, default=False)
+    __table_args__ = (UniqueConstraint('chat_id', 'name', name='_customcmd_chat_name_uc'),)
+
+class Lock(Base):
+    __tablename__ = "locks"
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(BigInteger, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
+    lock_type = Column(String, nullable=False)
+    is_locked = Column(Boolean, default=False)
+    __table_args__ = (UniqueConstraint('chat_id', 'lock_type', name='_lock_chat_type_uc'),)
+
+
 print(">> تم تحميل نماذج البيانات (الجداول) النهائية والشاملة بنجاح. <<")
