@@ -5,7 +5,7 @@ from telethon.tl.types import ChannelParticipantsAdmins, ChannelParticipantCreat
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation,
@@ -13,7 +13,8 @@ from .utils import (
     Ranks,
     is_command_enabled,
 )
-from .admin import get_or_create_user # استيراد الدالة غير المتزامنة
+# (ملاحظة: get_or_create_user موجودة في utils، لذا تم تبسيط الاستيراد)
+from .utils import get_or_create_user
 from .achievements import ACHIEVEMENTS
 
 # --- ثوابت ---
@@ -50,7 +51,7 @@ async def id_handler(event):
     if not target_user:
         return await event.reply("**ما گدرت أحدد المستخدم.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
         
         msg_count = user_obj.msg_count
@@ -80,7 +81,7 @@ async def id_handler(event):
     custom_title_item = inventory.get("تخصيص لقب")
     if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400:
         custom_title = user_obj.custom_title
-            
+        
     decoration_item = inventory.get("زخرفة")
     if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
         decoration = "✨"
@@ -130,7 +131,7 @@ async def kashf_handler(event):
         
     target_user = await replied_msg.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
     
     rank_int = await get_user_rank(target_user.id, event.chat_id)
