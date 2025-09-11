@@ -8,7 +8,8 @@ import config
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import Chat
 
 # --- استيراد الدوال المساعدة المحدثة ---
@@ -18,7 +19,7 @@ from .utils import is_admin, add_points
 # --- دوال مساعدة جديدة لإدارة إعدادات المجموعة ---
 async def get_chat_setting(chat_id, key, default=None):
     """تجلب إعدادًا معينًا من حقل الإعدادات للمجموعة."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(Chat.settings).where(Chat.id == chat_id))
         settings = result.scalar_one_or_none()
         if settings:
@@ -27,7 +28,7 @@ async def get_chat_setting(chat_id, key, default=None):
 
 async def set_chat_setting(chat_id, key, value):
     """تُعيّن إعدادًا معينًا في حقل الإعدادات للمجموعة."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         chat = result.scalar_one_or_none()
         
@@ -54,7 +55,7 @@ async def activity_report_handler(event):
     report_parts = ["📊 **تقرير نشاط البوت سُـرُوچ**\n\n"]
     active_groups_count = 0
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         # جلب جميع المجموعات النشطة من قاعدة البيانات
         result = await session.execute(select(Chat).where(Chat.is_active == True))
         active_chats = result.scalars().all()
