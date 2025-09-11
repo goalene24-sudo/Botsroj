@@ -1,16 +1,15 @@
-# plugins/millionaire.py
 import asyncio
 import random
 from telethon import events, Button
 from bot import client
-from .utils import check_activation, add_points, db, save_db
+# --- (مُعدَّل) تم حذف استيرادات غير ضرورية ---
+from .utils import check_activation, add_points
 from .millionaire_data import QUESTIONS
 
 # --- إعدادات اللعبة ---
-# --- (تم التعديل) تغيير بنية حفظ الألعاب لتمكين اللعب المتزامن ---
 ACTIVE_GAMES = {} # المفتاح الآن هو (chat_id, user_id)
 PRIZE_LADDER = [
-    0, 100, 200, 300, 500, 1000,   # Level 1-5
+    0, 100, 200, 300, 500, 1000,    # Level 1-5
     2000, 4000, 8000, 16000, 32000, # Level 6-10
     64000, 125000, 250000, 500000, 1000000 # Level 11-15
 ]
@@ -20,7 +19,6 @@ SAFE_POINTS = [1000, 32000]
 def get_question_by_level(level):
     """يجلب سؤالاً عشوائياً للمستوى المطلوب."""
     eligible_questions = [q for q in QUESTIONS if q['level'] == level]
-    # التأكد من عدم تكرار نفس السؤال في نفس اللعبة (اختياري لكنه تحسين جيد)
     return random.choice(eligible_questions) if eligible_questions else None
 
 def build_keyboard(game_state):
@@ -32,7 +30,6 @@ def build_keyboard(game_state):
     row = []
     for i, option in enumerate(options):
         if option:
-            # --- (تم التعديل) إضافة معرّف اللاعب للبيانات لضمان الخصوصية ---
             callback_data = f"mil:ans:{i}:{game_state['player_id']}"
             row.append(Button.inline(option, data=callback_data))
         if len(row) == 2:
@@ -60,7 +57,6 @@ async def start_game(event):
     player_id = player.id
     game_key = (chat_id, player_id)
 
-    # --- (تم التعديل) التحقق إذا كان اللاعب لديه لعبة نشطة بالفعل ---
     if game_key in ACTIVE_GAMES:
         return await event.reply("**لديك لعبة 'من سيربح المليون' نشطة بالفعل! أكملها أولاً أو انسحب منها.**")
 
@@ -70,7 +66,7 @@ async def start_game(event):
         "level": 1,
         "lifelines": {"5050": True, "audience": True, "phone": True},
         "message_id": None,
-        "used_questions": [] # لمنع تكرار الأسئلة في نفس اللعبة
+        "used_questions": []
     }
     
     question_data = get_question_by_level(1)
@@ -97,13 +93,11 @@ async def start_game(event):
 @client.on(events.CallbackQuery(pattern=b"mil:"))
 async def millionaire_callback_handler(event):
     chat_id = event.chat_id
-    user_id = event.sender_id # الشخص الذي ضغط على الزر
+    user_id = event.sender_id
     data = event.data.decode().split(':')
     action = data[1]
     
-    # --- (تم التعديل) منطق جديد للتحقق من هوية اللاعب وصلاحيته ---
     try:
-        # اللاعب المستهدف من الزر
         target_player_id = int(data[-1])
     except (ValueError, IndexError):
         return await event.answer("حدث خطأ في بيانات الزر.", alert=True)
@@ -111,7 +105,6 @@ async def millionaire_callback_handler(event):
     game_key = (chat_id, target_player_id)
     
     if user_id != target_player_id:
-        # التحقق إذا كان الضاغط هو نفسه صاحب اللعبة
         return await event.answer("هذه اللعبه لا تخصك لا تحشر خشمك تريد تلعب اكتب من سيربح المليون وشوفنه شطارتك", alert=True)
 
     if game_key not in ACTIVE_GAMES:
@@ -130,7 +123,7 @@ async def millionaire_callback_handler(event):
             current_prize = PRIZE_LADDER[game_state['level']]
 
             if game_state['level'] == 15:
-                add_points(chat_id, user_id, 1000000)
+                await add_points(chat_id, user_id, 1000000)
                 await event.edit(f"**🎉🎉 مليوووون مبروووك! 🎉🎉**\n\n**لقد فزت بمليون نقطة يا [{game_state['player_name']}](tg://user?id={user_id})! أنت البطل!**")
                 del ACTIVE_GAMES[game_key]
                 return
@@ -139,7 +132,7 @@ async def millionaire_callback_handler(event):
             new_question = get_question_by_level(game_state['level'])
             if not new_question:
                 await event.edit("**عذراً، انتهت الأسئلة! مبروك فزت بالرصيد الحالي.**")
-                add_points(chat_id, user_id, current_prize)
+                await add_points(chat_id, user_id, current_prize)
                 del ACTIVE_GAMES[game_key]
                 return
 
@@ -161,7 +154,7 @@ async def millionaire_callback_handler(event):
                     final_prize = sp
             
             if final_prize > 0:
-                add_points(chat_id, user_id, final_prize)
+                await add_points(chat_id, user_id, final_prize)
             
             await event.edit(
                 f"**للأسف إجابة خاطئة! 😔**\n\n"
@@ -199,7 +192,7 @@ async def millionaire_callback_handler(event):
                 correct_index = options.index(correct)
                 percs[correct_index] = random.randint(50, 80)
             except (ValueError, IndexError):
-                pass # Correct answer was removed by 50:50, so just show random percentages
+                pass
             
             total = sum(percs)
             percs = [int((p / total) * 100) for p in percs]
@@ -226,7 +219,7 @@ async def millionaire_callback_handler(event):
     elif action == "walkaway":
         prize = PRIZE_LADDER[game_state['level']-1]
         if prize > 0:
-            add_points(chat_id, user_id, prize)
+            await add_points(chat_id, user_id, prize)
         
         await event.edit(
             f"**قرار حكيم! 💰**\n\n"
