@@ -2,51 +2,71 @@
 import os
 import random
 import asyncio
+import aiohttp
 from telethon import events
+from telethon.tl.types import InputMediaPhoto
 from bot import client
+import config  # --- (مهم) استيراد ملف الإعدادات ---
 from .utils import check_activation
-from duckduckgo_search import DDGS  # --- (تمت إعادة المكتبة) ---
 import yt_dlp
 
-# --- (جديد) قائمة هويات المتصفحات لتجنب الحظر ---
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
-]
-
-@client.on(events.NewMessage(pattern=r"^صورة (.+)"))
+# --- (مُعدل بالكامل) دالة البحث عن الصور باستخدام Google API ---
+@client.on(events.NewMessage(pattern=r"^صورة(?: (\d+))? (.+)"))
 async def image_search_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
 
-    search_term = event.pattern_match.group(1).strip()
+    # التحقق من وجود المفاتيح في ملف الإعدادات
+    if not hasattr(config, 'GOOGLE_API_KEY') or not hasattr(config, 'GOOGLE_CX_ID') or not config.GOOGLE_API_KEY or not config.GOOGLE_CX_ID:
+        await event.reply("**❌ | خطأ فادح!**\n\nلم يتم العثور على مفاتيح Google API في ملف الإعدادات. يرجى إضافتها أولاً.")
+        return
+
+    match = event.pattern_match.groups()
+    limit = int(match[0]) if match[0] else 1
+    search_term = match[1].strip()
+
     if not search_term:
         return await event.reply("**شنو الصورة اللي أدور عليها؟ اكتب شي ويه الأمر.**\n**مثال: `صورة قطة`**")
+    
+    if limit > 10:
+        limit = 10 # الحد الأقصى للـ API هو 10 في كل طلب
 
-    loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}'**")
+    loading_msg = await event.reply(f"**📷 لحظات... دا أدور على صورة لـ '{search_term}' باستخدام Google**")
+
+    api_key = config.GOOGLE_API_KEY
+    cx_id = config.GOOGLE_CX_ID
+    
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": api_key,
+        "cx": cx_id,
+        "q": search_term,
+        "searchType": "image",
+        "num": limit,
+        "safe": "active"
+    }
 
     try:
-        # --- (مُعدل) استخدام المكتبة مع هيدر عشوائي لتجنب الحظر ---
-        headers = {'User-Agent': random.choice(USER_AGENTS)}
-        # ملاحظة: قد تحتاج إلى ضبط بروكسي إذا كنت تواجه حظرًا شديدًا
-        # with DDGS(headers=headers, proxies="socks5://user:pass@host:port") as ddgs:
-        with DDGS(headers=headers) as ddgs:
-            results = [r for r in ddgs.images(search_term, max_results=50)]
-        
-        if not results:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    return await loading_msg.edit(f"**❌ | حدث خطأ من Google:**\n`{response.status}: {error_text}`")
+                
+                data = await response.json()
+
+        if "items" not in data or not data["items"]:
             return await loading_msg.edit(f"**عذراً، ما لگيت أي صورة تطابق بحثك عن '{search_term}'.\nحاول بكلمات بحث مختلفة.**")
+
+        results = [item['link'] for item in data['items']]
         
-        image_to_send = random.choice(results)
-        image_url = image_to_send['image']
+        reply_to_id = event.message.reply_to_msg_id or event.id
+        if limit == 1:
+            await client.send_file(event.chat_id, results[0], caption=f"**🖼️ | نتيجة البحث عن:** `{search_term}`", reply_to=reply_to_id)
+        else:
+            media_album = [InputMediaPhoto(url) for url in results]
+            await client.send_file(event.chat_id, media_album, reply_to=reply_to_id)
         
-        await client.send_file(
-            event.chat_id,
-            file=image_url,
-            caption=f"**🖼️ | نتيجة البحث عن:** `{search_term}`",
-            reply_to=event.id
-        )
         await loading_msg.delete()
 
     except Exception as e:
