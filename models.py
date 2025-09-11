@@ -13,12 +13,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from database import Base
 
-# --- جدول للإعدادات العامة للبوت ---
-class GlobalSettings(Base):
+# --- جدول للإعدادات العامة للبوت (تم تصحيح الاسم) ---
+class GlobalSetting(Base):
     __tablename__ = "global_settings"
     
     key = Column(String, primary_key=True)
-    value = Column(JSON)
+    value = Column(String) # تم التغيير من JSON إلى String ليتوافق مع confess.py
 
 # --- جدول المجموعات (Chats) ---
 class Chat(Base):
