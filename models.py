@@ -12,7 +12,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from database import Base
-from plugins.utils import Ranks # استيراد الرتب لاستخدامها كقيمة افتراضية
 
 # --- جدول للإعدادات العامة للبوت ---
 class GlobalSettings(Base):
@@ -29,8 +28,6 @@ class Chat(Base):
     is_active = Column(Boolean, default=True)
     total_msgs = Column(Integer, default=0)
     last_dhikr_time = Column(Integer, default=0)
-
-    # --- (جديد) أعمدة لتخزين الإعدادات بصيغة JSON ---
     command_settings = Column(JSON, default={})
     lock_settings = Column(JSON, default={})
     
@@ -53,8 +50,9 @@ class User(Base):
     bio = Column(String, default="لم يتم تعيين نبذة بعد.")
     custom_title = Column(String, nullable=True)
     
-    # --- (جديد) عمود لتخزين رتبة المستخدم كرقم ---
-    rank = Column(Integer, default=Ranks.MEMBER)
+    # --- (تم التعديل هنا) ---
+    # تم حذف الاستيراد ووضع القيمة الافتراضية كرقم مباشرة لكسر الحلقة
+    rank = Column(Integer, default=0) # 0 هي رتبة العضو العادي
     
     achievements = Column(JSON, default=[]) 
     inventory = Column(JSON, default={})
