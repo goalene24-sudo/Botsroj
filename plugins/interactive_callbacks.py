@@ -5,8 +5,8 @@ from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
-# --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+# --- (تم التصحيح) استيراد مكونات قاعدة البيانات من utils ---
+from .utils import DBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
@@ -275,7 +275,7 @@ async def handle_interactive_callback(event):
         return
 
     if action == "asma_husna":
-        # ... الكود الخاص بأسماء الله الحسنى ...
+        # ... (منطق أسماء الله الحسنى لا يتغير) ...
         return
         
     if action == "show_rules":
