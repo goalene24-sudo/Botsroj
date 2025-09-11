@@ -39,7 +39,11 @@ XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
 
-# --- (تم التعديل) القائمة الكاملة للنكت ---
+# --- (تمت الإعادة) قوائم الأوامر التي تحتاجها الإضافات الأخرى ---
+PERCENT_COMMANDS = [ "نسبة الحب", "نسبة الكره", "نسبة الجمال", "نسبة الغباء", "نسبة الخيانة", "نسبة الشجاعة", "نسبة الذكاء" ]
+GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "xo", "الترتيب", "زواج", "كويز", "تخمين", "سمايلات", "سمايل", "سجلي", "المختلف", "اعلام الدول", "عواصم الدول", "رياضيات", "العكس", "اكمل المثل", "محيبس"]
+ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
+
 JOKES = [
     "اكو واحد راح للطبيب گاله دكتور عندي إسهال، الطبيب گاله حلّل، گال لعد شعبالك قابل مخثر؟",
     "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح.",
@@ -64,7 +68,6 @@ JOKES = [
     "بخيل وگع من السطح، وهو ونازل شاف مرته تطبخ، گاللها: لا تسوين عشا."
 ]
 
-# --- (تم التعديل) القائمة الكاملة للحزازير ---
 RIDDLES = [
     ("شنو الشي اللي كلما تاخذ منه يكبر؟", "الحفرة"),
     ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة"),
@@ -90,8 +93,6 @@ RIDDLES = [
 
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
-# --- (جديد) دوال التعامل مع قاعدة البيانات ---
-
 def get_or_create_chat(chat_id):
     chat = SESSION.query(Chat).filter(Chat.id == chat_id).first()
     if not chat:
@@ -109,30 +110,26 @@ def get_or_create_user(chat_id, user_id):
         SESSION.commit()
     return user
 
-# --- (مُعدل بالكامل) الدوال القديمة تم تحديثها لتعمل مع SQLAlchemy ---
-
 async def get_user_rank(user_id, chat_id):
-    if user_id in config.SUDO_USERS:
-        return Ranks.MAIN_DEV
-    
+    if user_id in config.SUDO_USERS: return Ranks.MAIN_DEV
     db_user = get_or_create_user(chat_id, user_id)
-    
     try:
         participant = await client.get_participant(chat_id, user_id)
-        if isinstance(participant, ChannelParticipantCreator):
-            return Ranks.OWNER
-        
+        if isinstance(participant, ChannelParticipantCreator): return Ranks.OWNER
         if isinstance(participant.participant, ChannelParticipantAdmin):
-            if db_user.rank < Ranks.MOD:
-                 return Ranks.MOD
-    except (UserNotParticipantError, Exception):
-        pass
-
+            if db_user.rank < Ranks.MOD: return Ranks.MOD
+    except: pass
     return db_user.rank
+
+async def is_admin(chat_id, user_id):
+    rank = await get_user_rank(user_id, chat_id)
+    return rank >= Ranks.MOD
 
 def is_command_enabled(chat_id, command_key):
     chat = get_or_create_chat(chat_id)
-    return chat.command_settings.get(command_key, True)
+    # Correctly access nested dictionary
+    command_settings = chat.settings.get("command_settings", {})
+    return command_settings.get(command_key, True)
 
 async def check_activation(chat_id):
     chat = get_or_create_chat(chat_id)
@@ -153,12 +150,10 @@ async def build_protection_menu(chat_id):
         if len(row) == 2:
             buttons.append(row)
             row = []
-    if row:
-        buttons.append(row)
+    if row: buttons.append(row)
     buttons.append([Button.inline("🔙 رجوع", data="admin_hub:main")])
     return buttons
 
-# --- (دوال لم تتغير في منطقها) ---
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
     days = uptime_delta.days
@@ -180,7 +175,6 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
 def build_main_menu_buttons():
-    # سيتم تعديل هذا لاحقًا لقراءة الأوامر المخصصة من قاعدة البيانات
     buttons = [
         [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
         [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
@@ -188,6 +182,7 @@ def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
+    # Note: Custom commands from DB will be implemented later
     return buttons
 
 def build_xo_keyboard(board, game_over=False):
