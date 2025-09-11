@@ -5,7 +5,44 @@ from telethon.tl.types import ChannelParticipantsAdmins
 from telethon.errors.rpcerrorlist import UserNotParticipantError, ChatWriteForbiddenError
 from bot import client
 import config
-from .utils import db, is_admin, add_points, save_db
+
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from database import DBSession
+from models import Chat
+
+# --- استيراد الدوال المساعدة المحدثة ---
+from .utils import is_admin, add_points
+
+
+# --- دوال مساعدة جديدة لإدارة إعدادات المجموعة ---
+async def get_chat_setting(chat_id, key, default=None):
+    """تجلب إعدادًا معينًا من حقل الإعدادات للمجموعة."""
+    async with DBSession() as session:
+        result = await session.execute(select(Chat.settings).where(Chat.id == chat_id))
+        settings = result.scalar_one_or_none()
+        if settings:
+            return settings.get(key, default)
+        return default
+
+async def set_chat_setting(chat_id, key, value):
+    """تُعيّن إعدادًا معينًا في حقل الإعدادات للمجموعة."""
+    async with DBSession() as session:
+        result = await session.execute(select(Chat).where(Chat.id == chat_id))
+        chat = result.scalar_one_or_none()
+        
+        if chat:
+            # نستخدم نسخة قابلة للتعديل من الإعدادات
+            new_settings = dict(chat.settings)
+            new_settings[key] = value
+            chat.settings = new_settings
+            await session.commit()
+        else:
+            # إذا لم تكن المجموعة موجودة، ننشئها
+            new_chat = Chat(id=chat_id, settings={key: value})
+            session.add(new_chat)
+            await session.commit()
+
 
 @client.on(events.NewMessage(pattern="^نشاطك$"))
 async def activity_report_handler(event):
@@ -17,15 +54,13 @@ async def activity_report_handler(event):
     report_parts = ["📊 **تقرير نشاط البوت سُـرُوچ**\n\n"]
     active_groups_count = 0
 
-    all_chat_ids = [int(chat_id) for chat_id in db if chat_id.startswith('-')]
+    async with DBSession() as session:
+        # جلب جميع المجموعات النشطة من قاعدة البيانات
+        result = await session.execute(select(Chat).where(Chat.is_active == True))
+        active_chats = result.scalars().all()
 
-    for chat_id in all_chat_ids:
-        chat_id_str = str(chat_id)
-        chat_info = db[chat_id_str]
-        
-        if chat_info.get("is_paused", False) or "users" not in chat_info:
-            continue
-
+    for chat in active_chats:
+        chat_id = chat.id
         try:
             if not await is_admin(chat_id, 'me'):
                 continue
@@ -35,7 +70,7 @@ async def activity_report_handler(event):
             
             admins_text = ""
             async for user in client.iter_participants(chat_entity, filter=ChannelParticipantsAdmins):
-                admins_text += f"   - [{user.first_name}](tg://user?id={user.id})\n"
+                admins_text += f"    - [{user.first_name}](tg://user?id={user.id})\n"
             
             active_groups_count += 1
             report_parts.append(
@@ -43,11 +78,12 @@ async def activity_report_handler(event):
                 f"**● المجموعة:** {chat_entity.title}\n"
                 f"**● الآيدي:** `{chat_id}`\n"
                 f"**● عدد الأعضاء:** {member_count}\n"
-                f"**● قائمة المشرفين:**\n{admins_text if admins_text else '   - لا يوجد مشرفين.'}\n"
+                f"**● قائمة المشرفين:**\n{admins_text if admins_text else '    - لا يوجد مشرفين.'}\n"
             )
         except (UserNotParticipantError, ValueError):
             continue
-        except Exception:
+        except Exception as e:
+            print(f"خطأ في معالجة المجموعة {chat_id} في تقرير النشاط: {e}")
             continue
 
     if active_groups_count > 0:
@@ -69,9 +105,9 @@ async def lottery_draw_handler(event):
     if event.is_private or event.sender_id not in config.SUDO_USERS:
         return
 
-    chat_id_str = str(event.chat_id)
+    chat_id = event.chat_id
     
-    lottery_players = db.get(chat_id_str, {}).get("lottery_players", [])
+    lottery_players = await get_chat_setting(chat_id, "lottery_players", [])
     if not lottery_players:
         return await event.reply("**لا يوجد أي مشاركين في اليانصيب الحالي لبدء السحب.**")
 
@@ -80,11 +116,12 @@ async def lottery_draw_handler(event):
 
     try:
         winner_id_str = random.choice(lottery_players)
-        winner_user = await client.get_entity(int(winner_id_str))
+        winner_id = int(winner_id_str)
+        winner_user = await client.get_entity(winner_id)
         
         prize = random.randint(5000, 15000)
         
-        add_points(event.chat_id, int(winner_id_str), prize)
+        await add_points(chat_id, winner_id, prize)
         
         announcement = (
             f"🎉 **الفائز المحظوظ هو... [{winner_user.first_name}](tg://user?id={winner_user.id})!** 🎉\n\n"
@@ -93,15 +130,13 @@ async def lottery_draw_handler(event):
         )
         await event.reply(announcement)
         
-        db[chat_id_str]["lottery_players"] = []
-        save_db(db)
+        await set_chat_setting(chat_id, "lottery_players", [])
 
     except Exception as e:
         await event.reply(f"**حدث خطأ أثناء إجراء السحب:**\n`{e}`")
 
 @client.on(events.NewMessage(pattern=r"^ارسل (-?\d+) (.+)"))
 async def send_to_group_handler(event):
-    # التأكد من أن الأمر أُرسل من قبل المطور فقط وفي الخاص
     if not event.is_private or event.sender_id not in config.SUDO_USERS:
         return
 
@@ -109,10 +144,8 @@ async def send_to_group_handler(event):
         chat_id_to_send = int(event.pattern_match.group(1))
         message_to_send = event.pattern_match.group(2)
 
-        # محاولة إرسال الرسالة
         await client.send_message(chat_id_to_send, message_to_send)
         
-        # إرسال تأكيد للمطور
         await event.reply(f"✅ **تم إرسال رسالتك بنجاح إلى المجموعة:** `{chat_id_to_send}`")
 
     except (ValueError, TypeError):
