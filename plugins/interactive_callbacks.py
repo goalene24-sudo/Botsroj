@@ -136,7 +136,40 @@ async def handle_interactive_callback(event):
         return
 
     if action == "tasbeeh":
-        # ... (منطق التسبيح لا يتغير لأنه لا يستخدم قاعدة البيانات) ...
+        sub_action = data_parts[1]
+        zikr = data_parts[2]
+        goal = int(data_parts[3])
+        current = int(data_parts[4])
+        
+        if sub_action == "click":
+            now = time.time()
+            last_click = TASBEEH_COOLDOWN.get(user_id, 0)
+            if now - last_click < TASBEEH_CLICK_COOLDOWN:
+                return await event.answer("على كيفك، لا تضغط بسرعة!", alert=True)
+            
+            TASBEEH_COOLDOWN[user_id] = now
+            current += 1
+            
+            new_data = f"tasbeeh:click:{zikr}:{goal}:{current}"
+            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
+            new_buttons = [[Button.inline(f"{zikr} [{current}]", data=new_data), 
+                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
+            try:
+                await event.edit(buttons=new_buttons)
+            except MessageNotModifiedError:
+                pass 
+
+            if current == goal:
+                await event.answer("تقبل الله طاعتك 🤲", alert=True)
+
+        elif sub_action == "reset":
+            current = 0
+            new_data = f"tasbeeh:click:{zikr}:{goal}:0"
+            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
+            new_buttons = [[Button.inline(f"{zikr} [0]", data=new_data), 
+                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
+            await event.edit(buttons=new_buttons)
+            await event.answer("تم تصفير العداد.")
         return
 
     if action == "mahbis":
@@ -203,11 +236,46 @@ async def handle_interactive_callback(event):
         return
 
     if action == "whisper":
-        # ... (منطق الهمس لا يتغير) ...
+        sub_action = data_parts[1]
+        msg_id = event.message_id
+        if sub_action == "read":
+            whisper_data = WHISPERS.get(msg_id)
+            if not whisper_data:
+                return await event.answer("**عذراً، هذه الهمسة قديمة جداً أو تم حذفها.**", alert=True)
+            recipient_id = whisper_data["to_id"]
+            if user_id == recipient_id:
+                whisper_text = whisper_data["text"]
+                await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
+                await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
+                del WHISPERS[msg_id]
+            else:
+                await event.answer("**🚫 | هذه الهمسة ليست لك!**", alert=True)
+        elif sub_action == "done":
+            await event.answer("**تمت قراءة هذه الهمسة بالفعل.**", alert=True)
         return
 
-    if action == "hisn" or action == "seerah" or action == "asma_husna":
-        # ... (منطق القوائم الدينية لا يتغير) ...
+    if action == "hisn":
+        key = data_parts[1]
+        dua_info = HISN_ALMUSLIM.get(key)
+        if dua_info:
+            text = dua_info["text"]
+            buttons = Button.inline("📜 رجوع إلى القائمة", data="hisn_main")
+            await event.edit(text, buttons=buttons)
+        await event.answer()
+        return
+
+    if action == "seerah":
+        stage_key = data_parts[1]
+        stage_info = SEERAH_STAGES.get(stage_key)
+        if stage_info:
+            text = stage_info["text"]
+            buttons = Button.inline("🔙 رجوع إلى القائمة", data="seerah_main")
+            await event.edit(f"**{text}**", buttons=buttons)
+        await event.answer()
+        return
+
+    if action == "asma_husna":
+        # ... الكود الخاص بأسماء الله الحسنى ...
         return
         
     if action == "show_rules":
@@ -236,3 +304,4 @@ async def handle_interactive_callback(event):
         else:
             await event.edit(f"**اويليي، غلط جوابك يا [{winner.first_name}](tg://user?id={winner.id})! 😢 الجواب الصح هو '{correct_answer}'.**")
         await event.answer()
+
