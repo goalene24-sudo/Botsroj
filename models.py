@@ -27,9 +27,14 @@ class Chat(Base):
     id = Column(BigInteger, primary_key=True, index=True)
     is_active = Column(Boolean, default=True)
     total_msgs = Column(Integer, default=0)
-    last_dhikr_time = Column(Integer, default=0)
-    command_settings = Column(JSON, default={})
+    
+    # --- (جديد) حقل JSON لتخزين جميع إعدادات المجموعة ---
+    settings = Column(JSON, default={})
+    # سيحتوي هذا على: dhikr_enabled, dhikr_interval, max_warns, welcome_msg, dev_reply, etc.
+    
     lock_settings = Column(JSON, default={})
+    filtered_words = Column(JSON, default=[])
+    custom_replies = Column(JSON, default={})
     
     users = relationship("User", back_populates="chat", cascade="all, delete-orphan")
     aliases = relationship("Alias", back_populates="chat", cascade="all, delete-orphan")
@@ -46,13 +51,11 @@ class User(Base):
     msg_count = Column(Integer, default=0)
     points = Column(Integer, default=0)
     sahaqat = Column(Integer, default=0)
+    warns = Column(Integer, default=0) # <-- (جديد) عمود للتحذيرات
     join_date = Column(String)
     bio = Column(String, default="لم يتم تعيين نبذة بعد.")
     custom_title = Column(String, nullable=True)
-    
-    # --- (تم التعديل هنا) ---
-    # تم حذف الاستيراد ووضع القيمة الافتراضية كرقم مباشرة لكسر الحلقة
-    rank = Column(Integer, default=0) # 0 هي رتبة العضو العادي
+    rank = Column(Integer, default=0)
     
     achievements = Column(JSON, default=[]) 
     inventory = Column(JSON, default={})
@@ -61,26 +64,21 @@ class User(Base):
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
 
-# --- جدول الاختصارات (Aliases) ---
+# --- (لا تغيير على الجداول التالية) ---
 class Alias(Base):
     __tablename__ = "aliases"
-    
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger, ForeignKey("chats.id"), nullable=False)
     alias_name = Column(String, nullable=False)
     command_name = Column(String, nullable=False)
-    
     chat = relationship("Chat", back_populates="aliases")
 
-# --- جدول سجل الرسائل (لأوامر التنظيف) ---
 class MessageHistory(Base):
     __tablename__ = "message_history"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger, ForeignKey("chats.id"), nullable=False)
     msg_id = Column(BigInteger, nullable=False)
     msg_type = Column(String)
-    
     chat = relationship("Chat", back_populates="message_history")
 
-print(">> تم تحميل نماذج البيانات (الجداول) النهائية بنجاح. <<")
+print(">> تم تحميل نماذج البيانات (الجداول) النهائية والشاملة بنجاح. <<")
