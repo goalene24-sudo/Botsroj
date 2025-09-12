@@ -7,10 +7,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, get_user_rank, Ranks, get_rank_name
-from .admin import get_or_create_user
+from .utils import get_or_create_user
 
 
 @client.on(events.NewMessage(pattern="^سجلي$"))
@@ -18,7 +18,7 @@ async def my_stats_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         
@@ -83,7 +83,7 @@ async def gift_points_handler(event):
     except (ValueError, IndexError):
         return await event.reply("**الأمر غلط. اكتب `اهداء` وبعدها عدد النقاط.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         sender_obj = await get_or_create_user(session, event.chat_id, sender.id)
         
         if sender_obj.points < amount:
@@ -115,7 +115,7 @@ async def daily_reward_handler(event):
     cooldown = 24 * 60 * 60
     current_time = int(time.time())
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         last_reward_time = inventory.get("last_reward", 0)
@@ -148,7 +148,7 @@ async def set_bio_handler(event):
     if len(bio_text) > 70:
         return await event.reply("**النبذة طويلة جداً! لازم تكون أقل من 70 حرف.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
         user_obj.bio = bio_text
         await session.commit()
@@ -162,7 +162,7 @@ async def divorce_handler(event):
     
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         sender_obj = await get_or_create_user(session, event.chat_id, sender.id)
         sender_inventory = sender_obj.inventory or {}
         married_to = sender_inventory.get("married_to")
@@ -197,7 +197,7 @@ async def my_inventory_handler(event):
     
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
 
@@ -257,7 +257,7 @@ async def set_birthday_handler(event):
             "**مثال:** `ضع ميلادي 25-12`"
         )
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
         inventory = user_obj.inventory or {}
         inventory["birthday"] = {"day": day, "month": month}
@@ -274,7 +274,7 @@ async def my_points_handler(event):
     
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         points = user_obj.points
     
@@ -298,7 +298,7 @@ async def set_best_friend_handler(event):
     if bff.bot:
         return await event.reply("**لا يمكنك اختيار بوت كصديقك المفضل.**")
         
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         inventory["best_friend"] = {"id": bff.id, "name": bff.first_name}
@@ -318,7 +318,7 @@ async def delete_best_friend_handler(event):
     
     sender = await event.get_sender()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, sender.id)
         inventory = user_obj.inventory or {}
         
