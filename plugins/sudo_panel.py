@@ -9,7 +9,7 @@ import config
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import func, delete
-from database import DBSession
+from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
 # --- استيراد الدوال المساعدة ---
@@ -18,7 +18,7 @@ from .utils import get_uptime_string
 # --- دوال مساعدة لإدارة الإعدادات العامة في قاعدة البيانات ---
 async def get_global_setting(key, default=None):
     """جلب قيمة إعداد عام من قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting and setting.value:
@@ -31,7 +31,7 @@ async def get_global_setting(key, default=None):
 
 async def set_global_setting(key, value):
     """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         # تحويل القيمة إلى JSON إذا كانت قاموسًا أو قائمة
         if isinstance(value, (dict, list)):
             value_to_store = json.dumps(value, ensure_ascii=False)
@@ -91,7 +91,7 @@ async def sudo_panel_callback(event):
 
     elif action == "stats":
         uptime = get_uptime_string(StartTime)
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             group_count = await session.scalar(select(func.count(Chat.id)))
             user_count = await session.scalar(select(func.count(func.distinct(User.user_id))))
 
@@ -113,7 +113,7 @@ async def sudo_panel_callback(event):
                 
                 await conv.send_message("**⏳ | سأبدأ الآن ببث الرسالة...**")
                 successful, failed = 0, 0
-                async with DBSession() as session:
+                async with AsyncDBSession() as session:
                     result = await session.execute(select(Chat.id))
                     all_chat_ids = result.scalars().all()
 
@@ -161,7 +161,7 @@ async def sudo_panel_callback(event):
                     await set_global_setting("globally_banned", banned_list)
 
                 successful, failed = 0, 0
-                async with DBSession() as session:
+                async with AsyncDBSession() as session:
                     result = await session.execute(select(Chat.id))
                     all_chat_ids = result.scalars().all()
 
@@ -190,7 +190,7 @@ async def sudo_panel_callback(event):
 
                 await conv.send_message(f"**⏳ | سأقوم الآن بترقية `{user_id_to_promote}`...**")
                 promoted_in = 0
-                async with DBSession() as session:
+                async with AsyncDBSession() as session:
                     result = await session.execute(select(Chat.id))
                     all_chat_ids = result.scalars().all()
                     
@@ -211,7 +211,7 @@ async def sudo_panel_callback(event):
     elif action == "db_maint":
         await event.edit("**🛠️ | جاري فحص قاعدة البيانات...**")
         inactive_chat_ids = []
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             result = await session.execute(select(Chat.id))
             all_chat_ids = result.scalars().all()
 
@@ -248,7 +248,7 @@ async def sudo_panel_callback(event):
                 except ValueError:
                     return await conv.send_message("**ID غير صالح.**")
 
-                async with DBSession() as session:
+                async with AsyncDBSession() as session:
                     chat_data = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
                     if not chat_data: 
                         return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
@@ -278,7 +278,7 @@ async def sudo_panel_callback(event):
                 is_gbanned = user_id in banned_list
                 report += f"- الحظر العام: {'محظور 🚫' if is_gbanned else 'غير محظور ✅'}\n"
                 
-                async with DBSession() as session:
+                async with AsyncDBSession() as session:
                     total_msgs_res = await session.execute(select(func.sum(User.msg_count)).where(User.user_id == user_id))
                     total_msgs = total_msgs_res.scalar() or 0
                     
