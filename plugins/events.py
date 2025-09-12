@@ -26,9 +26,10 @@ import logging
 # إعداد السجل
 logger = logging.getLogger(__name__)
 
-# --- (تم التعديل) معالج منفصل لترجمة الاختصارات، يعمل أولاً بسبب ترتيبه في الملف ---
+# --- معالج منفصل ومبكر لترجمة الاختصارات فقط ---
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.text))
 async def alias_handler(event):
+    # هذا المعالج يعمل أولاً بسبب ترتيبه في الملف
     if not await check_activation(event.chat_id):
         return
 
@@ -44,11 +45,9 @@ async def alias_handler(event):
 
     if command_candidate in all_aliases:
         original_command = all_aliases[command_candidate]
-        # تعديل الرسالة لتمريرها للمعالجات الأخرى
         event.message.message = original_command
         event.raw_text = original_command
         # إيقاف هذا المعالج والسماح للآخرين بالتقاط الأمر الجديد
-        # ستقوم تيليثون بإعادة معالجة الحدث المعدل من البداية
         raise events.StopPropagation
 
 # --- المعالج العام للرسائل، يلتقط ما لم يلتقطه معالج الاختصارات أو الأوامر الأخرى ---
