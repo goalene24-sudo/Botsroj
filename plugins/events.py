@@ -26,8 +26,8 @@ import logging
 # إعداد السجل
 logger = logging.getLogger(__name__)
 
-# --- (جديد) معالج منفصل ومبكر لترجمة الاختصارات فقط ---
-@client.on(events.NewMessage(func=lambda e: not e.is_private and e.text, priority=1))
+# --- (تم التعديل) معالج منفصل لترجمة الاختصارات، يعمل أولاً بسبب ترتيبه في الملف ---
+@client.on(events.NewMessage(func=lambda e: not e.is_private and e.text))
 async def alias_handler(event):
     if not await check_activation(event.chat_id):
         return
@@ -48,10 +48,11 @@ async def alias_handler(event):
         event.message.message = original_command
         event.raw_text = original_command
         # إيقاف هذا المعالج والسماح للآخرين بالتقاط الأمر الجديد
+        # ستقوم تيليثون بإعادة معالجة الحدث المعدل من البداية
         raise events.StopPropagation
 
-# --- المعالج العام للرسائل، يعمل بعد معالج الاختصارات ---
-@client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender, priority=2))
+# --- المعالج العام للرسائل، يلتقط ما لم يلتقطه معالج الاختصارات أو الأوامر الأخرى ---
+@client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
@@ -61,7 +62,6 @@ async def general_message_handler(event):
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
-            # --- نظام تخزين الرسائل (تم تبسيطه) ---
             if event.id:
                 long_text_size = (chat.settings or {}).get("long_text_size", 200)
                 msg_type = "text"
@@ -79,19 +79,14 @@ async def general_message_handler(event):
                 new_msg = MessageHistory(chat_id=event.chat_id, msg_id=event.id, msg_type=msg_type)
                 session.add(new_msg)
                 
-                history_count = (await session.execute(
-                    select(func.count(MessageHistory.id)).where(MessageHistory.chat_id == event.chat_id)
-                )).scalar_one()
+                history_count = (await session.execute(select(func.count(MessageHistory.id)).where(MessageHistory.chat_id == event.chat_id))).scalar_one()
 
                 if history_count > 100:
-                    oldest_msg_id_res = await session.execute(
-                        select(MessageHistory.id).where(MessageHistory.chat_id == event.chat_id).order_by(MessageHistory.id.asc()).limit(1)
-                    )
+                    oldest_msg_id_res = await session.execute(select(MessageHistory.id).where(MessageHistory.chat_id == event.chat_id).order_by(MessageHistory.id.asc()).limit(1))
                     oldest_msg_id = oldest_msg_id_res.scalar_one_or_none()
                     if oldest_msg_id:
                         await session.execute(delete(MessageHistory).where(MessageHistory.id == oldest_msg_id))
-            
-            # بقية الكود يستمر كما كان...
+
             now = int(time.time())
             chat_settings = chat.settings or {}
             last_dhikr_time = chat_settings.get("last_dhikr_time", 0)
@@ -111,12 +106,7 @@ async def general_message_handler(event):
             if not is_immune:
                 chat_locks = chat.lock_settings or {}
                 message_entities_for_lock = event.message.entities or []
-                checks = {
-                    "photo": event.photo, "video": event.video, "gif": event.gif,
-                    "sticker": event.sticker, "url": any(isinstance(e, MessageEntityUrl) for e in message_entities_for_lock),
-                    "username": any(isinstance(e, MessageEntityMention) for e in message_entities_for_lock),
-                    "forward": event.forward, "bot": event.via_bot
-                }
+                checks = { "photo": event.photo, "video": event.video, "gif": event.gif, "sticker": event.sticker, "url": any(isinstance(e, MessageEntityUrl) for e in message_entities_for_lock), "username": any(isinstance(e, MessageEntityMention) for e in message_entities_for_lock), "forward": event.forward, "bot": event.via_bot }
                 for lock_name, condition in checks.items():
                     if chat_locks.get(lock_name) and condition:
                         try: await event.delete()
@@ -167,18 +157,15 @@ async def general_message_handler(event):
             if not is_command:
                 user.msg_count = (user.msg_count or 0) + 1
                 chat.total_msgs = (chat.total_msgs or 0) + 1
-                
                 points_multiplier = 1
                 inventory = user.inventory or {}
                 multiplier_item = inventory.get("مضاعف نقاط")
                 if multiplier_item and time.time() - multiplier_item.get("purchase_time", 0) < multiplier_item.get("duration_days", 0) * 86400:
                     points_multiplier = 2
-                
                 points_to_add = 0
                 if len(event.text) >= 30: points_to_add += 3
                 elif len(event.text) >= 4: points_to_add += 1
                 if event.is_reply: points_to_add += 2
-
                 if points_to_add > 0:
                     user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
@@ -191,20 +178,13 @@ async def general_message_handler(event):
                         reply_template = ""
                         if isinstance(reply_data, dict):
                             current_rank = await get_user_rank(event.sender_id, event.chat_id)
-                            if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data:
-                                reply_list = reply_data["developer"]
-                            elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data:
-                                reply_list = reply_data["bot_admin"]
-                            elif current_rank >= Ranks.MOD and "group_admin" in reply_data:
-                                reply_list = reply_data["group_admin"]
-                            elif "member" in reply_data:
-                                reply_list = reply_data["member"]
-                            else:
-                                reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
-                            if reply_list:
-                                reply_template = random.choice(reply_list)
-                        elif isinstance(reply_data, str):
-                            reply_template = reply_data
+                            if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
+                            elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
+                            elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
+                            elif "member" in reply_data: reply_list = reply_data["member"]
+                            else: reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
+                            if reply_list: reply_template = random.choice(reply_list)
+                        elif isinstance(reply_data, str): reply_template = reply_data
                         if reply_template:
                             try:
                                 sender = await event.get_sender()
