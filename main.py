@@ -10,8 +10,8 @@ from database import init_db
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-# --- (تمت الإضافة) تعديل مستوى تسجيل sqlalchemy لتقليل الرسائل غير الضرورية ---
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+# --- (تم التعديل) تعديل مستوى تسجيل sqlalchemy بالكامل لتقليل الرسائل ---
+logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
 # --- تحميل كل الإضافات ---
