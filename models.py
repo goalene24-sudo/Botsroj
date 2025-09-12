@@ -40,6 +40,9 @@ class Chat(Base):
     aliases = relationship("Alias", back_populates="chat", cascade="all, delete-orphan")
     message_history = relationship("MessageHistory", back_populates="chat", cascade="all, delete-orphan")
 
+# (تمت الإضافة) هذا السطر سيقوم بحل خطأ استيراد 'Group'
+Group = Chat
+
 # --- جدول المستخدمين في المجموعات (Users) ---
 class User(Base):
     __tablename__ = "users"
