@@ -4,7 +4,8 @@ from bot import client, StartTime
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import func
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import Chat, User
 
 # --- استيراد الدوال المساعدة المحدثة ---
@@ -72,7 +73,7 @@ async def about_menu_command(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
     # --- جلب الإحصائيات من قاعدة البيانات الجديدة ---
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         # حساب عدد المجموعات النشطة
         total_groups_res = await session.execute(
             select(func.count(Chat.id)).where(Chat.is_active == True)
