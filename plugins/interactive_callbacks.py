@@ -5,8 +5,8 @@ from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
-# --- (تم التصحيح) استيراد مكونات قاعدة البيانات من utils ---
-from .utils import DBSession
+# --- (تم التعديل) استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
@@ -14,7 +14,7 @@ from .utils import (
     check_xo_winner, add_points, has_bot_permission,
     RIDDLES, BLESS_COUNTERS
 )
-from .admin import get_or_create_chat, get_or_create_user
+from .utils import get_or_create_chat, get_or_create_user
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
 from .games import MAHIBES_GAMES
 from .services import SEERAH_STAGES
@@ -32,7 +32,7 @@ async def handle_interactive_callback(event):
         if not await has_bot_permission(event):
             return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, chat_id)
             lock_settings = chat.lock_settings or {}
             
@@ -210,7 +210,7 @@ async def handle_interactive_callback(event):
             text = f"**🎉 تمت الموافقة!** 🎉\n\n**مبروك للخطيبين [{proposer_name}](tg://user?id={proposer_id}) و [{proposed_name}](tg://user?id={proposed_id})! عقبال الفرحة الكبرى.**"
             await event.edit(text, buttons=None)
             
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 proposer_obj = await get_or_create_user(session, chat_id, proposer_id)
                 proposed_obj = await get_or_create_user(session, chat_id, proposed_id)
 
@@ -249,7 +249,7 @@ async def handle_interactive_callback(event):
                 await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
                 del WHISPERS[msg_id]
             else:
-                await event.answer("**🚫 | هذه الهمسة ليست لك!**", alert=True)
+                await event.answer("🚫 | **هذه الهمسة ليست لك!**", alert=True)
         elif sub_action == "done":
             await event.answer("**تمت قراءة هذه الهمسة بالفعل.**", alert=True)
         return
@@ -280,9 +280,9 @@ async def handle_interactive_callback(event):
         
     if action == "show_rules":
         user = await event.get_sender()
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, chat_id)
-            rules = chat.settings.get("rules")
+            rules = (chat.settings or {}).get("rules")
         
         if rules:
             await event.reply(f"**اهلاً بك [{user.first_name}](tg://user?id={user.id})! تفضل قوانين المجموعة:**\n\n**{rules}**")
@@ -304,4 +304,3 @@ async def handle_interactive_callback(event):
         else:
             await event.edit(f"**اويليي، غلط جوابك يا [{winner.first_name}](tg://user?id={winner.id})! 😢 الجواب الصح هو '{correct_answer}'.**")
         await event.answer()
-
