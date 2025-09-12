@@ -10,15 +10,14 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import AsyncDBSession  # تم التعديل هنا
-from models import Alias, MessageHistory, User
+from database import AsyncDBSession
+from models import Alias, MessageHistory
 
 # --- استيراد الأدوات المحدثة ---
 from .utils import (
     check_activation, PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS,
-    FLOOD_TRACKER, get_user_rank, Ranks
+    FLOOD_TRACKER, get_user_rank, Ranks, get_or_create_chat, get_or_create_user
 )
-from .admin import get_or_create_chat, get_or_create_user
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
@@ -27,22 +26,16 @@ import logging
 # إعداد السجل
 logger = logging.getLogger(__name__)
 
-@client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat))
+@client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
 
-    async with AsyncDBSession() as session:  # تم التعديل هنا
+    async with AsyncDBSession() as session:
         try:
             # --- جلب كائنات المجموعة والمستخدم في بداية المعالج ---
             chat = await get_or_create_chat(session, event.chat_id)
-            if not chat:
-                logger.error(f"فشل في جلب أو إنشاء كائن الدردشة لـ {event.chat_id}")
-                return
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
-            if not user:
-                logger.error(f"فشل في جلب أو إنشاء كائن المستخدم لـ {event.sender_id} في {event.chat_id}")
-                return
 
             # --- محرك ترجمة الأوامر المضافة والثابتة ---
             if event.text:
@@ -56,7 +49,6 @@ async def general_message_handler(event):
                 command_candidate = event.text.strip()
                 if command_candidate in all_aliases:
                     original_command = all_aliases[command_candidate]
-                    # تعديل نص الرسالة ليتم معالجتها كأمر أصلي
                     try:
                         event.message.message = original_command
                         event.raw_text = original_command
@@ -65,7 +57,7 @@ async def general_message_handler(event):
 
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
-                long_text_size = chat.settings.get("long_text_size", 200)
+                long_text_size = (chat.settings or {}).get("long_text_size", 200)
                 msg_type = "text"
                 message_entities = event.message.entities or []
                 
@@ -95,15 +87,17 @@ async def general_message_handler(event):
 
             # --- ميزة الذكر التلقائي ---
             now = int(time.time())
-            last_dhikr_time = chat.settings.get("last_dhikr_time", 0)
-            dhikr_interval = chat.settings.get("dhikr_interval", 3600)
-            is_dhikr_enabled = chat.settings.get("dhikr_enabled", True)
+            chat_settings = chat.settings or {}
+            last_dhikr_time = chat_settings.get("last_dhikr_time", 0)
+            dhikr_interval = chat_settings.get("dhikr_interval", 3600)
+            is_dhikr_enabled = chat_settings.get("dhikr_enabled", True)
 
             if is_dhikr_enabled and (now - last_dhikr_time > dhikr_interval):
                 dhikr_message = random.choice(DHIKR_LIST)
                 await client.send_message(event.chat_id, dhikr_message)
-                chat.settings["last_dhikr_time"] = now
-                flag_modified(chat, "settings")  # إعلام SQLAlchemy بحدوث تغيير في حقل JSON
+                chat_settings["last_dhikr_time"] = now
+                chat.settings = chat_settings
+                flag_modified(chat, "settings")
 
             # --- فحص الرتب والأقفال ---
             rank_int = await get_user_rank(event.sender_id, event.chat_id)
@@ -125,7 +119,7 @@ async def general_message_handler(event):
                             logger.info(f"تم حذف الرسالة {event.id} بسبب قفل {lock_name}")
                         except Exception as e:
                             logger.error(f"لم أستطع حذف الرسالة في {event.chat_id}: {e}", exc_info=True)
-                        return  # الخروج من المعالج بعد حذف الرسالة
+                        return
 
                 # --- نظام التكرار ---
                 if chat_locks.get("anti_flood", False):
@@ -140,9 +134,9 @@ async def general_message_handler(event):
                     
                     FLOOD_TRACKER[chat_id][user_id].append(now)
                     
-                    FLOOD_TRACKER[chat_id][user_id] = FLOOD_TRACKER[chat_id][user_id][-5:]
+                    FLOOD_TRACKER[chat_id][user_id] = [t for t in FLOOD_TRACKER[chat_id][user_id] if now - t < 3]
                     
-                    if len(FLOOD_TRACKER[chat_id][user_id]) == 5 and (now - FLOOD_TRACKER[chat_id][user_id][0] < 3):
+                    if len(FLOOD_TRACKER[chat_id][user_id]) >= 5:
                         try:
                             until_date = datetime.now() + timedelta(minutes=5)
                             await client.edit_permissions(chat_id, user_id, send_messages=False, until_date=until_date)
@@ -155,15 +149,15 @@ async def general_message_handler(event):
 
                 # --- نظام الكلمات الممنوعة ---
                 if event.text:
-                    filtered_words = chat.filtered_words or []
+                    filtered_words = chat_settings.get("filtered_words", [])
                     if filtered_words and any(word.lower() in event.text.lower() for word in filtered_words):
                         try:
                             await event.delete()
                             sender = await event.get_sender()
                             
-                            user.warns = user.warns + 1 if hasattr(user, 'warns') else 1
+                            user.warns = (user.warns or 0) + 1
                             
-                            max_warns = chat.settings.get("max_warns", 3)
+                            max_warns = chat_settings.get("max_warns", 3)
                             if user.warns >= max_warns:
                                 until_date = datetime.now() + timedelta(days=1)
                                 await client.edit_permissions(event.chat_id, sender.id, send_messages=False, until_date=until_date)
@@ -185,8 +179,8 @@ async def general_message_handler(event):
             is_command = any(event.text.lower().startswith(cmd.lower()) for cmd in all_commands)
 
             if not is_command:
-                user.msg_count = user.msg_count + 1 if hasattr(user, 'msg_count') else 1
-                chat.total_msgs = chat.total_msgs + 1 if hasattr(chat, 'total_msgs') else 1
+                user.msg_count = (user.msg_count or 0) + 1
+                chat.total_msgs = (chat.total_msgs or 0) + 1
                 
                 points_multiplier = 1
                 inventory = user.inventory or {}
@@ -202,22 +196,47 @@ async def general_message_handler(event):
 
                 final_points_to_add = points_to_add * points_multiplier
                 if final_points_to_add > 0:
-                    user.points = user.points + final_points_to_add if hasattr(user, 'points') else final_points_to_add
+                    user.points = (user.points or 0) + final_points_to_add
                 
-                # --- نظام الردود ---
-                if chat.settings.get("public_replies_enabled", True):
-                    for key, value in DEFAULT_REPLIES.items():
-                        if key == event.text.lower():
-                            await event.reply(value)
-                            break
-                
-                custom_replies = chat.custom_replies or {}
-                for key, value in custom_replies.items():
-                    if key == event.text.lower():
-                        await event.reply(value)
-                        break
-        
+                # --- (تم التعديل) نظام الردود ---
+                if chat_settings.get("public_replies_enabled", True):
+                    # دمج الردود الافتراضية والمخصصة
+                    all_replies = DEFAULT_REPLIES.copy()
+                    custom_replies = chat.custom_replies or {}
+                    all_replies.update({k.lower(): v for k, v in custom_replies.items()})
+                    
+                    # البحث عن تطابق
+                    reply_text = all_replies.get(event.text.lower())
+                    if reply_text:
+                        await event.reply(reply_text)
+            
             await session.commit()
         except Exception as e:
             logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
-            await session.rollback()  # إلغاء التغييرات في حالة الخطأ
+            await session.rollback()
+
+@client.on(events.ChatAction)
+async def handle_chat_action(event):
+    if event.user_joined or event.user_added:
+        async with AsyncDBSession() as session:
+            try:
+                user = await get_or_create_user(session, event.chat_id, event.user_id)
+                user.join_date = datetime.now().strftime("%Y-%m-%d")
+                await session.commit()
+                
+                chat = await get_or_create_chat(session, event.chat_id)
+                welcome_message = (chat.settings or {}).get("welcome_message")
+
+                if welcome_message:
+                    user_entity = await event.get_user()
+                    chat_entity = await event.get_chat()
+                    
+                    formatted_message = welcome_message.format(
+                        user=f"[{user_entity.first_name}](tg://user?id={user_entity.id})",
+                        group=chat_entity.title
+                    )
+                    await client.send_message(event.chat_id, formatted_message)
+
+            except Exception as e:
+                logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
+                await session.rollback()
