@@ -1,4 +1,3 @@
-#admin.py
 import asyncio
 from telethon import events
 from bot import client
@@ -9,7 +8,7 @@ from sqlalchemy.future import select
 from sqlalchemy import delete
 # (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
 from database import AsyncDBSession
-from models import Chat, BotAdmin, Creator, SecondaryDev, Vip
+from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User  # تم إضافة User هنا
 
 # --- استيراد الدوال والرتب المحدثة ---
 from .utils import check_activation, has_bot_permission, get_user_rank, Ranks, build_protection_menu
@@ -25,6 +24,16 @@ async def get_or_create_chat(session, chat_id):
         session.add(chat)
         await session.commit()
     return chat
+
+async def get_or_create_user(session, user_id, username=None, first_name=None, last_name=None):
+    """الحصول على مستخدم من قاعدة البيانات أو إنشاء واحد جديد إذا لم يكن موجودًا."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(id=user_id, username=username, first_name=first_name, last_name=last_name)
+        session.add(user)
+        await session.commit()
+    return user
 
 async def get_chat_setting(chat_id, key, default=None):
     """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
