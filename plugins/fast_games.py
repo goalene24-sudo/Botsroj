@@ -5,7 +5,7 @@ from telethon import events
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+from database import AsyncDBSession
 from models import GlobalSetting
 import json
 
@@ -27,14 +27,17 @@ WORDS_LIST = [
 # --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
 async def is_globally_disabled(command_name):
     """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
         )
         setting = result.scalar_one_or_none()
         if setting and setting.value:
-            disabled_list = json.loads(setting.value)
-            return command_name in disabled_list
+            try:
+                disabled_list = json.loads(setting.value)
+                return command_name in disabled_list
+            except (json.JSONDecodeError, TypeError):
+                return False
         return False
 
 def scramble_word(word):
