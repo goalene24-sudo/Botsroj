@@ -2,6 +2,7 @@ import os
 # (تم التعديل) استيراد المكتبات الغير متزامنة
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.pool import NullPool  # إضافة استيراد NullPool
 import logging
 
 # إعداد السجل
