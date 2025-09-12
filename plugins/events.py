@@ -31,29 +31,32 @@ async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
 
+    # --- (تم التعديل) محرك ترجمة الأوامر يعمل أولاً ---
+    if event.text:
+        async with AsyncDBSession() as session:
+            result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
+            aliases_from_db = result.scalars().all()
+            user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
+            
+            all_aliases = FIXED_ALIASES.copy()
+            all_aliases.update(user_aliases)
+
+            command_candidate = event.text.strip()
+            if command_candidate in all_aliases:
+                original_command = all_aliases[command_candidate]
+                try:
+                    event.message.message = original_command
+                    event.raw_text = original_command
+                    # (جديد) هذا السطر مهم لتمرير الأمر المصحح إلى المعالجات الأخرى
+                    raise events.StopPropagation
+                except Exception as e:
+                    logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
+
     async with AsyncDBSession() as session:
         try:
             # --- جلب كائنات المجموعة والمستخدم في بداية المعالج ---
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
-
-            # --- محرك ترجمة الأوامر المضافة والثابتة ---
-            if event.text:
-                result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
-                aliases_from_db = result.scalars().all()
-                user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
-                
-                all_aliases = FIXED_ALIASES.copy()
-                all_aliases.update(user_aliases)
-
-                command_candidate = event.text.strip()
-                if command_candidate in all_aliases:
-                    original_command = all_aliases[command_candidate]
-                    try:
-                        event.message.message = original_command
-                        event.raw_text = original_command
-                    except Exception as e:
-                        logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
 
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
@@ -114,8 +117,7 @@ async def general_message_handler(event):
                 }
                 for lock_name, condition in checks.items():
                     if chat_locks.get(lock_name) and condition:
-                        try:
-                            await event.delete()
+                        try: await event.delete()
                         except Exception: pass
                         return
 
@@ -185,7 +187,7 @@ async def general_message_handler(event):
                 if points_to_add > 0:
                     user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
-                # --- (تم التعديل النهائي والأخير) نظام الردود ---
+                # --- نظام الردود ---
                 if (chat.settings or {}).get("public_replies_enabled", True):
                     all_replies = DEFAULT_REPLIES.copy()
                     custom_replies = chat.custom_replies or {}
@@ -194,7 +196,7 @@ async def general_message_handler(event):
                     reply_data = all_replies.get(event.text.lower())
                     
                     if reply_data:
-                        reply_template = None
+                        reply_template = ""
                         if isinstance(reply_data, dict):
                             current_rank = await get_user_rank(event.sender_id, event.chat_id)
                             
