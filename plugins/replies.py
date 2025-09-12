@@ -4,7 +4,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, has_bot_permission
 from .admin import get_or_create_chat
@@ -42,7 +42,7 @@ async def add_reply_handler(event):
             if not reply_text:
                 return await conv.send_message("**تم إلغاء العملية لأن الرد فارغ.**")
 
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 chat = await get_or_create_chat(session, event.chat_id)
                 custom_replies = chat.custom_replies or {}
                 custom_replies[trigger] = reply_text
@@ -62,7 +62,7 @@ async def delete_reply_handler(event):
     
     trigger_to_delete = event.pattern_match.group(1).strip()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         custom_replies = chat.custom_replies or {}
 
@@ -81,7 +81,7 @@ async def list_replies_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية يگدرون يشوفون الردود.**")
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         replies = chat.custom_replies or {}
 
@@ -112,7 +112,7 @@ async def set_dev_reply(event):
     
     reply_text = reply_text.strip()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         settings = chat.settings or {}
         settings["dev_reply"] = reply_text
@@ -133,7 +133,7 @@ async def set_call_reply(event):
     
     reply_text = reply_text.strip()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         settings = chat.settings or {}
         settings["call_reply"] = reply_text
@@ -149,7 +149,7 @@ async def delete_dev_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         settings = chat.settings or {}
         if "dev_reply" in settings:
@@ -167,7 +167,7 @@ async def delete_call_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         settings = chat.settings or {}
         if "call_reply" in settings:
