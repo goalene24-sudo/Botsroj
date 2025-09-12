@@ -5,6 +5,9 @@ from bot import client
 from plugins import ALL_MODULES
 import config
 
+# --- (تمت الإضافة) استيراد دالة تهيئة قاعدة البيانات ---
+from database import init_db
+
 # --- الإعدادات الأساسية ---
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -22,6 +25,11 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
+        # --- (تمت الإضافة) تهيئة قاعدة البيانات وإنشاء الجداول ---
+        LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
+        await init_db()
+        LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
+
         await client.start(bot_token=config.BOT_TOKEN)
         me = await client.get_me()
         LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
