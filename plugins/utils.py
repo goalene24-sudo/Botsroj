@@ -52,14 +52,10 @@ QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "ماف
 
 # --- دوال قاعدة البيانات الجديدة ---
 async def get_or_create_user(session, chat_id, user_id):
-    """
-    الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا.
-    """
     result = await session.execute(
         select(User).where(User.chat_id == chat_id, User.user_id == user_id)
     )
     user = result.scalar_one_or_none()
-
     if not user:
         user = User(chat_id=chat_id, user_id=user_id)
         session.add(user)
@@ -236,3 +232,18 @@ def check_xo_winner(board):
     for a, b, c in lines:
         if board[a] == board[b] == board[c] != '-': return board[a]
     return 'draw' if '-' not in board else None
+
+# ✅ ✅ ✅ [تمت إضافتها] - الدالة المطلوبة
+async def get_or_create_chat(session, chat_id):
+    """
+    الحصول على مجموعة من قاعدة البيانات أو إنشائها إذا لم تكن موجودة.
+    """
+    result = await session.execute(
+        select(Chat).where(Chat.id == chat_id)
+    )
+    chat = result.scalar_one_or_none()
+    if not chat:
+        chat = Chat(id=chat_id)
+        session.add(chat)
+        await session.commit()
+    return chat
