@@ -5,7 +5,7 @@ from bot import client
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+from database import AsyncDBSession
 from models import GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
@@ -16,18 +16,21 @@ from .slang_data import IRAQI_SLANG
 
 async def get_dictionary():
     """جلب القاموس المخصص من قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "custom_dictionary")
         )
         setting = result.scalar_one_or_none()
         if setting and setting.value:
-            return json.loads(setting.value)
+            try:
+                return json.loads(setting.value)
+            except (json.JSONDecodeError, TypeError):
+                return {}
         return {}
 
 async def save_dictionary(dictionary_data):
     """حفظ القاموس المخصص في قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "custom_dictionary")
         )
