@@ -26,36 +26,43 @@ import logging
 # إعداد السجل
 logger = logging.getLogger(__name__)
 
-# --- معالج منفصل ومبكر لترجمة الاختصارات فقط ---
-@client.on(events.NewMessage(func=lambda e: not e.is_private and e.text))
-async def alias_handler(event):
-    # هذا المعالج يعمل أولاً بسبب ترتيبه في الملف
-    if not await check_activation(event.chat_id):
-        return
-
-    command_candidate = event.text.strip()
-    
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
-        aliases_from_db = result.scalars().all()
-        user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
-        
-    all_aliases = FIXED_ALIASES.copy()
-    all_aliases.update(user_aliases)
-
-    if command_candidate in all_aliases:
-        original_command = all_aliases[command_candidate]
-        event.message.message = original_command
-        event.raw_text = original_command
-        # إيقاف هذا المعالج والسماح للآخرين بالتقاط الأمر الجديد
-        raise events.StopPropagation
-
-# --- المعالج العام للرسائل، يلتقط ما لم يلتقطه معالج الاختصارات أو الأوامر الأخرى ---
+# --- (تمت إعادة الهيكلة) هذا المعالج هو نقطة الدخول الرئيسية لكل الرسائل ---
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
-async def general_message_handler(event):
+async def master_handler(event):
+    # --- 1. التحقق من التفعيل ---
     if not await check_activation(event.chat_id):
         return
 
+    # --- 2. محرك ترجمة الاختصارات ---
+    if event.text:
+        # نضيف علامة لمنع الدخول في حلقة لا نهائية
+        if hasattr(event, 'is_alias_processed'):
+            pass # تم معالجة هذا الاختصار بالفعل، تجاهله
+        else:
+            command_candidate = event.text.strip()
+            async with AsyncDBSession() as session:
+                result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
+                aliases_from_db = result.scalars().all()
+                user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
+            
+            all_aliases = FIXED_ALIASES.copy()
+            all_aliases.update(user_aliases)
+
+            if command_candidate in all_aliases:
+                original_command = all_aliases[command_candidate]
+                event.message.message = original_command
+                event.raw_text = original_command
+                
+                # إضافة علامة لمنع المعالجة مرة أخرى
+                event.is_alias_processed = True
+                
+                # إعادة إرسال الحدث المعدل ليتم التقاطه بواسطة المعالجات الأخرى
+                await client.dispatch(event)
+                
+                # إيقاف معالجة الرسالة الأصلية (الاختصار)
+                raise events.StopPropagation
+
+    # --- 3. المعالج العام للرسائل غير الأوامر ---
     async with AsyncDBSession() as session:
         try:
             chat = await get_or_create_chat(session, event.chat_id)
