@@ -9,12 +9,12 @@ from bot import client
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+from database import AsyncDBSession
 from models import User, GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, PERCENT_COMMANDS, JOKES, RIDDLES, QUOTES, is_command_enabled
-from .admin import get_or_create_user
+from .utils import get_or_create_user
 
 # --- بيانات الألعاب والهمس (لا تحتاج قاعدة بيانات) ---
 WHISPERS = {}
@@ -82,7 +82,7 @@ PERSONALITY_ANALYSIS = [
 # --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
 async def is_globally_disabled(command_name):
     """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
         )
@@ -91,7 +91,7 @@ async def is_globally_disabled(command_name):
             try:
                 disabled_list = json.loads(setting.value)
                 return command_name in disabled_list
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 return False
         return False
 
@@ -198,7 +198,7 @@ async def leaderboard_handler(event):
     if not await is_command_enabled(event.chat_id, "games_enabled"): 
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(User)
             .where(User.chat_id == event.chat_id, User.points > 0)
@@ -302,7 +302,7 @@ async def interactive_action_handler(event):
     if sender.id == receiver.id:
         return await event.reply("**شدعوة هالنرجسية! متگدر تسويها لنفسك.**")
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         receiver_user_obj = await get_or_create_user(session, event.chat_id, receiver.id)
 
     inventory = receiver_user_obj.inventory or {}
