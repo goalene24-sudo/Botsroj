@@ -1,13 +1,15 @@
-# plugins/achievements.py
-
 from datetime import datetime
 from telethon import events
 from sqlalchemy.orm.attributes import flag_modified
+import logging
 
 from bot import client
 # --- (تم التعديل) استيراد المكونات الجديدة لقاعدة البيانات ---
 from .utils import check_activation, get_or_create_user
 from database import AsyncDBSession
+
+# إعداد السجل
+logger = logging.getLogger(__name__)
 
 # --- تعريف الأوسمة وشروطها ---
 # يمكننا إضافة المزيد من الأوسمة هنا بسهولة في المستقبل
@@ -26,67 +28,90 @@ ACHIEVEMENTS = {
     "veteran_2": {"name": "الأسطورة", "icon": "🏆", "type": "days", "value": 90, "desc": "لمرور 90 يوماً على الانضمام"},
 }
 
-
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.sender and not e.sender.bot))
 async def check_achievements_handler(event):
     """
     This handler runs in the background with every message to check if a user
     has unlocked a new achievement.
     """
-    if not await check_activation(event.chat_id): return
-    
-    session_updated = False
-    
-    async with AsyncDBSession() as session:
-        # جلب بيانات المستخدم من قاعدة البيانات الجديدة
-        user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
+    try:
+        if not await check_activation(event.chat_id):
+            return
         
-        # التأكد من وجود قائمة الأوسمة للمستخدم
-        user_achievements = user_obj.achievements or []
-        newly_unlocked = []
+        session_updated = False
+        
+        async with AsyncDBSession() as session:
+            # جلب بيانات المستخدم من قاعدة البيانات الجديدة
+            user_obj = await get_or_create_user(session, event.chat_id, event.sender_id)
+            if not user_obj:
+                logger.error(f"فشل في جلب أو إنشاء كائن المستخدم لـ {event.sender_id} في {event.chat_id}")
+                return
+            
+            # التأكد من وجود قائمة الأوسمة للمستخدم
+            user_achievements = user_obj.achievements or []
+            newly_unlocked = []
 
-        # المرور على كل الإنجازات المتاحة
-        for achievement_key, details in ACHIEVEMENTS.items():
-            # التحقق إذا كان المستخدم لا يملك هذا الوسام بالفعل
-            if achievement_key not in user_achievements:
-                unlocked = False
-                # التحقق من شرط الوسام
-                try:
-                    if details["type"] == "messages":
-                        if user_obj.msg_count >= details["value"]:
-                            unlocked = True
-                    
-                    elif details["type"] == "points":
-                        if user_obj.points >= details["value"]:
-                            unlocked = True
-
-                    elif details["type"] == "days":
-                        join_date_str = user_obj.join_date
-                        if join_date_str:
-                            join_datetime = datetime.strptime(join_date_str, "%Y-%m-%d")
-                            if (datetime.now() - join_datetime).days >= details["value"]:
+            # المرور على كل الإنجازات المتاحة
+            for achievement_key, details in ACHIEVEMENTS.items():
+                # التحقق إذا كان المستخدم لا يملك هذا الوسام بالفعل
+                if achievement_key not in user_achievements:
+                    unlocked = False
+                    # التحقق من شرط الوسام
+                    try:
+                        if details["type"] == "messages":
+                            msg_count = getattr(user_obj, 'msg_count', 0)  # التعامل مع None
+                            if msg_count >= details["value"]:
                                 unlocked = True
+                        
+                        elif details["type"] == "points":
+                            points = getattr(user_obj, 'points', 0)  # التعامل مع None
+                            if points >= details["value"]:
+                                unlocked = True
+
+                        elif details["type"] == "days":
+                            join_date_str = getattr(user_obj, 'join_date', None)
+                            if join_date_str:
+                                try:
+                                    join_datetime = datetime.strptime(join_date_str, "%Y-%m-%d")
+                                    if (datetime.now() - join_datetime).days >= details["value"]:
+                                        unlocked = True
+                                except ValueError as ve:
+                                    logger.error(f"خطأ في تحويل join_date لـ {event.sender_id}: {ve}")
+                                    continue
+                    except Exception as e:
+                        logger.error(f"خطأ في التحقق من الإنجاز {achievement_key} للمستخدم {event.sender_id}: {e}", exc_info=True)
+                        continue
+
+                    # إذا تم تحقيق الشرط
+                    if unlocked:
+                        newly_unlocked.append(achievement_key)
+                        session_updated = True
+                        
+                        # إرسال تهنئة في المجموعة
+                        user_mention = f"[{event.sender.first_name}](tg://user?id={event.sender.id})"
+                        achievement_name = f"**{details['name']} {details['icon']}**"
+                        
+                        try:
+                            await event.reply(
+                                f"**🎉 | تهانينا {user_mention}!**\n\n"
+                                f"**لقد حصلت على وسام {achievement_name}**\n"
+                                f"**السبب:** **{details['desc']}**"
+                            )
+                        except Exception as e:
+                            logger.error(f"فشل في إرسال رسالة التهنئة لـ {event.sender_id}: {e}", exc_info=True)
+
+            # حفظ التغييرات في قاعدة البيانات مرة واحدة فقط إذا تم فتح أي وسام
+            if session_updated:
+                try:
+                    user_obj.achievements = user_achievements + newly_unlocked
+                    flag_modified(user_obj, "achievements")
+                    await session.commit()
                 except Exception as e:
-                    print(f"Error checking achievement {achievement_key}: {e}")
-                    continue
-
-                # إذا تم تحقيق الشرط
-                if unlocked:
-                    newly_unlocked.append(achievement_key)
-                    session_updated = True
-                    
-                    # إرسال تهنئة في المجموعة
-                    user_mention = f"[{event.sender.first_name}](tg://user?id={event.sender.id})"
-                    achievement_name = f"**{details['name']} {details['icon']}**"
-                    
-                    await event.reply(
-                        f"**🎉 | تهانينا {user_mention}!**\n\n"
-                        f"**لقد حصلت على وسام {achievement_name}**\n"
-                        f"**السبب:** **{details['desc']}**"
-                    )
-
-        # حفظ التغييرات في قاعدة البيانات مرة واحدة فقط إذا تم فتح أي وسام
-        if session_updated:
-            user_obj.achievements = user_achievements + newly_unlocked
-            flag_modified(user_obj, "achievements")
-            await session.commit()
+                    logger.error(f"فشل في حفظ الإنجازات للمستخدم {event.sender_id}: {e}", exc_info=True)
+                    await session.rollback()
+    except Exception as e:
+        logger.error(f"استثناء غير معالج في check_achievements_handler للمستخدم {event.sender_id}: {e}", exc_info=True)
+        try:
+            await event.reply("حدث خطأ أثناء التحقق من الإنجازات، جرب مرة أخرى.")
+        except:
+            pass
