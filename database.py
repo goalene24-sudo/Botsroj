@@ -1,5 +1,3 @@
-# database.py
-
 import os
 # (تم التعديل) استيراد المكتبات الغير متزامنة
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
