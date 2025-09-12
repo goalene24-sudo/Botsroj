@@ -6,8 +6,9 @@ import config
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import DBSession
-from models import GlobalSetting # <-- يفترض وجود هذا النموذج
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
+from models import GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, has_bot_permission
@@ -15,14 +16,14 @@ from .utils import check_activation, has_bot_permission
 # --- دوال مساعدة لإدارة الإعدادات العامة في قاعدة البيانات ---
 async def get_global_setting(key):
     """جلب قيمة إعداد عام من قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
         return setting.value if setting else None
 
 async def set_global_setting(key, value):
     """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting:
@@ -34,7 +35,7 @@ async def set_global_setting(key, value):
 
 async def delete_global_setting(key):
     """حذف إعداد عام من قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         await session.execute(delete(GlobalSetting).where(GlobalSetting.key == key))
         await session.commit()
 
