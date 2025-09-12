@@ -185,26 +185,33 @@ async def general_message_handler(event):
                 if points_to_add > 0:
                     user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
-                # --- (تم التعديل) نظام الردود ---
+                # --- (تم التعديل النهائي) نظام الردود ---
                 if (chat.settings or {}).get("public_replies_enabled", True):
                     all_replies = DEFAULT_REPLIES.copy()
                     custom_replies = chat.custom_replies or {}
                     all_replies.update({k.lower(): v for k, v in custom_replies.items()})
                     
-                    reply_template = all_replies.get(event.text.lower())
+                    reply_data = all_replies.get(event.text.lower())
                     
-                    if reply_template:
-                        try:
-                            sender = await event.get_sender()
-                            final_reply = reply_template.format(
-                                user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
-                                user_first_name=sender.first_name
-                            )
-                            await event.reply(final_reply)
-                        except KeyError:
-                            await event.reply(reply_template)
-                        except Exception as e:
-                            logger.error(f"خطأ في إرسال الرد: {e}")
+                    if reply_data:
+                        reply_template = ""
+                        if isinstance(reply_data, dict):
+                            reply_template = reply_data.get("text")
+                        elif isinstance(reply_data, str):
+                            reply_template = reply_data
+
+                        if reply_template:
+                            try:
+                                sender = await event.get_sender()
+                                final_reply = reply_template.format(
+                                    user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
+                                    user_first_name=sender.first_name
+                                )
+                                await event.reply(final_reply)
+                            except KeyError:
+                                await event.reply(reply_template)
+                            except Exception as e:
+                                logger.error(f"خطأ في إرسال الرد: {e}")
             
             await session.commit()
         except Exception as e:
