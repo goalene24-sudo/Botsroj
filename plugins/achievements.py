@@ -12,7 +12,6 @@ from database import AsyncDBSession
 logger = logging.getLogger(__name__)
 
 # --- تعريف الأوسمة وشروطها ---
-# يمكننا إضافة المزيد من الأوسمة هنا بسهولة في المستقبل
 ACHIEVEMENTS = {
     # --- أوسمة تعتمد على عدد الرسائل ---
     "chatterbox_1": {"name": "المتحدث", "icon": "💬", "type": "messages", "value": 1000, "desc": "للوصول إلى 1,000 رسالة"},
@@ -47,6 +46,17 @@ async def check_achievements_handler(event):
                 logger.error(f"فشل في جلب أو إنشاء كائن المستخدم لـ {event.sender_id} في {event.chat_id}")
                 return
             
+            # إعداد القيم الافتراضية إذا كانت مفقودة
+            if user_obj.msg_count is None:
+                user_obj.msg_count = 0
+                session_updated = True
+            if user_obj.points is None:
+                user_obj.points = 0
+                session_updated = True
+            if user_obj.join_date is None:
+                user_obj.join_date = datetime.now().strftime("%Y-%m-%d")
+                session_updated = True
+            
             # التأكد من وجود قائمة الأوسمة للمستخدم
             user_achievements = user_obj.achievements or []
             newly_unlocked = []
@@ -59,17 +69,17 @@ async def check_achievements_handler(event):
                     # التحقق من شرط الوسام
                     try:
                         if details["type"] == "messages":
-                            msg_count = getattr(user_obj, 'msg_count', 0)  # التعامل مع None
+                            msg_count = user_obj.msg_count
                             if msg_count >= details["value"]:
                                 unlocked = True
                         
                         elif details["type"] == "points":
-                            points = getattr(user_obj, 'points', 0)  # التعامل مع None
+                            points = user_obj.points
                             if points >= details["value"]:
                                 unlocked = True
 
                         elif details["type"] == "days":
-                            join_date_str = getattr(user_obj, 'join_date', None)
+                            join_date_str = user_obj.join_date
                             if join_date_str:
                                 try:
                                     join_datetime = datetime.strptime(join_date_str, "%Y-%m-%d")
@@ -100,7 +110,7 @@ async def check_achievements_handler(event):
                         except Exception as e:
                             logger.error(f"فشل في إرسال رسالة التهنئة لـ {event.sender_id}: {e}", exc_info=True)
 
-            # حفظ التغييرات في قاعدة البيانات مرة واحدة فقط إذا تم فتح أي وسام
+            # حفظ التغييرات في قاعدة البيانات مرة واحدة فقط إذا تم فتح أي وسام أو تعديل القيم
             if session_updated:
                 try:
                     user_obj.achievements = user_achievements + newly_unlocked
