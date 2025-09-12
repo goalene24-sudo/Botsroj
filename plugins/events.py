@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession  # تم التعديل هنا
 from models import Alias, MessageHistory, User
 
 # --- استيراد الأدوات المحدثة ---
@@ -28,7 +28,7 @@ async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:  # تم التعديل هنا
         # --- جلب كائنات المجموعة والمستخدم في بداية المعالج ---
         chat = await get_or_create_chat(session, event.chat_id)
         user = await get_or_create_user(session, event.chat_id, event.sender_id)
@@ -46,13 +46,10 @@ async def general_message_handler(event):
             if command_candidate in all_aliases:
                 original_command = all_aliases[command_candidate]
                 # تعديل نص الرسالة ليتم معالجتها كأمر أصلي
-                # هذا الجزء يحتاج إلى حذر لضمان التوافق مع Telethon
                 try:
                     event.message.message = original_command
                     event.raw_text = original_command
-                    # قد نحتاج إلى إعادة بناء pattern_match إذا كان الأمر يعتمد عليه
                 except Exception:
-                    # في حال الفشل، نواصل بالطريقة القديمة كإجراء احتياطي
                     pass
 
 
@@ -96,7 +93,7 @@ async def general_message_handler(event):
             dhikr_message = random.choice(DHIKR_LIST)
             await client.send_message(event.chat_id, dhikr_message)
             chat.settings["last_dhikr_time"] = now
-            flag_modified(chat, "settings") # إعلام SQLAlchemy بحدوث تغيير في حقل JSON
+            flag_modified(chat, "settings")  # إعلام SQLAlchemy بحدوث تغيير في حقل JSON
 
         # --- فحص الرتب والأقفال ---
         rank_int = await get_user_rank(event.sender_id, event.chat_id)
@@ -115,7 +112,7 @@ async def general_message_handler(event):
                 if chat_locks.get(lock_name) and condition:
                     try: await event.delete()
                     except Exception as e: print(f"لم أستطع حذف الرسالة في {event.chat_id}: {e}")
-                    return # الخروج من المعالج بعد حذف الرسالة
+                    return  # الخروج من المعالج بعد حذف الرسالة
 
             # --- نظام التكرار ---
             if chat_locks.get("anti_flood", False):
@@ -130,16 +127,14 @@ async def general_message_handler(event):
                 
                 FLOOD_TRACKER[chat_id][user_id].append(now)
                 
-                # إبقاء آخر 5 رسائل فقط
                 FLOOD_TRACKER[chat_id][user_id] = FLOOD_TRACKER[chat_id][user_id][-5:]
                 
-                # إذا كانت هناك 5 رسائل في أقل من 3 ثواني
                 if len(FLOOD_TRACKER[chat_id][user_id]) == 5 and (now - FLOOD_TRACKER[chat_id][user_id][0] < 3):
                     try:
                         until_date = datetime.now() + timedelta(minutes=5)
                         await client.edit_permissions(chat_id, user_id, send_messages=False, until_date=until_date)
                         await event.reply(f"**تم كتم [{event.sender.first_name}](tg://user?id={user_id}) لمدة 5 دقائق بسبب التكرار.**")
-                        FLOOD_TRACKER[chat_id][user_id] = [] # تفريغ سجل المستخدم
+                        FLOOD_TRACKER[chat_id][user_id] = []
                     except Exception as e:
                         print(f"Flood control error: {e}")
                     return
@@ -152,14 +147,14 @@ async def general_message_handler(event):
                         await event.delete()
                         sender = await event.get_sender()
                         
-                        user.warns += 1 # زيادة التحذيرات مباشرة
+                        user.warns += 1
                         
                         max_warns = chat.settings.get("max_warns", 3)
                         if user.warns >= max_warns:
                             until_date = datetime.now() + timedelta(days=1)
                             await client.edit_permissions(event.chat_id, sender, send_messages=False, until_date=until_date)
                             await client.send_message(event.chat_id, f"**❗️تم كتم [{sender.first_name}](tg://user?id={sender.id}) لمدة 24 ساعة** لتجاوز التحذيرات.")
-                            user.warns = 0 # تصفير التحذيرات بعد العقوبة
+                            user.warns = 0
                         else:
                             await client.send_message(event.chat_id, f"**⚠️ تم حذف رسالة من [{sender.first_name}](tg://user?id={sender.id}) لمخالفة القوانين.\nعدد تحذيراته: {user.warns}/{max_warns}**")
                         return
@@ -206,3 +201,5 @@ async def general_message_handler(event):
                  if key == event.text.lower():
                     await event.reply(value)
                     break
+        
+        await session.commit()
