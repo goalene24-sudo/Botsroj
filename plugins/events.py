@@ -116,9 +116,7 @@ async def general_message_handler(event):
                     if chat_locks.get(lock_name) and condition:
                         try:
                             await event.delete()
-                            logger.info(f"تم حذف الرسالة {event.id} بسبب قفل {lock_name}")
-                        except Exception as e:
-                            logger.error(f"لم أستطع حذف الرسالة في {event.chat_id}: {e}", exc_info=True)
+                        except Exception: pass
                         return
 
                 # --- نظام التكرار ---
@@ -127,13 +125,10 @@ async def general_message_handler(event):
                     chat_id = event.chat_id
                     now = time.time()
                     
-                    if chat_id not in FLOOD_TRACKER:
-                        FLOOD_TRACKER[chat_id] = {}
-                    if user_id not in FLOOD_TRACKER[chat_id]:
-                        FLOOD_TRACKER[chat_id][user_id] = []
+                    if chat_id not in FLOOD_TRACKER: FLOOD_TRACKER[chat_id] = {}
+                    if user_id not in FLOOD_TRACKER[chat_id]: FLOOD_TRACKER[chat_id][user_id] = []
                     
                     FLOOD_TRACKER[chat_id][user_id].append(now)
-                    
                     FLOOD_TRACKER[chat_id][user_id] = [t for t in FLOOD_TRACKER[chat_id][user_id] if now - t < 3]
                     
                     if len(FLOOD_TRACKER[chat_id][user_id]) >= 5:
@@ -142,22 +137,18 @@ async def general_message_handler(event):
                             await client.edit_permissions(chat_id, user_id, send_messages=False, until_date=until_date)
                             await event.reply(f"**تم كتم [{event.sender.first_name}](tg://user?id={user_id}) لمدة 5 دقائق بسبب التكرار.**")
                             FLOOD_TRACKER[chat_id][user_id] = []
-                            logger.info(f"تم كتم المستخدم {user_id} بسبب التكرار")
-                        except Exception as e:
-                            logger.error(f"خطأ في التحكم بالتكرار: {e}", exc_info=True)
+                        except Exception: pass
                         return
 
                 # --- نظام الكلمات الممنوعة ---
                 if event.text:
-                    filtered_words = chat_settings.get("filtered_words", [])
+                    filtered_words = (chat.settings or {}).get("filtered_words", [])
                     if filtered_words and any(word.lower() in event.text.lower() for word in filtered_words):
                         try:
                             await event.delete()
                             sender = await event.get_sender()
-                            
                             user.warns = (user.warns or 0) + 1
-                            
-                            max_warns = chat_settings.get("max_warns", 3)
+                            max_warns = (chat.settings or {}).get("max_warns", 3)
                             if user.warns >= max_warns:
                                 until_date = datetime.now() + timedelta(days=1)
                                 await client.edit_permissions(event.chat_id, sender.id, send_messages=False, until_date=until_date)
@@ -165,9 +156,7 @@ async def general_message_handler(event):
                                 user.warns = 0
                             else:
                                 await client.send_message(event.chat_id, f"**⚠️ تم حذف رسالة من [{sender.first_name}](tg://user?id={sender.id}) لمخالفة القوانين.\nعدد تحذيراته: {user.warns}/{max_warns}**")
-                            logger.info(f"تم حذف رسالة بسبب كلمة محظورة للمستخدم {sender.id}")
-                        except Exception as e: 
-                            logger.error(f"خطأ في فلتر الكلمات: {e}", exc_info=True)
+                        except Exception: pass
                         return
 
             if not event.text:
@@ -189,26 +178,33 @@ async def general_message_handler(event):
                     points_multiplier = 2
                 
                 points_to_add = 0
-                message_length = len(event.text)
-                if message_length >= 30: points_to_add += 3
-                elif message_length >= 4: points_to_add += 1
+                if len(event.text) >= 30: points_to_add += 3
+                elif len(event.text) >= 4: points_to_add += 1
                 if event.is_reply: points_to_add += 2
 
-                final_points_to_add = points_to_add * points_multiplier
-                if final_points_to_add > 0:
-                    user.points = (user.points or 0) + final_points_to_add
+                if points_to_add > 0:
+                    user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
                 # --- (تم التعديل) نظام الردود ---
-                if chat_settings.get("public_replies_enabled", True):
-                    # دمج الردود الافتراضية والمخصصة
+                if (chat.settings or {}).get("public_replies_enabled", True):
                     all_replies = DEFAULT_REPLIES.copy()
                     custom_replies = chat.custom_replies or {}
                     all_replies.update({k.lower(): v for k, v in custom_replies.items()})
                     
-                    # البحث عن تطابق
-                    reply_text = all_replies.get(event.text.lower())
-                    if reply_text:
-                        await event.reply(reply_text)
+                    reply_template = all_replies.get(event.text.lower())
+                    
+                    if reply_template:
+                        try:
+                            sender = await event.get_sender()
+                            final_reply = reply_template.format(
+                                user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
+                                user_first_name=sender.first_name
+                            )
+                            await event.reply(final_reply)
+                        except KeyError:
+                            await event.reply(reply_template)
+                        except Exception as e:
+                            logger.error(f"خطأ في إرسال الرد: {e}")
             
             await session.commit()
         except Exception as e:
@@ -222,7 +218,6 @@ async def handle_chat_action(event):
             try:
                 user = await get_or_create_user(session, event.chat_id, event.user_id)
                 user.join_date = datetime.now().strftime("%Y-%m-%d")
-                await session.commit()
                 
                 chat = await get_or_create_chat(session, event.chat_id)
                 welcome_message = (chat.settings or {}).get("welcome_message")
@@ -237,6 +232,7 @@ async def handle_chat_action(event):
                     )
                     await client.send_message(event.chat_id, formatted_message)
 
+                await session.commit()
             except Exception as e:
                 logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
                 await session.rollback()
