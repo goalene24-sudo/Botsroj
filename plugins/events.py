@@ -185,7 +185,7 @@ async def general_message_handler(event):
                 if points_to_add > 0:
                     user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
-                # --- (تم التعديل النهائي) نظام الردود ---
+                # --- (تم التعديل النهائي والأخير) نظام الردود ---
                 if (chat.settings or {}).get("public_replies_enabled", True):
                     all_replies = DEFAULT_REPLIES.copy()
                     custom_replies = chat.custom_replies or {}
@@ -194,9 +194,24 @@ async def general_message_handler(event):
                     reply_data = all_replies.get(event.text.lower())
                     
                     if reply_data:
-                        reply_template = ""
+                        reply_template = None
                         if isinstance(reply_data, dict):
-                            reply_template = reply_data.get("text")
+                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                            
+                            if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data:
+                                reply_list = reply_data["developer"]
+                            elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data:
+                                reply_list = reply_data["bot_admin"]
+                            elif current_rank >= Ranks.MOD and "group_admin" in reply_data:
+                                reply_list = reply_data["group_admin"]
+                            elif "member" in reply_data:
+                                reply_list = reply_data["member"]
+                            else:
+                                reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
+                            
+                            if reply_list:
+                                reply_template = random.choice(reply_list)
+                        
                         elif isinstance(reply_data, str):
                             reply_template = reply_data
 
