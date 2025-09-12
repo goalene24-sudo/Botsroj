@@ -3,54 +3,58 @@
 import asyncio
 from telethon import events
 from bot import client
-from plugins.utils import get_user_rank, Ranks, db, save_db
+# --- (تم التعديل) استيراد المكونات الجديدة ---
+from plugins.utils import get_user_rank, Ranks
+from sqlalchemy.future import select
+from sqlalchemy import delete
+from database import AsyncDBSession
+from models import MessageHistory
 
 # --- دالة مساعدة مركزية لتجنب تكرار الكود ---
 async def purge_messages_by_type(event, target_types, count_to_delete, command_text):
     """
-    دالة عامة لحذف الرسائل بناءً على نوعها من السجل المحفوظ.
+    دالة عامة لحذف الرسائل بناءً على نوعها من السجل المحفوظ في قاعدة البيانات.
     """
-    chat_id_str = str(event.chat_id)
-    message_history = db.get(chat_id_str, {}).get("message_history", [])
-    
-    if not message_history:
-        await event.reply("ذاكرة الرسائل فارغة حالياً. يرجى الانتظار حتى يتم إرسال بعض الرسائل الجديدة.")
-        return
-
-    # 1. فلترة السجل للعثور على الرسائل من النوع المطلوب
-    filtered_messages = [msg for msg in message_history if msg.get("type") in target_types]
-
-    if not filtered_messages:
-        await event.reply(f"لم أجد أي رسائل من هذا النوع في آخر {len(message_history)} رسالة.")
-        return
-
-    # 2. أخذ العدد المطلوب من الرسائل التي تم فلترتها
-    ids_to_delete = [msg["msg_id"] for msg in filtered_messages]
-    # إذا كان العدد المحدد أكبر من عدد الرسائل المتاحة، فسيتم حذف المتاح فقط
-    ids_to_delete = ids_to_delete[-count_to_delete:]
-
-    # 3. إضافة رسالة الأمر نفسها للحذف
-    ids_to_delete.append(event.message.id)
-
+    ids_to_delete = []
     try:
-        await client.delete_messages(event.chat_id, ids_to_delete)
+        async with AsyncDBSession() as session:
+            # 1. فلترة السجل للعثور على الرسائل من النوع المطلوب
+            stmt = (
+                select(MessageHistory.msg_id)
+                .where(MessageHistory.chat_id == event.chat_id, MessageHistory.msg_type.in_(target_types))
+                .order_by(MessageHistory.id.desc())
+                .limit(count_to_delete)
+            )
+            result = await session.execute(stmt)
+            ids_to_delete = result.scalars().all()
 
-        # 4. تنظيف قاعدة البيانات من الرسائل المحذوفة
-        updated_history = [item for item in message_history if item["msg_id"] not in ids_to_delete]
-        if chat_id_str in db:
-            db[chat_id_str]["message_history"] = updated_history
-            save_db(db)
-        
-        # رسالة تأكيد مخصصة
-        deleted_count = len(ids_to_delete)
-        reply_text = f"✅ **تم حذف {deleted_count - 1} {command_text} بنجاح.**" if count_to_delete < 100 else f"✅ **تم حذف كل الـ {command_text} ({deleted_count - 1}) المحفوظة بنجاح.**"
-        confirmation_msg = await event.respond(reply_text)
-        await asyncio.sleep(5)
-        await confirmation_msg.delete()
+            if not ids_to_delete:
+                await event.reply(f"لم أجد أي رسائل من نوع '{command_text}' في ذاكرة البوت.")
+                return
+
+            # 2. إضافة رسالة الأمر نفسها للحذف
+            ids_to_delete.append(event.message.id)
+
+            # 3. الحذف من تيليجرام
+            await client.delete_messages(event.chat_id, ids_to_delete)
+
+            # 4. تنظيف قاعدة البيانات من الرسائل المحذوفة
+            delete_stmt = delete(MessageHistory).where(MessageHistory.msg_id.in_(ids_to_delete))
+            await session.execute(delete_stmt)
+            await session.commit()
+            
+            # رسالة تأكيد مخصصة
+            deleted_count = len(ids_to_delete)
+            reply_text = f"✅ **تم حذف {deleted_count - 1} {command_text} بنجاح.**" if count_to_delete < 100 else f"✅ **تم حذف كل الـ {command_text} ({deleted_count - 1}) المحفوظة بنجاح.**"
+            confirmation_msg = await event.respond(reply_text)
+            await asyncio.sleep(5)
+            await confirmation_msg.delete()
 
     except Exception as e:
         print(f"Error in specialized purge: {e}")
+        # إذا فشل الحذف من تيليجرام، لا تقم بالحذف من قاعدة البيانات
         await event.reply("⚠️ حدث خطأ أثناء محاولة الحذف. تأكد من صلاحياتي.")
+
 
 # --- (مُصحَّح) الأوامر المتخصصة مع عدد اختياري ---
 
