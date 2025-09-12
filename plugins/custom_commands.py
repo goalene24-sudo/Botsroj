@@ -4,12 +4,13 @@ from bot import client
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from database import DBSession
+# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
+from database import AsyncDBSession
 from models import User, GlobalSetting
 
 async def get_global_setting(key, default=None):
     """جلب قيمة إعداد عام من قاعدة البيانات."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting and setting.value:
@@ -41,7 +42,7 @@ async def custom_command_handler(event):
             chat = await event.get_chat()
             
             # جلب بيانات المستخدم من قاعدة البيانات الجديدة
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 result = await session.execute(
                     select(User).where(User.chat_id == chat.id, User.user_id == sender.id)
                 )
