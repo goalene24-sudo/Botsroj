@@ -1,12 +1,15 @@
-# plugins/aliases.py
-
 import asyncio
 from telethon import events
 from bot import client
+# --- (تم التعديل) استيراد المكونات الجديدة ---
 from .utils import (
-    db, save_db, get_user_rank, Ranks, check_activation,
+    get_user_rank, Ranks, check_activation,
     PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS
 )
+from sqlalchemy.future import select
+from sqlalchemy import delete
+from database import AsyncDBSession
+from models import Alias
 
 # --- (مُصحَّح) إضافة اختصار رفع مطور ثانوي ---
 FIXED_ALIASES = {
@@ -85,7 +88,6 @@ async def add_alias_handler(event):
     if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
 
-    chat_id_str = str(event.chat_id)
     original_command = None
 
     try:
@@ -96,7 +98,7 @@ async def add_alias_handler(event):
 **أرسل الآن الأمر الأصلي الموجود في البوت (مثال: `ايدي`).**
 
 **💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
-**""")
+""")
             
             while True:
                 response = await conv.get_response()
@@ -118,7 +120,7 @@ async def add_alias_handler(event):
 **أرسل الآن الأمر الجديد (الاختصار) الذي تريده (مثال: `اا`).**
 
 **💡 ملاحظة: يمكنك كتابة `الغاء` في أي وقت للخروج.**
-**""")
+""")
 
             alias_command_msg = None
             while True:
@@ -132,17 +134,19 @@ async def add_alias_handler(event):
 
             alias_command = alias_command_msg.text.strip()
             
-            if chat_id_str not in db: db[chat_id_str] = {}
-            if "command_aliases" not in db[chat_id_str]:
-                db[chat_id_str]["command_aliases"] = {}
+            async with AsyncDBSession() as session:
+                result = await session.execute(
+                    select(Alias).where(Alias.chat_id == event.chat_id, Alias.alias_name == alias_command)
+                )
+                existing_alias = result.scalar_one_or_none()
 
-            user_aliases = db[chat_id_str]["command_aliases"]
-            if alias_command in user_aliases or alias_command in FIXED_ALIASES:
-                await alias_command_msg.reply(f"**⚠️ عذراً، الاختصار `{alias_command}` مستخدم بالفعل.**")
-                return
+                if existing_alias or alias_command in FIXED_ALIASES:
+                    await alias_command_msg.reply(f"**⚠️ عذراً، الاختصار `{alias_command}` مستخدم بالفعل.**")
+                    return
 
-            user_aliases[alias_command] = original_command
-            save_db(db)
+                new_alias = Alias(chat_id=event.chat_id, alias_name=alias_command, command_name=original_command)
+                session.add(new_alias)
+                await session.commit()
 
             await alias_command_msg.reply(f"**✅ | تم الحفظ بنجاح!**\n\n**الآن عند إرسال `{alias_command}`، سيتم تنفيذ الأمر `{original_command}`.**")
 
@@ -159,27 +163,31 @@ async def delete_alias_handler(event):
     if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
     
-    chat_id_str = str(event.chat_id)
     alias_to_delete = event.pattern_match.group(1).strip()
     
     if alias_to_delete in FIXED_ALIASES:
         return await event.reply(f"**⚠️ | لا يمكن حذف الاختصار الأساسي `{alias_to_delete}`.**")
 
-    aliases = db.get(chat_id_str, {}).get("command_aliases", {})
-    if alias_to_delete in aliases:
-        del db[chat_id_str]["command_aliases"][alias_to_delete]
-        save_db(db)
-        await event.reply(f"**🗑️ | تم حذف الاختصار `{alias_to_delete}` بنجاح.**")
-    else:
-        await event.reply(f"**⚠️ | لم أجد الاختصار `{alias_to_delete}` في قائمة الأوامر المضافة.**")
+    async with AsyncDBSession() as session:
+        stmt = delete(Alias).where(Alias.chat_id == event.chat_id, Alias.alias_name == alias_to_delete)
+        result = await session.execute(stmt)
+        await session.commit()
+        
+        if result.rowcount > 0:
+            await event.reply(f"**🗑️ | تم حذف الاختصار `{alias_to_delete}` بنجاح.**")
+        else:
+            await event.reply(f"**⚠️ | لم أجد الاختصار `{alias_to_delete}` في قائمة الأوامر المضافة.**")
 
 
 @client.on(events.NewMessage(pattern="^الاوامر المضافة$"))
 async def list_aliases_handler(event):
     if not await check_activation(event.chat_id): return
-    chat_id_str = str(event.chat_id)
     
-    user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
+    async with AsyncDBSession() as session:
+        result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
+        user_aliases_rows = result.scalars().all()
+        user_aliases = {alias.alias_name: alias.command_name for alias in user_aliases_rows}
+
     all_aliases = FIXED_ALIASES.copy()
     all_aliases.update(user_aliases)
 
@@ -197,10 +205,12 @@ async def list_aliases_handler(event):
 @client.on(events.NewMessage(pattern="^ترتيب الاوامر$"))
 async def sort_aliases_handler(event):
     if not await check_activation(event.chat_id): return
-    chat_id_str = str(event.chat_id)
-
-    user_aliases = db.get(chat_id_str, {}).get("command_aliases", {})
     
+    async with AsyncDBSession() as session:
+        result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
+        user_aliases_rows = result.scalars().all()
+        user_aliases = {alias.alias_name: alias.command_name for alias in user_aliases_rows}
+
     reply_text = "**ترتيب الاوامر**\n\n"
     reply_text += "**◇ : تم ترتيب الاوامر بالشكل التالي ~**\n\n"
     
