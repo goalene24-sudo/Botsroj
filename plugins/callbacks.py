@@ -6,7 +6,7 @@ from bot import client, StartTime
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import func
-from database import DBSession
+from database import AsyncDBSession
 from models import Chat, User, GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
@@ -41,7 +41,7 @@ async def callback_handler(event):
         if not await is_admin(chat_id, event.sender_id):
             return await event.answer("🚫 | هذا الزر مخصص للمشرفين فقط.", alert=True)
 
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, chat_id)
             if chat.is_active:
                 try:
@@ -98,7 +98,7 @@ async def callback_handler(event):
         
         elif query_data == "about_menu":
             await event.answer("جاري حساب الإحصائيات...", alert=False)
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 total_groups = (await session.execute(select(func.count(Chat.id)).where(Chat.is_active == True))).scalar_one()
                 total_users = (await session.execute(select(func.count(func.distinct(User.user_id))))).scalar_one()
             
@@ -162,7 +162,7 @@ async def callback_handler(event):
         
         lock_key = query_data.split(":")[1]
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             if chat.lock_settings is None: chat.lock_settings = {}
             
@@ -185,11 +185,16 @@ async def callback_handler(event):
 async def custom_command_button_handler(event):
     command_name = event.data.decode().split(':')[1]
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         # جلب الأوامر المخصصة من الإعدادات العامة
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == "custom_commands"))
         settings = result.scalar_one_or_none()
-        custom_commands = json.loads(settings.value) if settings else {}
+        custom_commands = {}
+        if settings and settings.value:
+            try:
+                custom_commands = json.loads(settings.value)
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         if command_name not in custom_commands:
             return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
