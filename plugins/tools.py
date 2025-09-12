@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 from models import GlobalSetting, User
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation
@@ -38,7 +38,7 @@ DAYS_AR = {
 # --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
 async def is_globally_disabled(command_name):
     """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
         )
@@ -65,7 +65,7 @@ async def group_info_handler(event):
         admins = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
         admins_count = len(admins)
         
-        async with DBSession() as session:
+        async with AsyncDBSession() as session:
             chat_obj = await get_or_create_chat(session, event.chat_id)
             total_msgs = chat_obj.total_msgs
             
@@ -87,7 +87,7 @@ async def group_stats_handler(event):
     if await is_globally_disabled("احصائيات"):
         return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(User)
             .where(User.chat_id == event.chat_id)
