@@ -6,10 +6,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
-from .utils import check_activation, get_user_rank, Ranks
-from .admin import get_or_create_chat, get_or_create_user
+from .utils import check_activation, get_user_rank, Ranks, get_or_create_chat, get_or_create_user
 
 # --- معالج الكتم المؤقت عبر الأزرار ---
 @client.on(events.CallbackQuery(pattern=b"^mute_"))
@@ -63,16 +62,18 @@ async def add_filtered_word(event):
         return await event.reply("**الأمر يحتاج كلمة. الاستخدام الصحيح:\n`اضف كلمة ممنوعة [الكلمة اللي تريد تمنعها]`**")
 
     word = word.strip()
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
-        filtered_words = chat.filtered_words or []
+        settings = chat.settings or {}
+        filtered_words = settings.get("filtered_words", [])
 
         if word.lower() in [w.lower() for w in filtered_words]:
             return await event.reply(f"**الكلمة '{word}' هي أصلاً ممنوعة يمعود.**")
         
         filtered_words.append(word)
-        chat.filtered_words = filtered_words
-        flag_modified(chat, "filtered_words")
+        settings["filtered_words"] = filtered_words
+        chat.settings = settings
+        flag_modified(chat, "settings")
         await session.commit()
     
     await event.reply(f"**✅ تمام، ضفت الكلمة '{word}' لقائمة الممنوعات.**")
@@ -91,9 +92,10 @@ async def remove_filtered_word(event):
     word_to_remove = word_to_remove.strip().lower()
     word_found = None
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
-        filtered_words = chat.filtered_words or []
+        settings = chat.settings or {}
+        filtered_words = settings.get("filtered_words", [])
         
         for w in filtered_words:
             if w.lower() == word_to_remove:
@@ -102,8 +104,9 @@ async def remove_filtered_word(event):
 
         if word_found:
             filtered_words.remove(word_found)
-            chat.filtered_words = filtered_words
-            flag_modified(chat, "filtered_words")
+            settings["filtered_words"] = filtered_words
+            chat.settings = settings
+            flag_modified(chat, "settings")
             await session.commit()
             await event.reply(f"**✅ خوش، حذفت الكلمة '{word_found}' من قائمة الممنوعات.**")
         else:
@@ -116,9 +119,10 @@ async def list_filtered_words(event):
     actor_rank = await get_user_rank(event.sender_id, event.chat_id)
     if actor_rank < Ranks.MOD: return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين فما فوق.**")
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
-        words = chat.filtered_words or []
+        settings = chat.settings or {}
+        words = settings.get("filtered_words", [])
 
     if not words:
         return await event.reply("**قائمة الكلمات الممنوعة فارغة حالياً. كلشي مسموح 😉**")
@@ -168,13 +172,13 @@ async def consolidated_admin_handler(event):
             await client.edit_permissions(event.chat_id, user_to_manage, send_messages=True)
             await event.reply(f"**🗣️ يلا احچي [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
         elif action == "تحذير":
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
                 chat_obj = await get_or_create_chat(session, event.chat_id)
                 
-                user_obj.warns += 1
+                user_obj.warns = user_obj.warns + 1 if user_obj.warns else 1
                 new_warn_count = user_obj.warns
-                max_warns = chat_obj.settings.get("max_warns", 3)
+                max_warns = (chat_obj.settings or {}).get("max_warns", 3)
                 
                 if new_warn_count >= max_warns:
                     until_date = datetime.now() + timedelta(minutes=1440) # 24 hours
@@ -186,9 +190,9 @@ async def consolidated_admin_handler(event):
                 
                 await session.commit()
         elif action == "حذف التحذيرات":
-            async with DBSession() as session:
+            async with AsyncDBSession() as session:
                 user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
-                if user_obj.warns > 0:
+                if user_obj.warns and user_obj.warns > 0:
                     user_obj.warns = 0
                     await session.commit()
                     await event.reply(f"**✅ تم تصفير العداد.**\n**العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) رجع خوش آدمي وما عنده أي تحذير.**")
