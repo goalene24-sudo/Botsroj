@@ -9,7 +9,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
-from database import DBSession
+from database import AsyncDBSession
 from models import GlobalSetting
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, XO_GAMES, build_xo_keyboard, check_xo_winner, is_command_enabled
@@ -30,7 +30,7 @@ LUCK_BOX_MESSAGES = [
 # --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
 async def is_globally_disabled(command_name):
     """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
         )
@@ -39,7 +39,7 @@ async def is_globally_disabled(command_name):
             try:
                 disabled_list = json.loads(setting.value)
                 return command_name in disabled_list
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 return False
         return False
 
@@ -58,7 +58,7 @@ async def luck_box_handler(event):
     COOLDOWN = 10 * 60 * 60 # 10 ساعات
     current_time = int(time.time())
 
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         luck_box_data = chat.settings.get("luck_box", {})
         last_claim = luck_box_data.get(user_id_str, 0)
@@ -72,7 +72,9 @@ async def luck_box_handler(event):
         await asyncio.sleep(2)
 
         luck_box_data[user_id_str] = current_time
-        chat.settings["luck_box"] = luck_box_data
+        settings = chat.settings or {}
+        settings["luck_box"] = luck_box_data
+        chat.settings = settings
         flag_modified(chat, "settings")
         await session.commit()
 
@@ -229,9 +231,10 @@ async def couple_of_the_day_handler(event):
 
     now = datetime.now()
     
-    async with DBSession() as session:
+    async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
-        daily_couple_data = chat.settings.get("daily_couple", {})
+        settings = chat.settings or {}
+        daily_couple_data = settings.get("daily_couple", {})
         
         if daily_couple_data and daily_couple_data.get("date") == now.strftime("%Y-%m-%d"):
             user1_id = daily_couple_data["couple"][0]
@@ -259,12 +262,13 @@ async def couple_of_the_day_handler(event):
             couple = random.sample(real_users, 2)
             user1, user2 = couple[0], couple[1]
 
-            chat.settings["daily_couple"] = {
+            settings["daily_couple"] = {
                 "couple": [user1.id, user2.id],
                 "date": now.strftime("%Y-%m-%d"),
                 "user1_name": user1.first_name,
                 "user2_name": user2.first_name
             }
+            chat.settings = settings
             flag_modified(chat, "settings")
             await session.commit()
             
