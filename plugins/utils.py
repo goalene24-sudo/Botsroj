@@ -6,23 +6,58 @@ from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
+from sqlalchemy.orm.attributes import flag_modified
 
-# --- (تم التعديل) استيراد كل مكونات قاعدة البيانات هنا ---
+# --- استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
-# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
 from database import AsyncDBSession
-from models import User, Vip, SecondaryDev, Creator, BotAdmin, Group, CommandSetting, Lock, CustomCommand, GlobalSetting, Chat
+from models import (
+    User, Vip, SecondaryDev, Creator, BotAdmin, Chat, 
+    CommandSetting, Lock, CustomCommand, GlobalSetting
+)
+
+# --- (جديد) دوال مساعدة مركزية ---
+async def get_or_create_chat(session, chat_id):
+    """الحصول على مجموعة من قاعدة البيانات أو إنشائها مع تهيئة الحقول."""
+    result = await session.execute(select(Chat).where(Chat.id == chat_id))
+    chat = result.scalar_one_or_none()
+    if not chat:
+        chat = Chat(
+            id=chat_id, 
+            settings={}, 
+            lock_settings={},
+            filtered_words=[],
+            custom_replies={}
+        )
+        session.add(chat)
+        await session.flush()
+        await session.refresh(chat)
+    return chat
+
+async def get_or_create_user(session, chat_id, user_id):
+    """الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا."""
+    result = await session.execute(
+        select(User).where(User.chat_id == chat_id, User.user_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(chat_id=chat_id, user_id=user_id)
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+    return user
 
 # --- تعريف مستويات الرتب ---
 class Ranks:
-    MEMBER = 0        # عضو
-    VIP = 1           # عضو مميز
-    MOD = 2           # مشرف (من صلاحيات المجموعة)
-    ADMIN = 3         # ادمن (من صلاحيات البوت)
-    CREATOR = 4       # المنشئ (تمت ترقيته)
-    OWNER = 5         # مالك المجموعة الفعلي
-    SECONDARY_DEV = 6 # مطور ثانوي
-    MAIN_DEV = 7      # المطور الرئيسي
+    MEMBER = 0
+    VIP = 1
+    MOD = 2
+    ADMIN = 3
+    CREATOR = 4
+    OWNER = 5
+    SECONDARY_DEV = 6
+    MAIN_DEV = 7
 
 try:
     import google.generativeai as genai
@@ -50,31 +85,6 @@ RIDDLES = [
 ]
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
-# --- دوال قاعدة البيانات الجديدة ---
-async def get_or_create_user(session, chat_id, user_id):
-    result = await session.execute(
-        select(User).where(User.chat_id == chat_id, User.user_id == user_id)
-    )
-    user = result.scalar_one_or_none()
-    if not user:
-        user = User(chat_id=chat_id, user_id=user_id)
-        session.add(user)
-        await session.commit()
-    return user
-
-async def is_vip(chat_id, user_id):
-    async with AsyncDBSession() as session:
-        result = await session.execute(
-            select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id)
-        )
-        return result.scalar_one_or_none() is not None
-
-async def is_secondary_dev(chat_id, user_id):
-    async with AsyncDBSession() as session:
-        result = await session.execute(
-            select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id)
-        )
-        return result.scalar_one_or_none() is not None
 
 def get_rank_name(rank_level):
     if rank_level == Ranks.MAIN_DEV: return "المطور الرئيسي"
@@ -167,11 +177,8 @@ ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع تر
 
 async def is_command_enabled(chat_id, command_key):
     async with AsyncDBSession() as session:
-        result = await session.execute(
-            select(CommandSetting).where(CommandSetting.chat_id == chat_id, CommandSetting.command == command_key)
-        )
-        setting = result.scalar_one_or_none()
-        return setting.is_enabled if setting else True
+        chat = await get_or_create_chat(session, chat_id)
+        return (chat.settings or {}).get(command_key, True)
 
 async def is_admin(chat_id, user_id):
     if chat_id < 0:
@@ -201,8 +208,8 @@ async def add_points(chat_id, user_id, points_to_add):
 async def build_protection_menu(chat_id):
     buttons, row = [], []
     async with AsyncDBSession() as session:
-        result = await session.execute(select(Lock).where(Lock.chat_id == chat_id))
-        locks = {lock.lock_type: lock.is_locked for lock in result.scalars().all()}
+        chat = await get_or_create_chat(session, chat_id)
+        locks = chat.lock_settings or {}
 
     for name, key in LOCK_TYPES.items():
         is_locked = locks.get(key, False)
@@ -232,18 +239,3 @@ def check_xo_winner(board):
     for a, b, c in lines:
         if board[a] == board[b] == board[c] != '-': return board[a]
     return 'draw' if '-' not in board else None
-
-# ✅ ✅ ✅ [تمت إضافتها] - الدالة المطلوبة
-async def get_or_create_chat(session, chat_id):
-    """
-    الحصول على مجموعة من قاعدة البيانات أو إنشائها إذا لم تكن موجودة.
-    """
-    result = await session.execute(
-        select(Chat).where(Chat.id == chat_id)
-    )
-    chat = result.scalar_one_or_none()
-    if not chat:
-        chat = Chat(id=chat_id)
-        session.add(chat)
-        await session.commit()
-    return chat
