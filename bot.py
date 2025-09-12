@@ -15,10 +15,8 @@ StartTime = datetime.now()
 
 try:
     # --- هذا هو السطر الذي تم تصحيحه ---
-    # لقد استبدلنا None باسم جلسة وليكن 'saruj_bot'
     client = TelegramClient('saruj_bot', config.API_ID, config.API_HASH)
     logger.info("تم تهيئة العميل بنجاح.")
-    # ------------------------------------
 except Exception as e:
     logger.critical(f"!! خطأ فادح عند تهيئة البوت: {e}", exc_info=True)
     exit(1)
@@ -39,8 +37,13 @@ async def load_plugins():
 
 async def main():
     logger.info("بدء تشغيل البوت...")
-    await init_db()  # استدعاء دالة init_db من database.py لإنشاء الجداول
-    logger.info("تم إنشاء الجداول بنجاح.")
+    try:
+        await init_db()  # استدعاء دالة init_db من database.py لإنشاء الجداول
+        logger.info("تم إنشاء الجداول بنجاح.")
+    except Exception as e:
+        logger.critical(f"فشل إنشاء الجداول: {e}", exc_info=True)
+        exit(1)  # إنهاء البرنامج إذا فشل إنشاء الجداول
+    
     await client.start()
     logger.info("البوت قد بدأ بنجاح.")
     await load_plugins()  # تحميل الوحدات بعد بدء البوت
