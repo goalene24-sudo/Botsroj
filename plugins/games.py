@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from database import AsyncDBSession
-from models import GlobalSetting, User # تم استيراد User هنا للاستخدام
+from models import GlobalSetting, User 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, XO_GAMES, build_xo_keyboard, check_xo_winner, is_command_enabled, get_or_create_user
 from .quiz_data import QUIZ_QUESTIONS
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- متغيرات خاصة بالألعاب (لا تحتاج قاعدة بيانات) ---
 MAHIBES_GAMES = {}
-CURRENT_QUIZZES = {}
+CURRENT_QUIZZES = {} # سيتم استخدامه الآن
 RPS_GAMES = {}
 LUCK_BOX_MESSAGES = [
     "فتحت الصندوق و لگيت بي ورقة مكتوب عليها 'حاول مرة أخرى'... بس الخط حلو!",
@@ -29,49 +29,36 @@ LUCK_BOX_MESSAGES = [
     "مبروك! لگيت بالصندوق دعاء الوالدة، وهذا أحسن من كل الكنوز.",
 ]
 
-# --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
+# --- (بقية الكود يبقى كما هو حتى نصل إلى دالة الكويز) ---
+
 async def is_globally_disabled(command_name):
-    """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
     async with AsyncDBSession() as session:
-        result = await session.execute(
-            select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
-        )
+        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds"))
         setting = result.scalar_one_or_none()
-        if setting and isinstance(setting.value, list): # التعامل مع القيمة كقائمة مباشرة
-            return command_name in setting.value
+        if setting and isinstance(setting.value, list): return command_name in setting.value
         return False
 
 @client.on(events.NewMessage(pattern="^صندوق الحظ$"))
 async def luck_box_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("صندوق الحظ"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
-    
-    chat_id, user_id = event.chat_id, event.sender_id
-    COOLDOWN = 10 * 60 * 60
-    current_time = int(time.time())
-
+    chat_id, user_id, COOLDOWN, current_time = event.chat_id, event.sender_id, 10 * 60 * 60, int(time.time())
     async with AsyncDBSession() as session:
         user = await get_or_create_user(session, chat_id, user_id)
         inventory = user.inventory or {}
         last_claim = inventory.get("luck_box_claim", 0)
-
         if current_time - last_claim < COOLDOWN:
             remaining_seconds = COOLDOWN - (current_time - last_claim)
             remaining_time_str = str(timedelta(seconds=int(remaining_seconds))).split('.')[0]
             return await event.reply(f"**صندوقك الجاي يفتح بعد: {remaining_time_str} ⏳**")
-
         opening_msg = await event.reply("**جاي نفتح الصندوق... 🤔🎁**")
         await asyncio.sleep(2)
-
         inventory["luck_box_claim"] = current_time
         user.inventory = inventory
         flag_modified(user, "inventory")
-        
         rewards, probabilities = ["points", "message", "nothing"], [0.60, 0.25, 0.15]
         chosen_reward = random.choices(rewards, probabilities)[0]
-
         if chosen_reward == "points":
             points = random.randint(10, 75)
             await add_points(chat_id, user_id, points)
@@ -80,12 +67,10 @@ async def luck_box_handler(event):
             await opening_msg.edit(f"**فتحت الصندوق و... 🤔\n\n{random.choice(LUCK_BOX_MESSAGES)}**")
         else:
             await opening_msg.edit("**للأسف الصندوق طلع فارغ هل مرة 😥... حظ أوفر!**")
-        
         await session.commit()
 
 @client.on(events.NewMessage(pattern="^حظي$"))
 async def slot_machine_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("حظي"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
@@ -105,7 +90,6 @@ async def slot_machine_handler(event):
 
 @client.on(events.NewMessage(pattern="^xo$"))
 async def xo_game_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("xo"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
@@ -121,7 +105,6 @@ async def xo_game_handler(event):
 
 @client.on(events.NewMessage(pattern="^حجره ورقه مقص$"))
 async def rps_game_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("حجره ورقه مقص"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
@@ -136,35 +119,35 @@ async def rps_game_handler(event):
 
 @client.on(events.NewMessage(pattern="^كويز$"))
 async def start_quiz_handler(event):
-    # --- (تم التعديل هنا) ---
     try:
         if event.is_private or not await check_activation(event.chat_id): return
-        
-        if await is_globally_disabled("كويز"):
-            return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
-
-        if not await is_command_enabled(event.chat_id, "games_enabled"):
-            return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
+        if await is_globally_disabled("كويز"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
+        if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
             
         question_data = random.choice(QUIZ_QUESTIONS)
-        
-        if not all(k in question_data for k in ["question", "options", "answer"]):
-            logger.error(f"Invalid question format in QUIZ_QUESTIONS: {question_data}")
-            return await event.reply("**حدث خطأ في بيانات الأسئلة، يرجى مراجعة المطور.**")
-
         question, options, correct_answer = question_data["question"], question_data["options"].copy(), question_data["answer"]
         random.shuffle(options)
-        buttons = [Button.inline(opt, data=f"quiz:{opt}:{correct_answer}") for opt in options]
+        
+        buttons = []
+        for opt in options:
+            is_correct = "1" if opt == correct_answer else "0"
+            buttons.append(Button.inline(opt, data=f"quiz:{is_correct}"))
+            
         keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-        await event.reply(f"**يابه سؤال عالطاير 🚁... جاوب صح وشوفنا شطارتك:\n\n{question}**", buttons=keyboard)
+        
+        # --- (تم التعديل هنا) ---
+        quiz_msg = await event.reply(f"**يابه سؤال عالطاير 🚁... جاوب صح وشوفنا شطارتك:\n\n{question}**", buttons=keyboard)
+        # تسجيل الكويز الفعال لتتبعه لاحقًا
+        CURRENT_QUIZZES[quiz_msg.id] = {
+            "correct_answer": correct_answer,
+            "participants": set()
+        }
     except Exception as e:
         logger.error(f"Unhandled exception in start_quiz_handler: {e}", exc_info=True)
         await event.reply("**عفوًا، حدث خطأ غير متوقع أثناء بدء لعبة الكويز.**")
 
-
 @client.on(events.NewMessage(pattern="^محيبس$"))
 async def start_mahbis_game_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("محيبس"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
@@ -183,7 +166,6 @@ async def start_mahbis_game_handler(event):
 
 @client.on(events.NewMessage(pattern="^من سيربح المليون$"))
 async def millionaire_start_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("من سيربح المليون"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
@@ -191,16 +173,15 @@ async def millionaire_start_handler(event):
 
 @client.on(events.NewMessage(pattern="^ثنائي اليوم$"))
 async def couple_of_the_day_handler(event):
-    # (الكود هنا يبقى كما هو)
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("ثنائي اليوم"): return await event.reply("**(هذا الامر تحت الصيانه حاليا)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): return await event.reply("🚫 | **عذراً، الألعاب معطلة.**")
 
     now = datetime.now()
     async with AsyncDBSession() as session:
-        user = await get_or_create_user(session, event.chat_id, event.sender_id)
-        inventory = user.inventory or {}
-        daily_couple_data = inventory.get("daily_couple", {})
+        chat = await get_or_create_chat(session, event.chat_id)
+        settings = chat.settings or {}
+        daily_couple_data = settings.get("daily_couple", {})
         
         if daily_couple_data and daily_couple_data.get("date") == now.strftime("%Y-%m-%d"):
             user1_id, user2_id = daily_couple_data["couple"][0], daily_couple_data["couple"][1]
@@ -215,10 +196,12 @@ async def couple_of_the_day_handler(event):
             real_users = [u for u in participants if not u.bot and not u.deleted]
             if len(real_users) < 2: return await msg.edit("**ماكو أعضاء كافين! 😥**")
             user1, user2 = random.sample(real_users, 2)
-            inventory["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.first_name}
-            user.inventory = inventory
-            flag_modified(user, "inventory")
+            
+            settings["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.first_name}
+            chat.settings = settings
+            flag_modified(chat, "settings")
             await session.commit()
+            
             reply_text = f"**💍 | و ألف مبروك! ثنائي اليوم هم:**\n\n**<a href='tg://user?id={user1.id}'>{user1.first_name}</a> + <a href='tg://user?id={user2.id}'>{user2.first_name}</a>**\n\n**نتمنى لكم يوماً سعيداً! 🎉**"
             await msg.edit(reply_text, parse_mode='html')
         except Exception as e:
