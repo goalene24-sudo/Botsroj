@@ -40,7 +40,6 @@ async def general_message_handler(event):
         return
 
     try:
-        # --- (تمت إعادة البناء بالكامل) محرك ترجمة وتوجيه الأوامر ---
         if event.text:
             command_to_process = None
             async with AsyncDBSession() as session:
@@ -54,22 +53,19 @@ async def general_message_handler(event):
             full_text = event.text.strip()
             translated_command = None
             
-            # الخطوة 1: حاول ترجمة الاختصار
             if full_text in all_aliases:
                 translated_command = all_aliases[full_text]
             
-            # الخطوة 2: تحديد الأمر النهائي الذي سيتم معالجته
             command_to_process = translated_command if translated_command is not None else full_text
 
             # --- الموزع (Router) ---
-            # الآن سيفحص الموزع الأمر النهائي سواء كان مترجماً أم لا
             
             if command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
                 return
             
             elif command_to_process == "طرد":
-                await kick_logic(event)
+                await kick_logic(event, command_to_process)
                 return
             
             elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
@@ -77,11 +73,11 @@ async def general_message_handler(event):
                 return
 
             elif command_to_process == "سجلي":
-                await my_stats_logic(event)
+                await my_stats_logic(event, command_to_process) # تم التصحيح هنا
                 return
             
             elif command_to_process == "رتبتي":
-                await my_rank_logic(event)
+                await my_rank_logic(event, command_to_process) # تم التصحيح هنا
                 return
             
             elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"):
@@ -89,7 +85,7 @@ async def general_message_handler(event):
                 return
 
             elif command_to_process == "القوانين":
-                await get_rules_logic(event)
+                await get_rules_logic(event, command_to_process) # تم التصحيح هنا
                 return
                 
             elif command_to_process.startswith("نداء"):
@@ -106,9 +102,7 @@ async def general_message_handler(event):
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
             if event.id:
-                long_text_size = (chat.settings or {}).get("long_text_size", 200)
-                msg_type = "text"
-                message_entities = event.message.entities or []
+                long_text_size, msg_type, message_entities = (chat.settings or {}).get("long_text_size", 200), "text", event.message.entities or []
                 if event.photo: msg_type = "photo"
                 elif event.video: msg_type = "video"
                 elif event.sticker: msg_type = "sticker"
