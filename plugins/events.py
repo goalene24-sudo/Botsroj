@@ -61,16 +61,11 @@ async def general_message_handler(event):
 
                 # إذا تم العثور على ترجمة، قم بتوجيهها للمنطق المناسب
                 if original_command:
-                    # تحديث نص الرسالة في الحدث لكي يستخدمه المنطق
-                    event.message.message = original_command
-                    
                     # --- الموزع (Router) ---
-                    # 1. التحقق من أووامر القفل والفتح
+                    # 1. التحقق من أوامر القفل والفتح
                     if original_command.startswith(("قفل", "فتح")):
-                        # --- رسالة تشخيصية ---
-                        logger.info(f"[ROUTER] Command '{original_command}' matched. Calling lock_unlock_logic.")
-                        await lock_unlock_logic(event)
-                        logger.info(f"[ROUTER] lock_unlock_logic finished.")
+                        # (تم التعديل) تمرير النص المترجم مباشرة إلى الوظيفة
+                        await lock_unlock_logic(event, original_command)
                         raise events.StopPropagation # إيقاف المعالجة لأن الأمر تم تنفيذه
                     
             # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
