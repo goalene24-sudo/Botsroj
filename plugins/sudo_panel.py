@@ -23,7 +23,6 @@ async def get_global_setting(key, default=None):
         setting = result.scalar_one_or_none()
         if setting and setting.value:
             try:
-                # محاولة فك تشفير JSON، إذا فشل، أرجع القيمة كنص عادي
                 return json.loads(setting.value)
             except json.JSONDecodeError:
                 return setting.value
@@ -32,7 +31,6 @@ async def get_global_setting(key, default=None):
 async def set_global_setting(key, value):
     """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
     async with AsyncDBSession() as session:
-        # تحويل القيمة إلى JSON إذا كانت قاموسًا أو قائمة
         if isinstance(value, (dict, list)):
             value_to_store = json.dumps(value, ensure_ascii=False)
         else:
@@ -108,7 +106,7 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**📢 | أرسل الآن رسالة الإذاعة...**\n**(للإلغاء، أرسل `الغاء`)**")
                 response = await conv.get_response()
-                if not response.text or response.text.strip().lower() == "الغاء": 
+                if not response.text or response.text.strip().lower() == "الغاء":    
                     return await conv.send_message("**☑️ | تم إلغاء الإذاعة.**")
                 
                 await conv.send_message("**⏳ | سأبدأ الآن ببث الرسالة...**")
@@ -124,12 +122,12 @@ async def sudo_panel_callback(event):
                     except Exception as e:
                         print(f"Broadcast failed for chat {chat_id}: {e}"); failed += 1
                 await conv.send_message(f"**📡 | اكتملت الإذاعة!**\n**- ✅ نجح:** `{successful}`\n**- ❌ فشل:** `{failed}`")
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير الملف...")
-        db_path = "surooj.db" # تم التغيير إلى اسم قاعدة البيانات الجديدة
+        db_path = "surooj.db"
         
         if not os.path.exists(db_path):
             return await client.send_message(event.chat_id, f"**❌ | خطأ: لم يتم العثور على الملف `{db_path}`!**")
@@ -145,12 +143,12 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**🚫 | أرسل الآن ID المستخدم للحظر العام...**\n**(للإلغاء، أرسل `الغاء`)**")
                 response = await conv.get_response()
-                if not response.text or response.text.strip().lower() == "الغاء": 
+                if not response.text or response.text.strip().lower() == "الغاء":    
                     return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
                 
-                try: 
+                try:    
                     user_id_to_ban = int(response.text.strip())
-                except ValueError: 
+                except ValueError:    
                     return await conv.send_message("**⚠️ | ID غير صالح.**")
                 
                 await conv.send_message(f"**⏳ | سأقوم الآن بحظر `{user_id_to_ban}`...**")
@@ -172,7 +170,7 @@ async def sudo_panel_callback(event):
                     except Exception as e:
                         print(f"GBan failed for chat {chat_id}: {e}"); failed += 1
                 await conv.send_message(f"**🚫 | اكتمل الحظر العام!**\n**- ✅ تم الحظر في:** `{successful}`\n**- ❌ فشل في:** `{failed}`")
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "gadmin":
@@ -180,12 +178,12 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**🧑‍✈️ | أرسل الآن ID المستخدم للترقية العامة...**\n**(للإلغاء، أرسل `الغاء`)**")
                 response = await conv.get_response()
-                if not response.text or response.text.strip().lower() == "الغاء": 
+                if not response.text or response.text.strip().lower() == "الغاء":    
                     return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
 
-                try: 
+                try:    
                     user_id_to_promote = int(response.text.strip())
-                except ValueError: 
+                except ValueError:    
                     return await conv.send_message("**⚠️ | ID غير صالح.**")
 
                 await conv.send_message(f"**⏳ | سأقوم الآن بترقية `{user_id_to_promote}`...**")
@@ -195,7 +193,6 @@ async def sudo_panel_callback(event):
                     all_chat_ids = result.scalars().all()
                     
                     for chat_id in all_chat_ids:
-                        # التحقق مما إذا كان المستخدم أدمنًا بالفعل في هذه المجموعة
                         res = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id_to_promote))
                         existing_admin = res.scalar_one_or_none()
                         
@@ -205,7 +202,7 @@ async def sudo_panel_callback(event):
                             promoted_in += 1
                     await session.commit()
                 await conv.send_message(f"**🧑‍✈️ | اكتملت الترقية!**\n**- ✅ تمت الترقية في:** `{promoted_in}` **مجموعة جديدة.**")
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "db_maint":
@@ -224,7 +221,6 @@ async def sudo_panel_callback(event):
             if not inactive_chat_ids:
                 return await event.edit("**✅ | قاعدة البيانات نظيفة!**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
             
-            # حذف المجموعات غير النشطة
             await session.execute(delete(Chat).where(Chat.id.in_(inactive_chat_ids)))
             await session.commit()
         
@@ -250,7 +246,7 @@ async def sudo_panel_callback(event):
 
                 async with AsyncDBSession() as session:
                     chat_data = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
-                    if not chat_data: 
+                    if not chat_data:    
                         return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
                     
                     user_count = await session.scalar(select(func.count(User.id)).where(User.chat_id == chat_id))
@@ -260,7 +256,7 @@ async def sudo_panel_callback(event):
                 report += f"- أعضاء مسجلين: {user_count}\n"
                 report += f"- أدمنية البوت: {admin_count}\n"
                 await conv.send_message(report)
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
             
     elif action == "inspect_user":
@@ -287,7 +283,7 @@ async def sudo_panel_callback(event):
 
                 report += f"- مجموع الرسائل: {total_msgs}\n- موجود في: `{group_count}` مجموعة\n"
                 await conv.send_message(report)
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
             
     elif action == "global_settings":
@@ -303,7 +299,7 @@ async def sudo_panel_callback(event):
     elif action == "g_disable_cmd":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
-                await conv.send_message("**🚫 | أرسل الآن اسم الأمر الذي تريد تعطيله على مستوى البوت بالكامل (بدون `/` أو `!`).**\n\n**مثال: `ايدي`**")
+                await conv.send_message("**🚫 | أرسل الآن اسم الأمر الذي تريد تعطيله...**\n\n**مثال: `ايدي`**")
                 response = await conv.get_response()
                 if not response.text: return
                 cmd_to_disable = response.text.strip().lower().replace("/", "").replace("!", "")
@@ -315,7 +311,7 @@ async def sudo_panel_callback(event):
                 disabled_list.append(cmd_to_disable)
                 await set_global_setting("disabled_cmds", disabled_list)
                 await conv.send_message(f"**✅ | تم تعطيل الأمر `{cmd_to_disable}` في جميع المجموعات.**")
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "g_enable_cmd":
@@ -333,7 +329,7 @@ async def sudo_panel_callback(event):
                 disabled_list.remove(cmd_to_enable)
                 await set_global_setting("disabled_cmds", disabled_list)
                 await conv.send_message(f"**✅ | تم إعادة تفعيل الأمر `{cmd_to_enable}` في جميع المجموعات.**")
-        except asyncio.TimeoutError: 
+        except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "g_list_disabled":
@@ -366,18 +362,39 @@ async def sudo_panel_callback(event):
                 if not cmd_name or ' ' in cmd_name:
                     return await conv.send_message("**⚠️ | اسم الأمر غير صالح. يجب أن يكون كلمة واحدة بدون مسافات.**")
 
-                placeholders_guide = (
-                    "**حسناً، الآن أرسل النص الذي سيرد به البوت.**\n\n"
-                    "**يمكنك استخدام المتغيرات التالية:**\n"
-                    "`{user_first_name}` - الاسم الأول\n"
-                    "`{user_mention}` - منشن للعضو\n"
-                )
+                placeholders_guide = ("**حسناً، الآن أرسل النص الذي سيرد به البوت.**\n\n"
+                                      "**يمكنك استخدام المتغيرات التالية:**\n"
+                                      "`{user_first_name}` - الاسم الأول\n"
+                                      "`{user_mention}` - منشن للعضو")
                 await conv.send_message(placeholders_guide)
                 cmd_reply_msg = await conv.get_response()
                 cmd_reply_text = cmd_reply_msg.text
 
+                ask_button_msg = await conv.send_message(
+                    "**هل تريد إضافة زر لهذا الأمر في قائمة الأوامر الرئيسية؟**",
+                    buttons=[[
+                        Button.inline("✅ نعم", data="yes"),
+                        Button.inline("❌ لا", data="no")
+                    ]]
+                )
+                
+                button_choice_event = await conv.wait_event(events.CallbackQuery(from_users=event.sender_id))
+                button_choice = button_choice_event.data.decode()
+                await ask_button_msg.delete()
+
+                command_data = {"reply": cmd_reply_text}
+
+                if button_choice == "yes":
+                    await conv.send_message("**أرسل الآن النص الذي سيظهر على الزر.**\n\n**مثال: `قناتنا`**")
+                    button_text_msg = await conv.get_response()
+                    button_text = button_text_msg.text.strip()
+                    command_data["button_text"] = button_text
+                    command_data["display_mode"] = "edit"
+                else:
+                    command_data["display_mode"] = "popup"
+
                 custom_commands = await get_global_setting("custom_commands", {})
-                custom_commands[cmd_name] = {"reply": cmd_reply_text}
+                custom_commands[cmd_name] = command_data
                 await set_global_setting("custom_commands", custom_commands)
                 
                 await conv.send_message(f"**✅ | تم حفظ الأمر `{cmd_name}` بنجاح!**")
