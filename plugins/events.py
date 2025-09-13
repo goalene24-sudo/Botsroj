@@ -40,6 +40,7 @@ async def general_message_handler(event):
         return
 
     try:
+        # --- (النسخة النهائية) محرك ترجمة وتوجيه الأوامر ---
         if event.text:
             command_to_process = None
             async with AsyncDBSession() as session:
@@ -51,173 +52,91 @@ async def general_message_handler(event):
             all_aliases.update(user_aliases)
 
             full_text = event.text.strip()
-            translated_command = None
+            translated_command = all_aliases.get(full_text)
             
-            if full_text in all_aliases:
-                translated_command = all_aliases[full_text]
-            
+            # تحديد الأمر النهائي: إما المترجم من اختصار، أو النص الأصلي
             command_to_process = translated_command if translated_command is not None else full_text
 
             # --- الموزع (Router) ---
-            
             if command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
                 return
-            
             elif command_to_process == "طرد":
                 await kick_logic(event, command_to_process)
                 return
-            
             elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
                 await set_rank_logic(event, command_to_process)
                 return
-
             elif command_to_process == "سجلي":
-                await my_stats_logic(event, command_to_process) # تم التصحيح هنا
+                await my_stats_logic(event, command_to_process)
                 return
-            
             elif command_to_process == "رتبتي":
-                await my_rank_logic(event, command_to_process) # تم التصحيح هنا
+                await my_rank_logic(event, command_to_process)
                 return
-            
             elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"):
                 await id_logic(event, command_to_process)
                 return
-
             elif command_to_process == "القوانين":
-                await get_rules_logic(event, command_to_process) # تم التصحيح هنا
+                await get_rules_logic(event, command_to_process)
                 return
-                
             elif command_to_process.startswith("نداء"):
                 await tag_all_logic(event, command_to_process)
                 return
-                
             elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
                 await toggle_id_photo_logic(event, command_to_process)
                 return
 
-        # --- هذا الكود سيعمل فقط إذا لم تكن الرسالة أمراً تم التعرف عليه من قبل الموزع ---
+        # --- هذا الكود سيعمل فقط إذا لم تكن الرسالة أمراً تم التعرف عليه ---
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
-            if event.id:
-                long_text_size, msg_type, message_entities = (chat.settings or {}).get("long_text_size", 200), "text", event.message.entities or []
-                if event.photo: msg_type = "photo"
-                elif event.video: msg_type = "video"
-                elif event.sticker: msg_type = "sticker"
-                elif event.gif: msg_type = "gif"
-                elif event.document: msg_type = "document"
-                elif event.text and len(event.text) > long_text_size: msg_type = "long_text"
-                elif any(isinstance(e, MessageEntityUrl) for e in message_entities): msg_type = "url"
-                elif event.forward: msg_type = "forward"
-                new_msg = MessageHistory(chat_id=event.chat_id, msg_id=event.id, msg_type=msg_type)
-                session.add(new_msg)
-                history_count = (await session.execute(select(func.count(MessageHistory.id)).where(MessageHistory.chat_id == event.chat_id))).scalar_one()
-                if history_count > 100:
-                    oldest_msg_id_res = await session.execute(select(MessageHistory.id).where(MessageHistory.chat_id == event.chat_id).order_by(MessageHistory.id.asc()).limit(1))
-                    oldest_msg_id = oldest_msg_id_res.scalar_one_or_none()
-                    if oldest_msg_id: await session.execute(delete(MessageHistory).where(MessageHistory.id == oldest_msg_id))
+            user.msg_count = (user.msg_count or 0) + 1
+            chat.total_msgs = (chat.total_msgs or 0) + 1
+            
+            # --- نظام الردود ---
+            if event.text and (chat.settings or {}).get("public_replies_enabled", True):
+                trigger = event.text.lower()
+                all_replies = DEFAULT_REPLIES.copy()
+                custom_replies = chat.custom_replies or {}
+                all_replies.update({k.lower(): v for k, v in custom_replies.items()})
+                reply_data = all_replies.get(trigger)
 
-            now = int(time.time())
-            chat_settings = chat.settings or {}
-            last_dhikr_time = chat_settings.get("last_dhikr_time", 0)
-            dhikr_interval = chat_settings.get("dhikr_interval", 3600)
-            is_dhikr_enabled = chat_settings.get("dhikr_enabled", True)
-            if is_dhikr_enabled and (now - last_dhikr_time > dhikr_interval):
-                await client.send_message(event.chat_id, random.choice(DHIKR_LIST))
-                chat_settings["last_dhikr_time"] = now
-                chat.settings = chat_settings
-                flag_modified(chat, "settings")
-
-            rank_int = await get_user_rank(event.sender_id, event.chat_id)
-            is_immune = rank_int >= Ranks.MOD
-            if not is_immune:
-                chat_locks = chat.lock_settings or {}
-                message_entities_for_lock = event.message.entities or []
-                checks = {"photo": event.photo, "video": event.video, "gif": event.gif, "sticker": event.sticker, "url": any(isinstance(e, MessageEntityUrl) for e in message_entities_for_lock), "username": any(isinstance(e, MessageEntityMention) for e in message_entities_for_lock), "forward": event.forward, "bot": event.via_bot}
-                for lock_name, condition in checks.items():
-                    if chat_locks.get(lock_name) and condition:
-                        try: await event.delete()
-                        except Exception: pass
-                        return
-                if chat_locks.get("anti_flood", False):
-                    user_id, chat_id, now = event.sender_id, event.chat_id, time.time()
-                    if chat_id not in FLOOD_TRACKER: FLOOD_TRACKER[chat_id] = {}
-                    if user_id not in FLOOD_TRACKER[chat_id]: FLOOD_TRACKER[chat_id][user_id] = []
-                    FLOOD_TRACKER[chat_id][user_id].append(now)
-                    FLOOD_TRACKER[chat_id][user_id] = [t for t in FLOOD_TRACKER[chat_id][user_id] if now - t < 3]
-                    if len(FLOOD_TRACKER[chat_id][user_id]) >= 5:
+                if reply_data:
+                    BOT_TRIGGERS = ["سروج", "بوت"]
+                    if any(b in trigger for b in BOT_TRIGGERS):
+                        current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                        chat_settings = chat.settings or {}
+                        if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
+                            await event.reply(chat_settings["dev_reply"])
+                            return
+                        if chat_settings.get("call_reply"):
+                            await event.reply(chat_settings["call_reply"])
+                            return
+                    
+                    reply_template = None
+                    if isinstance(reply_data, str):
+                        reply_template = reply_data
+                    elif isinstance(reply_data, dict):
+                        current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                        if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
+                        elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
+                        elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
+                        elif "member" in reply_data: reply_list = reply_data["member"]
+                        else: reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
+                        if reply_list: reply_template = random.choice(reply_list)
+                    
+                    if reply_template:
+                        sender = await event.get_sender()
                         try:
-                            until_date = datetime.now() + timedelta(minutes=5)
-                            await client.edit_permissions(chat_id, user_id, send_messages=False, until_date=until_date)
-                            await event.reply(f"**تم كتم [{event.sender.first_name}](tg://user?id={user_id}) لمدة 5 دقائق بسبب التكرار.**")
-                            FLOOD_TRACKER[chat_id][user_id] = []
-                        except Exception: pass
-                        return
-                if event.text:
-                    filtered_words = (chat.settings or {}).get("filtered_words", [])
-                    if filtered_words and any(word.lower() in event.text.lower() for word in filtered_words):
-                        try:
-                            await event.delete()
-                            sender = await event.get_sender()
-                            user.warns = (user.warns or 0) + 1
-                            max_warns = (chat.settings or {}).get("max_warns", 3)
-                            if user.warns >= max_warns:
-                                until_date = datetime.now() + timedelta(days=1)
-                                await client.edit_permissions(event.chat_id, sender.id, send_messages=False, until_date=until_date)
-                                await client.send_message(event.chat_id, f"**❗️تم كتم [{sender.first_name}](tg://user?id={sender.id}) لمدة 24 ساعة** لتجاوز التحذيرات.")
-                                user.warns = 0
-                            else:
-                                await client.send_message(event.chat_id, f"**⚠️ تم حذف رسالة من [{sender.first_name}](tg://user?id={sender.id}) لمخالفة القوانين.\nعدد تحذيراته: {user.warns}/{max_warns}**")
-                        except Exception: pass
-                        return
-            if not event.text:
-                await session.commit()
-                return
-            all_bot_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر"]
-            is_any_command = any(event.text.lower().startswith(cmd.lower()) for cmd in all_bot_commands)
-            if not is_any_command:
-                user.msg_count = (user.msg_count or 0) + 1
-                chat.total_msgs = (chat.total_msgs or 0) + 1
-                points_multiplier = 1
-                inventory = user.inventory or {}
-                multiplier_item = inventory.get("مضاعف نقاط")
-                if multiplier_item and time.time() - multiplier_item.get("purchase_time", 0) < multiplier_item.get("duration_days", 0) * 86400:
-                    points_multiplier = 2
-                points_to_add = 0
-                if len(event.text) >= 30: points_to_add += 3
-                elif len(event.text) >= 4: points_to_add += 1
-                if event.is_reply: points_to_add += 2
-                if points_to_add > 0: user.points = (user.points or 0) + (points_to_add * points_multiplier)
-                if (chat.settings or {}).get("public_replies_enabled", True):
-                    all_replies = DEFAULT_REPLIES.copy()
-                    custom_replies = chat.custom_replies or {}
-                    all_replies.update({k.lower(): v for k, v in custom_replies.items()})
-                    reply_data = all_replies.get(event.text.lower())
-                    if reply_data:
-                        reply_template = None
-                        if isinstance(reply_data, dict):
-                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
-                            if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
-                            elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
-                            elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
-                            elif "member" in reply_data: reply_list = reply_data["member"]
-                            else: reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
-                            if reply_list: reply_template = random.choice(reply_list)
-                        elif isinstance(reply_data, str): reply_template = reply_data
-                        if reply_template:
-                            try:
-                                sender = await event.get_sender()
-                                final_reply = reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name)
-                                await event.reply(final_reply)
-                            except KeyError: await event.reply(reply_template)
-                            except Exception as e: logger.error(f"خطأ في إرسال الرد: {e}")
+                            final_reply = reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name)
+                            await event.reply(final_reply)
+                        except KeyError:
+                            await event.reply(reply_template)
             await session.commit()
 
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
-
 
 @client.on(events.ChatAction)
 async def handle_chat_action(event):
