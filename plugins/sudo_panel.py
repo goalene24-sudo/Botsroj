@@ -315,6 +315,7 @@ async def sudo_panel_callback(event):
                 cmd_name = cmd_name_msg.text.strip().lower()
                 if not cmd_name or ' ' in cmd_name:
                     return await conv.send_message("**⚠️ | اسم الأمر غير صالح. يجب أن يكون كلمة واحدة بدون مسافات.**")
+                
                 placeholders_guide = ("**حسناً، الآن أرسل النص الذي سيرد به البوت.**\n\n"
                                       "**يمكنك استخدام المتغيرات التالية:**\n"
                                       "`{user_first_name}` - الاسم الأول\n"
@@ -322,14 +323,19 @@ async def sudo_panel_callback(event):
                 await conv.send_message(placeholders_guide)
                 cmd_reply_msg = await conv.get_response()
                 cmd_reply_text = cmd_reply_msg.text
+
                 ask_button_msg = await conv.send_message(
                     "**هل تريد إضافة زر لهذا الأمر في قائمة الأوامر الرئيسية؟**",
                     buttons=[[Button.inline("✅ نعم", data="yes"), Button.inline("❌ لا", data="no")]]
                 )
-                button_choice_event = await conv.wait_event(events.CallbackQuery(from_users=event.sender_id))
+                
+                button_choice_event = await conv.wait_event(
+                    events.CallbackQuery(func=lambda e: e.sender_id == event.sender_id)
+                )
                 await button_choice_event.answer()
                 button_choice = button_choice_event.data.decode()
                 await ask_button_msg.delete()
+
                 command_data = {"reply": cmd_reply_text}
                 if button_choice == "yes":
                     await conv.send_message("**أرسل الآن النص الذي سيظهر على الزر.**\n\n**مثال: `قناتنا`**")
@@ -339,6 +345,7 @@ async def sudo_panel_callback(event):
                     command_data["display_mode"] = "edit"
                 else:
                     command_data["display_mode"] = "popup"
+                
                 custom_commands = await get_global_setting("custom_commands", {})
                 custom_commands[cmd_name] = command_data
                 await set_global_setting("custom_commands", custom_commands)
