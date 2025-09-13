@@ -37,7 +37,7 @@ async def general_message_handler(event):
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
-            # --- (تم التعديل) محرك ترجمة الأوامر المضافة والثابتة لحل مشكلة الاختصارات المركبة ---
+            # --- (تم التصحيح) محرك ترجمة الأوامر ليعمل مع جميع أنواع الاختصارات ---
             if event.text:
                 result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
                 aliases_from_db = result.scalars().all()
@@ -46,23 +46,31 @@ async def general_message_handler(event):
                 all_aliases = FIXED_ALIASES.copy()
                 all_aliases.update(user_aliases)
 
-                message_parts = event.text.strip().split()
-                if message_parts:
-                    command_candidate = message_parts[0]
-                    
-                    if command_candidate in all_aliases:
-                        original_command = all_aliases[command_candidate]
-                        
-                        # إعادة بناء الرسالة مع الأمر الأصلي
-                        new_message_parts = [original_command] + message_parts[1:]
-                        final_command = " ".join(new_message_parts)
-                        
-                        try:
-                            # تحديث نص الرسالة في الحدث
-                            event.message.message = final_command
-                            event.raw_text = final_command
-                        except Exception as e:
-                            logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
+                full_text = event.text.strip()
+                original_command = None
+
+                # الخطوة 1: التحقق من تطابق النص الكامل مع اختصار (مثل "ا" أو "ق ص")
+                if full_text in all_aliases:
+                    original_command = all_aliases[full_text]
+                else:
+                    # الخطوة 2: إذا لم يتطابق، تحقق مما إذا كانت الكلمة الأولى هي اختصار
+                    # (هذا يدعم حالات مثل "ق الصور" إذا كان "ق" اختصارًا لـ "قفل")
+                    message_parts = full_text.split()
+                    if message_parts:
+                        command_candidate = message_parts[0]
+                        if command_candidate in all_aliases:
+                            translated_first_word = all_aliases[command_candidate]
+                            new_message_parts = [translated_first_word] + message_parts[1:]
+                            original_command = " ".join(new_message_parts)
+
+                # إذا تم العثور على ترجمة، قم بتحديث الرسالة
+                if original_command:
+                    try:
+                        event.message.message = original_command
+                        event.raw_text = original_command
+                    except Exception as e:
+                        logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
+
 
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
