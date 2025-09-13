@@ -22,7 +22,7 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- (تمت الإضافة) استيراد منطق الأوامر الجديد ---
+# --- استيراد منطق الأوامر الجديد ---
 from .commands_logic import lock_unlock_logic
 import logging
 
@@ -65,12 +65,13 @@ async def general_message_handler(event):
                     event.message.message = original_command
                     
                     # --- الموزع (Router) ---
-                    # 1. التحقق من أوامر القفل والفتح
+                    # 1. التحقق من أووامر القفل والفتح
                     if original_command.startswith(("قفل", "فتح")):
+                        # --- رسالة تشخيصية ---
+                        logger.info(f"[ROUTER] Command '{original_command}' matched. Calling lock_unlock_logic.")
                         await lock_unlock_logic(event)
+                        logger.info(f"[ROUTER] lock_unlock_logic finished.")
                         raise events.StopPropagation # إيقاف المعالجة لأن الأمر تم تنفيذه
-                    
-                    # (يمكن إضافة المزيد من الأوامر هنا مستقبلاً)
                     
             # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
             chat = await get_or_create_chat(session, event.chat_id)
