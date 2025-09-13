@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 from sqlalchemy import delete
 # (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
 from database import AsyncDBSession
-from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User  # تم إضافة User هنا
+from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User
 
 # --- استيراد الدوال والرتب المحدثة ---
 from .utils import check_activation, has_bot_permission, get_user_rank, Ranks, build_protection_menu
@@ -43,7 +43,6 @@ async def get_chat_setting(chat_id, key, default=None):
     """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
-        # تأكد من أن settings ليس None قبل الوصول إليه
         if chat.settings is None:
             chat.settings = {}
         return chat.settings.get(key, default)
@@ -52,11 +51,9 @@ async def set_chat_setting(chat_id, key, value):
     """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
-        # تأكد من أن settings ليس None
         if chat.settings is None:
             chat.settings = {}
         
-        # قم بتحديث القيمة
         new_settings = chat.settings.copy()
         new_settings[key] = value
         chat.settings = new_settings
@@ -73,111 +70,8 @@ async def del_chat_setting(chat_id, key):
             chat.settings = new_settings
             await session.commit()
 
+# --- (تم حذف المعالجات المكررة من هنا) ---
 
-# --- قاموس أنواع الأقفال للترجمة ---
-LOCK_TYPES_MAP = {
-    # الوسائط الأساسية
-    "الصور": "photo", "الفيديو": "video", "المتحركه": "gif", "الملصقات": "sticker",
-    "الروابط": "url", "المعرف": "username", "التوجيه": "forward", "الملفات": "document",
-    "الاغاني": "audio", "الصوت": "voice", "السيلفي": "video_note",
-    # أنواع الرسائل
-    "الكلايش": "long_text", "الدردشه": "text", "الانلاين": "inline", "البوتات": "bot",
-    # أنواع المحتوى
-    "الجهات": "contact", "الموقع": "location", "الفشار": "game",
-    # اللغات والإجراءات
-    "الانكليزيه": "english", "التعديل": "edit",
-}
-
-# --- أمر الطرد ---
-@client.on(events.NewMessage(pattern="^طرد$"))
-async def kick_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-
-        if not await has_bot_permission(event):
-            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
-
-        reply = await event.get_reply_message()
-        if not reply:
-            return await event.reply("**⚠️ | يجب استخدام هذا الأمر بالرد على رسالة شخص لطرده.**")
-
-        user_to_kick = await reply.get_sender()
-        actor = await event.get_sender()
-        
-        me = await client.get_me()
-        if user_to_kick.id == me.id:
-            return await event.reply("**تريدني اطرد نفسي شدتحس بله😒**")
-
-        if user_to_kick.id == actor.id:
-            return await event.reply("**لا يمكنك طرد نفسك!**")
-
-        try:
-            bot_perms = await client.get_permissions(event.chat_id, me.id)
-            if not bot_perms.ban_users:
-                return await event.reply("**⚠️ | ليس لدي صلاحية طرد الأعضاء في هذه المجموعة.**")
-        except Exception:
-            return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي، يرجى التأكد من أنني مشرف.**")
-
-        actor_rank = await get_user_rank(actor.id, event.chat_id)
-        target_rank = await get_user_rank(user_to_kick.id, event.chat_id)
-
-        if target_rank >= actor_rank:
-            return await event.reply("**❌ | لا يمكنك طرد شخص يمتلك رتبة مساوية لك أو أعلى.**")
-
-        try:
-            await client.kick_participant(event.chat_id, user_to_kick.id)
-            await event.reply(f"**✅ | تم طرد العضو [{user_to_kick.first_name}](tg://user?id={user_to_kick.id}) من المجموعة بنجاح.**")
-        except Exception as e:
-            await event.reply(f"**حدث خطأ أثناء محاولة طرد العضو:**\n`{str(e)}`")
-    except Exception as e:
-        logger.error(f"استثناء في kick_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-@client.on(events.NewMessage(pattern=r"^(قفل|فتح) (.+)$"))
-async def lock_unlock_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
-            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
-        
-        action = event.pattern_match.group(1)
-        target = event.pattern_match.group(2).strip()
-        
-        lock_key = LOCK_TYPES_MAP.get(target)
-        
-        if not lock_key:
-            return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**")
-
-        async with AsyncDBSession() as session:
-            chat = await get_or_create_chat(session, event.chat_id)
-            if chat.lock_settings is None:
-                chat.lock_settings = {}
-            
-            new_lock_settings = chat.lock_settings.copy()
-            current_state_is_locked = new_lock_settings.get(lock_key, False)
-
-            if action == "قفل":
-                if current_state_is_locked:
-                    return await event.reply(f"**🔒 | {target} مقفلة بالفعل، لا تقلق عزيزي.**")
-                new_lock_settings[lock_key] = True
-                await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
-            else: # فتح
-                if not current_state_is_locked:
-                    return await event.reply(f"**🔓 | {target} مفتوحة بالفعل.**")
-                new_lock_settings[lock_key] = False
-                await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
-            
-            chat.lock_settings = new_lock_settings
-            await session.commit()
-    except Exception as e:
-        logger.error(f"استثناء في lock_unlock_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
@@ -331,139 +225,6 @@ async def promote_demote_handler(event):
         except:
             pass
 
-# --- (مُحَدَّث) أوامر الأدمن ---
-@client.on(events.NewMessage(pattern="^(رفع ادمن|تنزيل ادمن|الادمنيه|مسح الادمنيه)$"))
-async def bot_admin_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        action = event.raw_text.replace(" كل", "")
-        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
-
-        if action in ["رفع ادمن", "تنزيل ادمن", "مسح الادمنيه"]:
-            if actor_rank < Ranks.CREATOR:
-                return await event.reply("**فقط المنشئ والمطور يستطيعون استخدام هذا الأمر.**")
-            
-            async with AsyncDBSession() as session:
-                if action == "مسح الادمنيه":
-                    await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id))
-                    await session.commit()
-                    return await event.reply("**✅ تم مسح قائمة الأدمنية لهذه المجموعة بنجاح.**")
-
-                reply = await event.get_reply_message()
-                if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
-                user_to_manage = await reply.get_sender()
-                if user_to_manage.bot: return await event.reply("**لا يمكنك ترقية البوتات.**")
-                
-                target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
-                if target_rank >= actor_rank:
-                    return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
-
-                result = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_to_manage.id))
-                is_admin = result.scalar_one_or_none()
-
-                if action == "رفع ادمن":
-                    if is_admin: return await event.reply("**هذا الشخص هو أصلاً أدمن بالبوت.**")
-                    session.add(BotAdmin(chat_id=event.chat_id, user_id=user_to_manage.id))
-                    await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) أدمن في البوت.**")
-                else:
-                    if not is_admin: return await event.reply("**هذا الشخص هو مو أدمن بالبوت أصلاً.**")
-                    await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_to_manage.id))
-                    await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من أدمنية البوت.**")
-                await session.commit()
-        
-        elif action == "الادمنيه":
-            if actor_rank < Ranks.MOD: return
-            async with AsyncDBSession() as session:
-                result = await session.execute(select(BotAdmin.user_id).where(BotAdmin.chat_id == event.chat_id))
-                bot_admins_ids = result.scalars().all()
-
-            if not bot_admins_ids: return await event.reply("**ماكو أي أدمن بالبوت حالياً بهاي المجموعة.**")
-            admin_list_text = "**⚜️ قائمة الأدمنية في البوت:**\n\n"
-            for admin_id in bot_admins_ids:
-                try:
-                    user = await client.get_entity(admin_id)
-                    admin_list_text += f"- [{user.first_name}](tg://user?id={user.id})\n"
-                except Exception:
-                    admin_list_text += f"- `{admin_id}` (يمكن غادر المجموعة)\n"
-            await event.reply(admin_list_text)
-    except Exception as e:
-        logger.error(f"استثناء في bot_admin_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-# --- (مُحَدَّث) أوامر المنشئ ---
-@client.on(events.NewMessage(pattern="^(رفع منشئ|تنزيل منشئ|المنشئين|مسح المنشئين|رفع مالك)$"))
-async def creator_admin_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        action = event.raw_text
-        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
-
-        if action == "رفع مالك":
-            if actor_rank < Ranks.OWNER:
-                return await event.reply("**فقط المالك الفعلي للمجموعة يستطيع استخدام هذا الأمر.**")
-            reply = await event.get_reply_message()
-            if not reply:
-                return await event.reply(f"**✅ أهلاً بك يا مالك المجموعة!**")
-            action = "رفع منشئ"
-
-        if action in ["رفع منشئ", "تنزيل منشئ", "مسح المنشئين"]:
-            if actor_rank < Ranks.OWNER:
-                return await event.reply("**فقط مالك المجموعة والمطور يستطيعون استخدام هذا الأمر.**")
-            
-            async with AsyncDBSession() as session:
-                if action == "مسح المنشئين":
-                    await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id))
-                    await session.commit()
-                    return await event.reply("**✅ تم مسح قائمة المنشئين لهذه المجموعة بنجاح.**")
-
-                reply = await event.get_reply_message()
-                if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
-                user_to_manage = await reply.get_sender()
-                if user_to_manage.bot: return await event.reply("**لا يمكنك ترقية البوتات.**")
-                
-                target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
-                if target_rank >= actor_rank:
-                    return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
-
-                result = await session.execute(select(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_to_manage.id))
-                is_creator = result.scalar_one_or_none()
-
-                if action == "رفع منشئ":
-                    if is_creator: return await event.reply("**هذا الشخص هو أصلاً منشئ.**")
-                    session.add(Creator(chat_id=event.chat_id, user_id=user_to_manage.id))
-                    await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى منشئ في البوت.**")
-                else:
-                    if not is_creator: return await event.reply("**هذا الشخص هو ليس منشئاً أصلاً.**")
-                    await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_to_manage.id))
-                    await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من المنشئين.**")
-                await session.commit()
-
-        elif action == "المنشئين":
-            if actor_rank < Ranks.MOD: return
-            async with AsyncDBSession() as session:
-                result = await session.execute(select(Creator.user_id).where(Creator.chat_id == event.chat_id))
-                creator_ids = result.scalars().all()
-            
-            if not creator_ids: return await event.reply("**لا يوجد أي منشئين في البوت حالياً بهذه المجموعة.**")
-            list_text = "**⚜️ قائمة المنشئين في البوت:**\n\n"
-            for user_id in creator_ids:
-                try:
-                    user = await client.get_entity(user_id)
-                    list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
-                except Exception:
-                    list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
-            await event.reply(list_text)
-    except Exception as e:
-        logger.error(f"استثناء في creator_admin_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-# --- (مُحَدَّث) أوامر المطور الثانوي ---
 @client.on(events.NewMessage(pattern="^(رفع مطور ثانوي|تنزيل مطور ثانوي|المطورين الثانويين|مسح المطورين الثانويين)$"))
 async def secondary_dev_handler(event):
     try:
@@ -497,7 +258,7 @@ async def secondary_dev_handler(event):
                     if is_dev: return await event.reply("**هذا الشخص هو أصلاً مطور ثانوي.**")
                     session.add(SecondaryDev(chat_id=event.chat_id, user_id=user_to_manage.id))
                     await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى مطور ثانوي.**")
-                else:
+                else: # تنزيل مطور ثانوي
                     if not is_dev: return await event.reply("**هذا الشخص ليس مطور ثانوي أصلاً.**")
                     await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_to_manage.id))
                     await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من المطورين الثانويين.**")
@@ -525,68 +286,6 @@ async def secondary_dev_handler(event):
         except:
             pass
 
-# --- (مُحَدَّث) أوامر العضو المميز ---
-@client.on(events.NewMessage(pattern="^(رفع مميز|تنزيل مميز|المميزين|مسح المميزين)$"))
-async def vip_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        action = event.raw_text
-        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
-
-        if action in ["رفع مميز", "تنزيل مميز", "مسح المميزين"]:
-            if actor_rank < Ranks.ADMIN:
-                return await event.reply("**هذا الأمر للادمنية فما فوق.**")
-            
-            async with AsyncDBSession() as session:
-                if action == "مسح المميزين":
-                    await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id))
-                    await session.commit()
-                    return await event.reply("**✅ تم مسح قائمة الأعضاء المميزين لهذه المجموعة بنجاح.**")
-
-                reply = await event.get_reply_message()
-                if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
-                user_to_manage = await reply.get_sender()
-                if user_to_manage.bot: return await event.reply("**لا يمكنك ترقية البوتات.**")
-                
-                target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
-                if target_rank >= actor_rank:
-                    return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
-
-                result = await session.execute(select(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_to_manage.id))
-                is_vip = result.scalar_one_or_none()
-
-                if action == "رفع مميز":
-                    if is_vip: return await event.reply("**هذا الشخص هو أصلاً عضو مميز.**")
-                    session.add(Vip(chat_id=event.chat_id, user_id=user_to_manage.id))
-                    await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى عضو مميز.**")
-                else:
-                    if not is_vip: return await event.reply("**هذا الشخص ليس عضو مميز أصلاً.**")
-                    await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_to_manage.id))
-                    await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من المميزين.**")
-                await session.commit()
-
-        elif action == "المميزين":
-            if actor_rank < Ranks.MOD: return
-            async with AsyncDBSession() as session:
-                result = await session.execute(select(Vip.user_id).where(Vip.chat_id == event.chat_id))
-                vip_ids = result.scalars().all()
-            
-            if not vip_ids: return await event.reply("**لا يوجد أي أعضاء مميزين في المجموعة.**")
-            list_text = "**⚜️ قائمة الأعضاء المميزين:**\n\n"
-            for user_id in vip_ids:
-                try:
-                    user = await client.get_entity(user_id)
-                    list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
-                except Exception:
-                    list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
-            await event.reply(list_text)
-    except Exception as e:
-        logger.error(f"استثناء في vip_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-        
 @client.on(events.NewMessage(pattern=r"^ضع حجم الكلايش (\d+)$"))
 async def set_long_text_size(event):
     try:
