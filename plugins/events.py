@@ -23,7 +23,10 @@ from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
 # --- (تم التحديث) استيراد منطق الأوامر الجديد ---
-from .commands_logic import lock_unlock_logic, kick_logic, set_rank_logic
+from .commands_logic import (
+    lock_unlock_logic, kick_logic, set_rank_logic, 
+    my_stats_logic, my_rank_logic, id_logic
+)
 import logging
 
 # إعداد السجل
@@ -48,43 +51,53 @@ async def general_message_handler(event):
                 full_text = event.text.strip()
                 original_command = None
 
+                # (تم التعديل) التعامل مع الأوامر التي قد تحتوي على وسائط مثل "ايدي @username"
+                command_parts = full_text.split(maxsplit=1)
+                first_word = command_parts[0]
+
                 if full_text in all_aliases:
                     original_command = all_aliases[full_text]
-                else:
-                    message_parts = full_text.split()
-                    if message_parts:
-                        command_candidate = message_parts[0]
-                        if command_candidate in all_aliases:
-                            translated_first_word = all_aliases[command_candidate]
-                            new_message_parts = [translated_first_word] + message_parts[1:]
-                            original_command = " ".join(new_message_parts)
+                elif first_word in all_aliases:
+                    translated_first_word = all_aliases[first_word]
+                    # إعادة بناء الأمر مع الوسائط
+                    if len(command_parts) > 1:
+                        original_command = f"{translated_first_word} {command_parts[1]}"
+                    else:
+                        original_command = translated_first_word
 
-                # إذا تم العثور على ترجمة، قم بتوجيهها للمنطق المناسب
                 if original_command:
                     # --- (تم التحديث) الموزع (Router) ---
                     
-                    # 1. أوامر القفل والفتح
                     if original_command.startswith(("قفل", "فتح")):
                         await lock_unlock_logic(event, original_command)
                         raise events.StopPropagation
                     
-                    # 2. أمر الطرد
                     elif original_command == "طرد":
                         await kick_logic(event)
                         raise events.StopPropagation
                     
-                    # 3. أوامر الرتب (ادمن, منشئ, مميز)
-                    elif original_command in [
-                        "رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", 
-                        "رفع مميز", "تنزيل مميز"
-                    ]:
+                    elif original_command in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
                         await set_rank_logic(event, original_command)
+                        raise events.StopPropagation
+
+                    elif original_command == "سجلي":
+                        await my_stats_logic(event)
+                        raise events.StopPropagation
+                    
+                    elif original_command == "رتبتي":
+                        await my_rank_logic(event)
+                        raise events.StopPropagation
+                    
+                    # (تمت الإضافة) توجيه أمر ايدي
+                    elif original_command.startswith("ايدي"):
+                        await id_logic(event, original_command)
                         raise events.StopPropagation
 
             # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
             
+            # ... (بقية الكود يبقى كما هو دون تغيير) ...
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
                 long_text_size = (chat.settings or {}).get("long_text_size", 200)
@@ -126,7 +139,7 @@ async def general_message_handler(event):
                 dhikr_message = random.choice(DHIKR_LIST)
                 await client.send_message(event.chat_id, dhikr_message)
                 chat_settings["last_dhikr_time"] = now
-                chat.settings = chat_settings
+                chat_settings = chat_settings
                 flag_modified(chat, "settings")
 
             # --- فحص الرتب والأقفال ---
@@ -135,7 +148,6 @@ async def general_message_handler(event):
 
             if not is_immune:
                 chat_locks = chat.lock_settings or {}
-                # ... (rest of the file is the same)
                 message_entities_for_lock = event.message.entities or []
                 checks = {
                     "photo": event.photo, "video": event.video, "gif": event.gif,
