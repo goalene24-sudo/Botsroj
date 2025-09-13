@@ -22,7 +22,7 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- (تم التحديث) استيراد منطق الأوامر الجديد ---
+# --- استيراد منطق الأوامر الجديد ---
 from .commands_logic import (
     lock_unlock_logic, kick_logic, set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
@@ -33,82 +33,78 @@ import logging
 # إعداد السجل
 logger = logging.getLogger(__name__)
 
+
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
 
-    async with AsyncDBSession() as session:
-        try:
-            # --- محرك ترجمة الأوامر والموزع الرئيسي ---
-            if event.text:
+    try:
+        # --- (تمت إعادة البناء بالكامل) محرك ترجمة وتوجيه الأوامر ---
+        if event.text:
+            command_to_process = None
+            async with AsyncDBSession() as session:
                 result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
                 aliases_from_db = result.scalars().all()
                 user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
+            
+            all_aliases = FIXED_ALIASES.copy()
+            all_aliases.update(user_aliases)
+
+            full_text = event.text.strip()
+            translated_command = None
+            
+            # الخطوة 1: حاول ترجمة الاختصار
+            if full_text in all_aliases:
+                translated_command = all_aliases[full_text]
+            
+            # الخطوة 2: تحديد الأمر النهائي الذي سيتم معالجته
+            command_to_process = translated_command if translated_command is not None else full_text
+
+            # --- الموزع (Router) ---
+            # الآن سيفحص الموزع الأمر النهائي سواء كان مترجماً أم لا
+            
+            if command_to_process.startswith(("قفل", "فتح")):
+                await lock_unlock_logic(event, command_to_process)
+                return
+            
+            elif command_to_process == "طرد":
+                await kick_logic(event)
+                return
+            
+            elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
+                await set_rank_logic(event, command_to_process)
+                return
+
+            elif command_to_process == "سجلي":
+                await my_stats_logic(event)
+                return
+            
+            elif command_to_process == "رتبتي":
+                await my_rank_logic(event)
+                return
+            
+            elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"):
+                await id_logic(event, command_to_process)
+                return
+
+            elif command_to_process == "القوانين":
+                await get_rules_logic(event)
+                return
                 
-                all_aliases = FIXED_ALIASES.copy()
-                all_aliases.update(user_aliases)
-
-                full_text = event.text.strip()
-                original_command = None
+            elif command_to_process.startswith("نداء"):
+                await tag_all_logic(event, command_to_process)
+                return
                 
-                command_parts = full_text.split(maxsplit=1)
-                first_word = command_parts[0]
+            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
+                await toggle_id_photo_logic(event, command_to_process)
+                return
 
-                if full_text in all_aliases:
-                    original_command = all_aliases[full_text]
-                elif first_word in all_aliases:
-                    translated_first_word = all_aliases[first_word]
-                    if len(command_parts) > 1:
-                        original_command = f"{translated_first_word} {command_parts[1]}"
-                    else:
-                        original_command = translated_first_word
-
-                if original_command:
-                    # --- (تم التحديث) الموزع (Router) ---
-                    
-                    if original_command.startswith(("قفل", "فتح")):
-                        await lock_unlock_logic(event, original_command)
-                        raise events.StopPropagation
-                    
-                    elif original_command == "طرد":
-                        await kick_logic(event)
-                        raise events.StopPropagation
-                    
-                    elif original_command in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
-                        await set_rank_logic(event, original_command)
-                        raise events.StopPropagation
-
-                    elif original_command == "سجلي":
-                        await my_stats_logic(event)
-                        raise events.StopPropagation
-                    
-                    elif original_command == "رتبتي":
-                        await my_rank_logic(event)
-                        raise events.StopPropagation
-                    
-                    elif original_command.startswith("ايدي") or original_command.startswith("id"):
-                        await id_logic(event, original_command)
-                        raise events.StopPropagation
-
-                    # (تمت الإضافة) أوامر إدارية بسيطة
-                    elif original_command == "القوانين":
-                        await get_rules_logic(event)
-                        raise events.StopPropagation
-                        
-                    elif original_command.startswith("نداء"):
-                        await tag_all_logic(event, original_command)
-                        raise events.StopPropagation
-                        
-                    elif original_command.startswith(("تشغيل صورة ايدي", "تعطيل صورة ايدي")):
-                        await toggle_id_photo_logic(event, original_command)
-                        raise events.StopPropagation
-
-            # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
+        # --- هذا الكود سيعمل فقط إذا لم تكن الرسالة أمراً تم التعرف عليه من قبل الموزع ---
+        async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
-            
-            # ... (بقية الكود يبقى كما هو دون تغيير) ...
+
             if event.id:
                 long_text_size = (chat.settings or {}).get("long_text_size", 200)
                 msg_type = "text"
@@ -128,17 +124,18 @@ async def general_message_handler(event):
                     oldest_msg_id_res = await session.execute(select(MessageHistory.id).where(MessageHistory.chat_id == event.chat_id).order_by(MessageHistory.id.asc()).limit(1))
                     oldest_msg_id = oldest_msg_id_res.scalar_one_or_none()
                     if oldest_msg_id: await session.execute(delete(MessageHistory).where(MessageHistory.id == oldest_msg_id))
+
             now = int(time.time())
             chat_settings = chat.settings or {}
             last_dhikr_time = chat_settings.get("last_dhikr_time", 0)
             dhikr_interval = chat_settings.get("dhikr_interval", 3600)
             is_dhikr_enabled = chat_settings.get("dhikr_enabled", True)
             if is_dhikr_enabled and (now - last_dhikr_time > dhikr_interval):
-                dhikr_message = random.choice(DHIKR_LIST)
-                await client.send_message(event.chat_id, dhikr_message)
+                await client.send_message(event.chat_id, random.choice(DHIKR_LIST))
                 chat_settings["last_dhikr_time"] = now
                 chat.settings = chat_settings
                 flag_modified(chat, "settings")
+
             rank_int = await get_user_rank(event.sender_id, event.chat_id)
             is_immune = rank_int >= Ranks.MOD
             if not is_immune:
@@ -184,9 +181,9 @@ async def general_message_handler(event):
             if not event.text:
                 await session.commit()
                 return
-            all_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر"]
-            is_command = any(event.text.lower().startswith(cmd.lower()) for cmd in all_commands)
-            if not is_command:
+            all_bot_commands = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + ["الاوامر"]
+            is_any_command = any(event.text.lower().startswith(cmd.lower()) for cmd in all_bot_commands)
+            if not is_any_command:
                 user.msg_count = (user.msg_count or 0) + 1
                 chat.total_msgs = (chat.total_msgs or 0) + 1
                 points_multiplier = 1
@@ -223,11 +220,10 @@ async def general_message_handler(event):
                             except KeyError: await event.reply(reply_template)
                             except Exception as e: logger.error(f"خطأ في إرسال الرد: {e}")
             await session.commit()
-        except events.StopPropagation:
-            pass
-        except Exception as e:
-            logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
-            await session.rollback()
+
+    except Exception as e:
+        logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
+
 
 @client.on(events.ChatAction)
 async def handle_chat_action(event):
@@ -235,7 +231,7 @@ async def handle_chat_action(event):
         async with AsyncDBSession() as session:
             try:
                 user = await get_or_create_user(session, event.chat_id, event.user_id)
-                user.join_date = datetime.now().strftime("%Y-%م-%d")
+                user.join_date = datetime.now().strftime("%Y-%m-%d")
                 chat = await get_or_create_chat(session, event.chat_id)
                 welcome_message = (chat.settings or {}).get("welcome_message")
                 if welcome_message:
