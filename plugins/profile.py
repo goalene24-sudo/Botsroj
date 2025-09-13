@@ -13,55 +13,7 @@ from .utils import check_activation, add_points, get_user_rank, Ranks, get_rank_
 from .utils import get_or_create_user
 
 
-@client.on(events.NewMessage(pattern="^سجلي$"))
-async def my_stats_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): return
-    sender = await event.get_sender()
-    
-    async with AsyncDBSession() as session:
-        user_obj = await get_or_create_user(session, event.chat_id, sender.id)
-        inventory = user_obj.inventory or {}
-        
-        married_to = inventory.get("married_to")
-        best_friend = inventory.get("best_friend")
-        gifted_points = inventory.get("gifted_points", 0)
-        
-        title = None
-        custom_title_item = inventory.get("تخصيص لقب")
-        if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400:
-            title = user_obj.custom_title
-
-        if not title:
-            vip_item = inventory.get("لقب vip")
-            if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-                title = "عضو مميز 🎖️"
-
-    profile_text = f"**📈 سجلك الشخصي يا [{sender.first_name}](tg://user?id={sender.id})**\n\n"
-    
-    if married_to:
-        partner_id = married_to.get("id")
-        partner_name = married_to.get("name")
-        profile_text += f"**❤️ الحالة الاجتماعية:** مرتبط/ة بـ [{partner_name}](tg://user?id={partner_id})\n"
-    else:
-        profile_text += "**❤️ الحالة الاجتماعية:** أعزب/عزباء\n"
-
-    if best_friend:
-        bff_id = best_friend.get("id")
-        bff_name = best_friend.get("name")
-        profile_text += f"**🫂 الصديق المفضل:** [{bff_name}](tg://user?id={bff_id})\n"
-
-    if user_obj.join_date:
-        profile_text += f"**📅 تاريخ الانضمام:** {user_obj.join_date}\n"
-        
-    if title:
-        profile_text += f"**🎖️ اللقب:** {title}\n"
-        
-    profile_text += (
-        f"**🎁 النقاط المهدَاة:** {gifted_points}\n\n"
-        "**استمر بالتفاعل! ✨**"
-    )
-    
-    await event.reply(profile_text)
+# --- (تم حذف my_stats_handler و my_rank_handler من هنا لأنهما الآن في النظام المركزي) ---
 
 
 @client.on(events.NewMessage(pattern=r"^اهداء (\d+)$"))
@@ -208,7 +160,7 @@ async def my_inventory_handler(event):
     current_time = int(time.time())
 
     for item_name, data in inventory.items():
-        if not isinstance(data, dict): continue # تجاهل البيانات غير الصالحة
+        if not isinstance(data, dict): continue
         
         duration_days = data.get("duration_days")
         if duration_days is None: continue
@@ -249,7 +201,7 @@ async def set_birthday_handler(event):
         day, month = map(int, date_str.replace('/', '-').split('-'))
         if not (1 <= day <= 31 and 1 <= month <= 12):
             raise ValueError("Invalid day or month")
-        datetime(year=2024, month=month, day=day) # للتحقق من صحة التاريخ
+        datetime(year=2024, month=month, day=day)
     except (ValueError, IndexError):
         return await event.reply(
             "**الصيغة غلط! ❌**\n"
@@ -333,23 +285,6 @@ async def delete_best_friend_handler(event):
             await event.reply("**ليس لديك صديق مفضل معين لتقوم بحذفه.**")
 
 
-@client.on(events.NewMessage(pattern=r"^\.?رتبتي$"))
-async def my_rank_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): return
-    
-    rank_level = await get_user_rank(event.sender_id, event.chat_id)
-    rank_name = get_rank_name(rank_level)
-    
-    rank_emoji_map = {
-        Ranks.MAIN_DEV: "👨‍💻", Ranks.SECONDARY_DEV: "🛠️", Ranks.OWNER: "👑",
-        Ranks.CREATOR: "⚜️", Ranks.ADMIN: "🤖", Ranks.MOD: "🛡️",
-        Ranks.VIP: "✨", Ranks.MEMBER: "👤"
-    }
-    emoji = rank_emoji_map.get(rank_level, "👤")
-    
-    await event.reply(f"⌔︙**رتبتك هي :** {rank_name} {emoji}")
-
-
 @client.on(events.NewMessage(pattern="^صلاحياتي$"))
 async def my_permissions_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -383,7 +318,6 @@ async def my_permissions_handler(event):
             
             permissions_text = f"**⚜️ | صلاحياتك كمشرف يا [{sender.first_name}](tg://user?id={sender.id}):**\n\n"
             
-            # This part for anonymous admins might need adjustment based on telethon version
             if hasattr(participant, 'participant') and hasattr(participant.participant, 'anonymous') and participant.participant.anonymous:
                 permissions_text += "✅ **إرسال الرسائل كمشرف مخفي**\n"
             
