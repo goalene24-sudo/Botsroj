@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
+    # --- (تمت الإضافة) منع تكرار معالجة الأوامر المترجمة ---
+    if hasattr(event.message, '_translated'):
+        return
+
     if not await check_activation(event.chat_id):
         return
 
@@ -37,10 +41,8 @@ async def general_message_handler(event):
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
-            # --- محرك ترجمة الأوامر مع إضافة سجلات تشخيصية ---
+            # --- (تم التعديل) محرك ترجمة الأوامر مع إعادة الإرسال ---
             if event.text:
-                logger.info(f"[DIAGNOSTIC] Received text: '{event.text}'") # طباعة النص المستلم
-                
                 result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
                 aliases_from_db = result.scalars().all()
                 user_aliases = {a.alias_name: a.command_name for a in aliases_from_db}
@@ -48,43 +50,26 @@ async def general_message_handler(event):
                 all_aliases = FIXED_ALIASES.copy()
                 all_aliases.update(user_aliases)
 
-                # طباعة عينة من الاختصارات للتأكد من تحميلها
-                sample_aliases = list(all_aliases.keys())[:5]
-                logger.info(f"[DIAGNOSTIC] Sample alias keys: {sample_aliases}")
-                logger.info(f"[DIAGNOSTIC] Does 'ق ص' exist in keys? {'ق ص' in all_aliases}")
-
                 full_text = event.text.strip()
                 original_command = None
-                
-                logger.info(f"[DIAGNOSTIC] Checking full_text: '{full_text}'")
 
                 if full_text in all_aliases:
-                    logger.info(f"[DIAGNOSTIC] Full text MATCH FOUND! '{full_text}' -> '{all_aliases[full_text]}'")
                     original_command = all_aliases[full_text]
                 else:
-                    logger.info(f"[DIAGNOSTIC] Full text match failed. Checking first word.")
                     message_parts = full_text.split()
                     if message_parts:
                         command_candidate = message_parts[0]
-                        logger.info(f"[DIAGNOSTIC] First word candidate: '{command_candidate}'")
                         if command_candidate in all_aliases:
-                            logger.info(f"[DIAGNOSTIC] First word MATCH FOUND! '{command_candidate}' -> '{all_aliases[command_candidate]}'")
                             translated_first_word = all_aliases[command_candidate]
                             new_message_parts = [translated_first_word] + message_parts[1:]
                             original_command = " ".join(new_message_parts)
-                        else:
-                             logger.info(f"[DIAGNOSTIC] First word match also failed.")
 
+                # إذا تم العثور على ترجمة، أعد إرسال الحدث وتوقف
                 if original_command:
-                    logger.info(f"[DIAGNOSTIC] Translating message to: '{original_command}'")
-                    try:
-                        event.message.message = original_command
-                        event.raw_text = original_command
-                    except Exception as e:
-                        logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
-                else:
-                    logger.info(f"[DIAGNOSTIC] No translation found for this message.")
-
+                    event.message.message = original_command
+                    setattr(event.message, '_translated', True) # إضافة علامة لمنع التكرار
+                    await client.dispatch(event.message) # إعادة إرسال الرسالة المعدلة
+                    raise events.StopPropagation # إيقاف المعالجة هنا
 
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
@@ -260,6 +245,8 @@ async def general_message_handler(event):
                                 logger.error(f"خطأ في إرسال الرد: {e}")
             
             await session.commit()
+        except events.StopPropagation:
+            raise # أعد إطلاق الاستثناء لإيقاف المعالجة كما هو مخطط
         except Exception as e:
             logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
             await session.rollback()
