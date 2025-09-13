@@ -54,10 +54,8 @@ async def general_message_handler(event):
             full_text = event.text.strip()
             translated_command = all_aliases.get(full_text)
             
-            # تحديد الأمر النهائي: إما المترجم من اختصار، أو النص الأصلي
             command_to_process = translated_command if translated_command is not None else full_text
 
-            # --- الموزع (Router) ---
             if command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
                 return
@@ -86,7 +84,7 @@ async def general_message_handler(event):
                 await toggle_id_photo_logic(event, command_to_process)
                 return
 
-        # --- هذا الكود سيعمل فقط إذا لم تكن الرسالة أمراً تم التعرف عليه ---
+        # --- منطق الرسائل العادية (غير الأوامر) ---
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
@@ -94,26 +92,31 @@ async def general_message_handler(event):
             user.msg_count = (user.msg_count or 0) + 1
             chat.total_msgs = (chat.total_msgs or 0) + 1
             
-            # --- نظام الردود ---
+            # --- نظام الردود (تمت إعادة بناء المنطق بالكامل) ---
             if event.text and (chat.settings or {}).get("public_replies_enabled", True):
                 trigger = event.text.lower()
+                
+                # الخطوة 1: التحقق من ردود المناداة الخاصة أولاً
+                BOT_TRIGGERS = ["سروج", "بوت"]
+                if any(b in trigger for b in BOT_TRIGGERS):
+                    current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                    chat_settings = chat.settings or {}
+                    if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
+                        await event.reply(chat_settings["dev_reply"])
+                        await session.commit()
+                        return
+                    if chat_settings.get("call_reply"):
+                        await event.reply(chat_settings["call_reply"])
+                        await session.commit()
+                        return
+                
+                # الخطوة 2: إذا لم يتم إرسال رد خاص، تحقق من الردود العامة
                 all_replies = DEFAULT_REPLIES.copy()
                 custom_replies = chat.custom_replies or {}
                 all_replies.update({k.lower(): v for k, v in custom_replies.items()})
                 reply_data = all_replies.get(trigger)
 
                 if reply_data:
-                    BOT_TRIGGERS = ["سروج", "بوت"]
-                    if any(b in trigger for b in BOT_TRIGGERS):
-                        current_rank = await get_user_rank(event.sender_id, event.chat_id)
-                        chat_settings = chat.settings or {}
-                        if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
-                            await event.reply(chat_settings["dev_reply"])
-                            return
-                        if chat_settings.get("call_reply"):
-                            await event.reply(chat_settings["call_reply"])
-                            return
-                    
                     reply_template = None
                     if isinstance(reply_data, str):
                         reply_template = reply_data
@@ -133,6 +136,7 @@ async def general_message_handler(event):
                             await event.reply(final_reply)
                         except KeyError:
                             await event.reply(reply_template)
+
             await session.commit()
 
     except Exception as e:
