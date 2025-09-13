@@ -15,7 +15,7 @@ from models import Chat, User, GlobalSetting
 from .utils import (
     is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,    
     build_main_menu_buttons, build_protection_menu, get_uptime_string,
-    get_or_create_user, add_points # <-- تم استيراد دالة النقاط
+    get_or_create_user, add_points
 )
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
@@ -25,13 +25,13 @@ from .menu_texts import (
     SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, SHOP_MENU_TEXT
 )
 from .admin import get_or_create_chat, set_chat_setting
-from .games import CURRENT_QUIZZES # <-- تم استيراد قاموس الكويزات الفعالة
+from .games import CURRENT_QUIZZES
 
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
     query_data = event.data.decode('utf-8')
     
-    # --- (بداية الكود يبقى كما هو) ---
+    # --- (الكود هنا يبقى كما هو حتى نصل إلى قسم الكويز) ---
     main_menus = [
         "fun_menu", "profile_menu", "shop_menu", "tools_menu",
         "services_menu", "replies_menu", "about_menu", "back_to_main",
@@ -110,8 +110,8 @@ async def callback_handler(event):
             try: await event.edit(text_to_show, buttons=buttons_to_show)
             except MessageNotModifiedError: pass
 
-    # --- (تمت إضافة المنطق هنا) ---
     elif query_data.startswith("quiz:"):
+        # --- (تم التعديل هنا) ---
         result = query_data.split(":")[1]
         user_id = event.sender_id
         msg_id = event.message_id
@@ -124,26 +124,33 @@ async def callback_handler(event):
             return await event.answer("لقد قمت بالمحاولة بالفعل!", alert=True)
 
         quiz_info["participants"].add(user_id)
+        
+        user_entity = await event.get_sender()
+        original_message = await event.get_message()
+        question_text = original_message.text.split('\n\n')[1]
+        correct_answer_text = quiz_info['correct_answer']
 
         if result == "1":
             points_to_win = random.randint(15, 50)
             await add_points(event.chat_id, user_id, points_to_win)
-            await event.answer(f"🎉 إجابة صحيحة! لقد ربحت {points_to_win} نقطة.", alert=True)
             
-            user_entity = await event.get_sender()
-            original_message = await event.get_message()
-            question_text = original_message.text.split('\n\n')[1] # استخلاص السؤال
-            
-            await event.edit(
+            reply_text = (
                 f"**{question_text}**\n\n"
-                f"**انتهى الكويز!**\n"
-                f"**الفائز هو [{user_entity.first_name}](tg://user?id={user_id})!**\n"
-                f"**الإجابة الصحيحة كانت: {quiz_info['correct_answer']}**",
-                buttons=None
+                f"**🏆 إجابة صحيحة!**\n"
+                f"**الفائز هو [{user_entity.first_name}](tg://user?id={user_id}) وقد ربح {points_to_win} نقطة!**\n"
+                f"**الإجابة كانت بالفعل: {correct_answer_text}**"
             )
+            await event.edit(reply_text, buttons=None)
             del CURRENT_QUIZZES[msg_id]
         else:
-            await event.answer("❌ إجابة خاطئة! حظ أوفر في المرة القادمة.", alert=True)
+            reply_text = (
+                f"**{question_text}**\n\n"
+                f"**للاسف إجابتك خاطئة يا [{user_entity.first_name}](tg://user?id={user_id})! 😥**\n"
+                f"**الإجابة الصحيحة كانت: {correct_answer_text}**"
+            )
+            await event.edit(reply_text, buttons=None)
+            # يمكنك أن تقرر إذا كنت تريد إنهاء الكويز بعد إجابة خاطئة واحدة
+            # del CURRENT_QUIZZES[msg_id] 
         return
         
     elif query_data.startswith("toggle_lock:"):
@@ -166,7 +173,6 @@ async def callback_handler(event):
 
 @client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
 async def custom_command_button_handler(event):
-    # (الكود هنا يبقى كما هو)
     command_name = event.data.decode().split(':')[1]
     async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == "custom_commands"))
