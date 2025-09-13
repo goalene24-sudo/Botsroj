@@ -37,7 +37,7 @@ async def general_message_handler(event):
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
 
-            # --- محرك ترجمة الأوامر المضافة والثابتة ---
+            # --- (تم التعديل) محرك ترجمة الأوامر المضافة والثابتة لحل مشكلة الاختصارات المركبة ---
             if event.text:
                 result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
                 aliases_from_db = result.scalars().all()
@@ -46,14 +46,23 @@ async def general_message_handler(event):
                 all_aliases = FIXED_ALIASES.copy()
                 all_aliases.update(user_aliases)
 
-                command_candidate = event.text.strip()
-                if command_candidate in all_aliases:
-                    original_command = all_aliases[command_candidate]
-                    try:
-                        event.message.message = original_command
-                        event.raw_text = original_command
-                    except Exception as e:
-                        logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
+                message_parts = event.text.strip().split()
+                if message_parts:
+                    command_candidate = message_parts[0]
+                    
+                    if command_candidate in all_aliases:
+                        original_command = all_aliases[command_candidate]
+                        
+                        # إعادة بناء الرسالة مع الأمر الأصلي
+                        new_message_parts = [original_command] + message_parts[1:]
+                        final_command = " ".join(new_message_parts)
+                        
+                        try:
+                            # تحديث نص الرسالة في الحدث
+                            event.message.message = final_command
+                            event.raw_text = final_command
+                        except Exception as e:
+                            logger.error(f"فشل في تعديل نص الرسالة: {e}", exc_info=True)
 
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
