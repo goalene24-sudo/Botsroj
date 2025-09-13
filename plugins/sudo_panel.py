@@ -178,32 +178,22 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**🧑‍✈️ | أرسل الآن ID المستخدم للترقية العامة...**\n**(للإلغاء، أرسل `الغاء`)**")
                 response = await conv.get_response()
-                if not response.text or response.text.strip().lower() == "الغاء":    
-                    return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
-
-                try:    
-                    user_id_to_promote = int(response.text.strip())
-                except ValueError:    
-                    return await conv.send_message("**⚠️ | ID غير صالح.**")
-
+                if not response.text or response.text.strip().lower() == "الغاء": return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
+                try: user_id_to_promote = int(response.text.strip())
+                except ValueError: return await conv.send_message("**⚠️ | ID غير صالح.**")
                 await conv.send_message(f"**⏳ | سأقوم الآن بترقية `{user_id_to_promote}`...**")
                 promoted_in = 0
                 async with AsyncDBSession() as session:
                     result = await session.execute(select(Chat.id))
                     all_chat_ids = result.scalars().all()
-                    
                     for chat_id in all_chat_ids:
                         res = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id_to_promote))
-                        existing_admin = res.scalar_one_or_none()
-                        
-                        if not existing_admin:
-                            new_admin = BotAdmin(chat_id=chat_id, user_id=user_id_to_promote)
-                            session.add(new_admin)
+                        if not res.scalar_one_or_none():
+                            session.add(BotAdmin(chat_id=chat_id, user_id=user_id_to_promote))
                             promoted_in += 1
                     await session.commit()
                 await conv.send_message(f"**🧑‍✈️ | اكتملت الترقية!**\n**- ✅ تمت الترقية في:** `{promoted_in}` **مجموعة جديدة.**")
-        except asyncio.TimeoutError:    
-            await event.reply("**⏰ | انتهى الوقت.**")
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
         
     elif action == "db_maint":
         await event.edit("**🛠️ | جاري فحص قاعدة البيانات...**")
@@ -211,27 +201,20 @@ async def sudo_panel_callback(event):
         async with AsyncDBSession() as session:
             result = await session.execute(select(Chat.id))
             all_chat_ids = result.scalars().all()
-
             for chat_id in all_chat_ids:
                 try:
                     await client.get_entity(chat_id); await asyncio.sleep(1)
                 except Exception:
                     inactive_chat_ids.append(chat_id)
-            
             if not inactive_chat_ids:
                 return await event.edit("**✅ | قاعدة البيانات نظيفة!**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
-            
             await session.execute(delete(Chat).where(Chat.id.in_(inactive_chat_ids)))
             await session.commit()
-        
         await event.edit(f"**🗑️ | اكتملت الصيانة!**\n**تم تنظيف `{len(inactive_chat_ids)}` مجموعة غير نشطة.**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
 
     elif action == "inspect":
         inspect_text = "**🔍 | قسم فحص البيانات**\n\n**اختر نوع البيانات:**"
-        inspect_buttons = [
-            [Button.inline("فحص مجموعة 🏙️", data="sudo_panel:inspect_group"), Button.inline("فحص مستخدم 👤", data="sudo_panel:inspect_user")],
-            [Button.inline("🔙 رجوع", data="sudo_panel:main")]
-        ]
+        inspect_buttons = [[Button.inline("فحص مجموعة 🏙️", data="sudo_panel:inspect_group"), Button.inline("فحص مستخدم 👤", data="sudo_panel:inspect_user")], [Button.inline("🔙 رجوع", data="sudo_panel:main")]]
         await event.edit(inspect_text, buttons=inspect_buttons)
 
     elif action == "inspect_group":
@@ -239,107 +222,79 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**🏙️ | أرسل الآن ID المجموعة...**")
                 response = await conv.get_response()
-                try:
-                    chat_id = int(response.text.strip())
-                except ValueError:
-                    return await conv.send_message("**ID غير صالح.**")
-
+                try: chat_id = int(response.text.strip())
+                except ValueError: return await conv.send_message("**ID غير صالح.**")
                 async with AsyncDBSession() as session:
                     chat_data = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
-                    if not chat_data:    
-                        return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
-                    
+                    if not chat_data: return await conv.send_message("**لم يتم العثور على بيانات لهذه المجموعة.**")
                     user_count = await session.scalar(select(func.count(User.id)).where(User.chat_id == chat_id))
                     admin_count = await session.scalar(select(func.count(BotAdmin.id)).where(BotAdmin.chat_id == chat_id))
-
-                report = f"**📄 | تقرير المجموعة `{chat_id}`**\n"
-                report += f"- أعضاء مسجلين: {user_count}\n"
-                report += f"- أدمنية البوت: {admin_count}\n"
+                report = f"**📄 | تقرير المجموعة `{chat_id}`**\n- أعضاء مسجلين: {user_count}\n- أدمنية البوت: {admin_count}\n"
                 await conv.send_message(report)
-        except asyncio.TimeoutError:    
-            await event.reply("**⏰ | انتهى الوقت.**")
-            
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
+        
     elif action == "inspect_user":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**👤 | أرسل الآن ID المستخدم...**")
                 response = await conv.get_response()
-                try:
-                    user_id = int(response.text.strip())
-                except ValueError:
-                    return await conv.send_message("**ID غير صالح.**")
-
+                try: user_id = int(response.text.strip())
+                except ValueError: return await conv.send_message("**ID غير صالح.**")
                 report = f"**📄 | تقرير المستخدم `{user_id}`**\n"
                 banned_list = await get_global_setting("globally_banned", [])
                 is_gbanned = user_id in banned_list
                 report += f"- الحظر العام: {'محظور 🚫' if is_gbanned else 'غير محظور ✅'}\n"
-                
                 async with AsyncDBSession() as session:
                     total_msgs_res = await session.execute(select(func.sum(User.msg_count)).where(User.user_id == user_id))
                     total_msgs = total_msgs_res.scalar() or 0
-                    
                     group_count_res = await session.execute(select(func.count(User.id)).where(User.user_id == user_id))
                     group_count = group_count_res.scalar() or 0
-
                 report += f"- مجموع الرسائل: {total_msgs}\n- موجود في: `{group_count}` مجموعة\n"
                 await conv.send_message(report)
-        except asyncio.TimeoutError:    
-            await event.reply("**⏰ | انتهى الوقت.**")
-            
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
+        
     elif action == "global_settings":
         disabled_cmds = await get_global_setting("disabled_cmds", [])
-        settings_text = "**🌐 | الإعدادات العامة للبوت**\n\n**اختر الإجراء الذي تريد القيام به:**"
-        settings_buttons = [
-            [Button.inline("🚫 تعطيل أمر عام", data="sudo_panel:g_disable_cmd"), Button.inline("✅ تفعيل أمر عام", data="sudo_panel:g_enable_cmd")],
-            [Button.inline(f"📜 عرض الأوامر المعطلة ({len(disabled_cmds)})", data="sudo_panel:g_list_disabled")],
-            [Button.inline("🔙 رجوع", data="sudo_panel:main")]
-        ]
+        settings_text = "**🌐 | الإعدادات العامة للبوت**\n\n**اختر الإجراء:**"
+        settings_buttons = [[Button.inline("🚫 تعطيل أمر عام", data="sudo_panel:g_disable_cmd"), Button.inline("✅ تفعيل أمر عام", data="sudo_panel:g_enable_cmd")], [Button.inline(f"📜 عرض الأوامر المعطلة ({len(disabled_cmds)})", data="sudo_panel:g_list_disabled")], [Button.inline("🔙 رجوع", data="sudo_panel:main")]]
         await event.edit(settings_text, buttons=settings_buttons)
 
     elif action == "g_disable_cmd":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
-                await conv.send_message("**🚫 | أرسل الآن اسم الأمر الذي تريد تعطيله...**\n\n**مثال: `ايدي`**")
+                await conv.send_message("**🚫 | أرسل الآن اسم الأمر لتعطيله...**")
                 response = await conv.get_response()
                 if not response.text: return
                 cmd_to_disable = response.text.strip().lower().replace("/", "").replace("!", "")
-                
                 disabled_list = await get_global_setting("disabled_cmds", [])
                 if cmd_to_disable in disabled_list:
                     return await conv.send_message(f"**⚠️ | الأمر `{cmd_to_disable}` معطل بالفعل.**")
-                
                 disabled_list.append(cmd_to_disable)
                 await set_global_setting("disabled_cmds", disabled_list)
-                await conv.send_message(f"**✅ | تم تعطيل الأمر `{cmd_to_disable}` في جميع المجموعات.**")
-        except asyncio.TimeoutError:    
-            await event.reply("**⏰ | انتهى الوقت.**")
-        
+                await conv.send_message(f"**✅ | تم تعطيل الأمر `{cmd_to_disable}`.**")
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
+
     elif action == "g_enable_cmd":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
-                await conv.send_message("**✅ | أرسل الآن اسم الأمر الذي تريد إعادة تفعيله...**")
+                await conv.send_message("**✅ | أرسل الآن اسم الأمر لتفعيله...**")
                 response = await conv.get_response()
                 if not response.text: return
                 cmd_to_enable = response.text.strip().lower().replace("/", "").replace("!", "")
-                
                 disabled_list = await get_global_setting("disabled_cmds", [])
                 if cmd_to_enable not in disabled_list:
                     return await conv.send_message(f"**⚠️ | الأمر `{cmd_to_enable}` غير معطل أصلاً.**")
-                
                 disabled_list.remove(cmd_to_enable)
                 await set_global_setting("disabled_cmds", disabled_list)
-                await conv.send_message(f"**✅ | تم إعادة تفعيل الأمر `{cmd_to_enable}` في جميع المجموعات.**")
-        except asyncio.TimeoutError:    
-            await event.reply("**⏰ | انتهى الوقت.**")
-        
+                await conv.send_message(f"**✅ | تم تفعيل الأمر `{cmd_to_enable}`.**")
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
+
     elif action == "g_list_disabled":
         disabled_list = await get_global_setting("disabled_cmds", [])
         if not disabled_list:
-            text_to_send = "**📜 | لا توجد أي أوامر معطلة على مستوى البوت حالياً.**"
+            text_to_send = "**📜 | لا توجد أوامر معطلة.**"
         else:
-            text_to_send = "**📜 | قائمة الأوامر المعطلة عاماً:**\n\n"
-            text_to_send += "\n".join(f"{i+1}. `{cmd}`" for i, cmd in enumerate(disabled_list))
-        
+            text_to_send = "**📜 | الأوامر المعطلة:**\n\n" + "\n".join(f"- `{cmd}`" for cmd in disabled_list)
         await event.edit(text_to_send, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:global_settings")])
 
     elif action == "custom_cmds":
@@ -358,10 +313,8 @@ async def sudo_panel_callback(event):
                 await conv.send_message("**أرسل الآن اسم الأمر الجديد (بدون `/`).**\n\n**مثال: `القناة`**")
                 cmd_name_msg = await conv.get_response()
                 cmd_name = cmd_name_msg.text.strip().lower()
-
                 if not cmd_name or ' ' in cmd_name:
                     return await conv.send_message("**⚠️ | اسم الأمر غير صالح. يجب أن يكون كلمة واحدة بدون مسافات.**")
-
                 placeholders_guide = ("**حسناً، الآن أرسل النص الذي سيرد به البوت.**\n\n"
                                       "**يمكنك استخدام المتغيرات التالية:**\n"
                                       "`{user_first_name}` - الاسم الأول\n"
@@ -369,21 +322,15 @@ async def sudo_panel_callback(event):
                 await conv.send_message(placeholders_guide)
                 cmd_reply_msg = await conv.get_response()
                 cmd_reply_text = cmd_reply_msg.text
-
                 ask_button_msg = await conv.send_message(
                     "**هل تريد إضافة زر لهذا الأمر في قائمة الأوامر الرئيسية؟**",
-                    buttons=[[
-                        Button.inline("✅ نعم", data="yes"),
-                        Button.inline("❌ لا", data="no")
-                    ]]
+                    buttons=[[Button.inline("✅ نعم", data="yes"), Button.inline("❌ لا", data="no")]]
                 )
-                
                 button_choice_event = await conv.wait_event(events.CallbackQuery(from_users=event.sender_id))
+                await button_choice_event.answer()
                 button_choice = button_choice_event.data.decode()
                 await ask_button_msg.delete()
-
                 command_data = {"reply": cmd_reply_text}
-
                 if button_choice == "yes":
                     await conv.send_message("**أرسل الآن النص الذي سيظهر على الزر.**\n\n**مثال: `قناتنا`**")
                     button_text_msg = await conv.get_response()
@@ -392,11 +339,9 @@ async def sudo_panel_callback(event):
                     command_data["display_mode"] = "edit"
                 else:
                     command_data["display_mode"] = "popup"
-
                 custom_commands = await get_global_setting("custom_commands", {})
                 custom_commands[cmd_name] = command_data
                 await set_global_setting("custom_commands", custom_commands)
-                
                 await conv.send_message(f"**✅ | تم حفظ الأمر `{cmd_name}` بنجاح!**")
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
@@ -407,7 +352,6 @@ async def sudo_panel_callback(event):
                 await conv.send_message("**أرسل اسم الأمر الذي تريد حذفه.**")
                 cmd_name_msg = await conv.get_response()
                 cmd_name = cmd_name_msg.text.strip().lower()
-
                 custom_commands = await get_global_setting("custom_commands", {})
                 if cmd_name in custom_commands:
                     del custom_commands[cmd_name]
