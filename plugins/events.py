@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 import random
 import time
+import re
 from telethon import events
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention
 from sqlalchemy.future import select
@@ -21,6 +22,8 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
+# --- (تمت الإضافة) استيراد منطق الأوامر الجديد ---
+from .commands_logic import lock_unlock_logic
 import logging
 
 # إعداد السجل
@@ -28,20 +31,12 @@ logger = logging.getLogger(__name__)
 
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
-    # --- (تمت الإضافة) منع تكرار معالجة الأوامر المترجمة ---
-    if hasattr(event.message, '_translated'):
-        return
-
     if not await check_activation(event.chat_id):
         return
 
     async with AsyncDBSession() as session:
         try:
-            # --- جلب كائنات المجموعة والمستخدم في بداية المعالج ---
-            chat = await get_or_create_chat(session, event.chat_id)
-            user = await get_or_create_user(session, event.chat_id, event.sender_id)
-
-            # --- (تم التعديل) محرك ترجمة الأوامر مع إعادة الإرسال ---
+            # --- محرك ترجمة الأوامر والموزع الرئيسي ---
             if event.text:
                 result = await session.execute(select(Alias).where(Alias.chat_id == event.chat_id))
                 aliases_from_db = result.scalars().all()
@@ -64,13 +59,23 @@ async def general_message_handler(event):
                             new_message_parts = [translated_first_word] + message_parts[1:]
                             original_command = " ".join(new_message_parts)
 
-                # إذا تم العثور على ترجمة، أعد إرسال الحدث وتوقف
+                # إذا تم العثور على ترجمة، قم بتوجيهها للمنطق المناسب
                 if original_command:
+                    # تحديث نص الرسالة في الحدث لكي يستخدمه المنطق
                     event.message.message = original_command
-                    setattr(event.message, '_translated', True) # إضافة علامة لمنع التكرار
-                    await client.dispatch(event.message) # إعادة إرسال الرسالة المعدلة
-                    raise events.StopPropagation # إيقاف المعالجة هنا
-
+                    
+                    # --- الموزع (Router) ---
+                    # 1. التحقق من أوامر القفل والفتح
+                    if original_command.startswith(("قفل", "فتح")):
+                        await lock_unlock_logic(event)
+                        raise events.StopPropagation # إيقاف المعالجة لأن الأمر تم تنفيذه
+                    
+                    # (يمكن إضافة المزيد من الأوامر هنا مستقبلاً)
+                    
+            # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
+            chat = await get_or_create_chat(session, event.chat_id)
+            user = await get_or_create_user(session, event.chat_id, event.sender_id)
+            
             # --- نظام تخزين الرسائل مع الأنواع ---
             if event.id:
                 long_text_size = (chat.settings or {}).get("long_text_size", 200)
@@ -201,7 +206,7 @@ async def general_message_handler(event):
                 if points_to_add > 0:
                     user.points = (user.points or 0) + (points_to_add * points_multiplier)
                 
-                # --- (تم التعديل النهائي والأخير) نظام الردود ---
+                # --- نظام الردود ---
                 if (chat.settings or {}).get("public_replies_enabled", True):
                     all_replies = DEFAULT_REPLIES.copy()
                     custom_replies = chat.custom_replies or {}
@@ -246,7 +251,7 @@ async def general_message_handler(event):
             
             await session.commit()
         except events.StopPropagation:
-            raise # أعد إطلاق الاستثناء لإيقاف المعالجة كما هو مخطط
+            pass # هذا استثناء طبيعي لإيقاف المعالجة، لا تقم بأي إجراء
         except Exception as e:
             logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
             await session.rollback()
