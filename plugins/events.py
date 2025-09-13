@@ -22,8 +22,8 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- استيراد منطق الأوامر الجديد ---
-from .commands_logic import lock_unlock_logic
+# --- (تم التحديث) استيراد منطق الأوامر الجديد ---
+from .commands_logic import lock_unlock_logic, kick_logic, set_rank_logic
 import logging
 
 # إعداد السجل
@@ -61,13 +61,26 @@ async def general_message_handler(event):
 
                 # إذا تم العثور على ترجمة، قم بتوجيهها للمنطق المناسب
                 if original_command:
-                    # --- الموزع (Router) ---
-                    # 1. التحقق من أوامر القفل والفتح
-                    if original_command.startswith(("قفل", "فتح")):
-                        # (تم التعديل) تمرير النص المترجم مباشرة إلى الوظيفة
-                        await lock_unlock_logic(event, original_command)
-                        raise events.StopPropagation # إيقاف المعالجة لأن الأمر تم تنفيذه
+                    # --- (تم التحديث) الموزع (Router) ---
                     
+                    # 1. أوامر القفل والفتح
+                    if original_command.startswith(("قفل", "فتح")):
+                        await lock_unlock_logic(event, original_command)
+                        raise events.StopPropagation
+                    
+                    # 2. أمر الطرد
+                    elif original_command == "طرد":
+                        await kick_logic(event)
+                        raise events.StopPropagation
+                    
+                    # 3. أوامر الرتب (ادمن, منشئ, مميز)
+                    elif original_command in [
+                        "رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", 
+                        "رفع مميز", "تنزيل مميز"
+                    ]:
+                        await set_rank_logic(event, original_command)
+                        raise events.StopPropagation
+
             # --- جلب كائنات المجموعة والمستخدم (فقط إذا لم يكن أمراً) ---
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
@@ -122,6 +135,7 @@ async def general_message_handler(event):
 
             if not is_immune:
                 chat_locks = chat.lock_settings or {}
+                # ... (rest of the file is the same)
                 message_entities_for_lock = event.message.entities or []
                 checks = {
                     "photo": event.photo, "video": event.video, "gif": event.gif,
