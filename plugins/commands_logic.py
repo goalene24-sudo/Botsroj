@@ -2,6 +2,7 @@ import logging
 import re
 import time
 import random
+import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
@@ -14,8 +15,26 @@ from .achievements import ACHIEVEMENTS
 
 logger = logging.getLogger(__name__)
 
-# --- (القسم الأول: منطق القفل والفتح) ---
-# ... (الكود السابق يبقى كما هو) ...
+# --- دوال مساعدة ---
+async def get_or_create_chat(session, chat_id):
+    result = await session.execute(select(Chat).where(Chat.id == chat_id))
+    chat = result.scalar_one_or_none()
+    if not chat:
+        chat = Chat(id=chat_id, settings={}, lock_settings={})
+        session.add(chat)
+    return chat
+
+async def set_chat_setting(chat_id, key, value):
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, chat_id)
+        if chat.settings is None: chat.settings = {}
+        new_settings = chat.settings.copy()
+        new_settings[key] = value
+        chat.settings = new_settings
+        await session.commit()
+
+# --- قسم منطق الأوامر ---
+
 LOCK_TYPES_MAP = {
     "الصور": "photo", "الفيديو": "video", "المتحركه": "gif", "الملصقات": "sticker",
     "الروابط": "url", "المعرف": "username", "التوجيه": "forward", "الملفات": "document",
@@ -25,24 +44,14 @@ LOCK_TYPES_MAP = {
     "الانكليزيه": "english", "التعديل": "edit",
 }
 
-async def get_or_create_chat(session, chat_id):
-    result = await session.execute(select(Chat).where(Chat.id == chat_id))
-    chat = result.scalar_one_or_none()
-    if not chat:
-        chat = Chat(id=chat_id, settings={}, lock_settings={})
-        session.add(chat)
-    return chat
-
 async def lock_unlock_logic(event, command_text):
     try:
-        if not await has_bot_permission(event):
-            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+        if not await has_bot_permission(event): return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
         match = re.match(r"^(قفل|فتح) (.+)$", command_text)
         if not match: return 
         action, target = match.group(1), match.group(2).strip()
         lock_key = LOCK_TYPES_MAP.get(target)
-        if not lock_key:
-            return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**")
+        if not lock_key: return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**")
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             if chat.lock_settings is None: chat.lock_settings = {}
@@ -61,19 +70,16 @@ async def lock_unlock_logic(event, command_text):
         logger.error(f"استثناء في lock_unlock_logic: {e}", exc_info=True)
         await event.reply("حدث خطأ، جرب مرة أخرى.")
 
-# --- (القسم الثاني: منطق الأوامر الإدارية) ---
 async def kick_logic(event):
     try:
-        if not await has_bot_permission(event):
-            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+        if not await has_bot_permission(event): return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
         reply = await event.get_reply_message()
         if not reply: return await event.reply("**⚠️ | يجب الرد على رسالة.**")
         user_to_kick, actor = await reply.get_sender(), await event.get_sender()
         me = await event.client.get_me()
         if user_to_kick.id in [me.id, actor.id]: return
         actor_rank, target_rank = await get_user_rank(actor.id, event.chat_id), await get_user_rank(user_to_kick.id, event.chat_id)
-        if target_rank >= actor_rank:
-            return await event.reply("**❌ | لا يمكنك طرد رتبة أعلى منك أو مساوية لك.**")
+        if target_rank >= actor_rank: return await event.reply("**❌ | لا يمكنك طرد رتبة أعلى منك أو مساوية لك.**")
         await event.client.kick_participant(event.chat_id, user_to_kick.id)
         await event.reply(f"**✅ | تم طرد [{user_to_kick.first_name}](tg://user?id={user_to_kick.id}) بنجاح.**")
     except Exception as e:
@@ -109,22 +115,18 @@ async def set_rank_logic(event, command_text):
         logger.error(f"استثناء في set_rank_logic: {e}", exc_info=True)
         await event.reply("حدث خطأ، جرب مرة أخرى.")
 
-# --- (القسم الثالث: منطق أوامر الملف الشخصي) ---
 async def my_stats_logic(event):
     try:
         sender = await event.get_sender()
         async with AsyncDBSession() as session:
             user_obj = await get_or_create_user(session, event.chat_id, sender.id)
-            inventory = user_obj.inventory or {}
-            married_to, best_friend, gifted_points = inventory.get("married_to"), inventory.get("best_friend"), inventory.get("gifted_points", 0)
+            inventory, married_to, best_friend, gifted_points = user_obj.inventory or {}, inventory.get("married_to"), inventory.get("best_friend"), inventory.get("gifted_points", 0)
             title = None
             custom_title_item = inventory.get("تخصيص لقب")
-            if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400:
-                title = user_obj.custom_title
+            if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400: title = user_obj.custom_title
             if not title:
                 vip_item = inventory.get("لقب vip")
-                if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-                    title = "عضو مميز 🎖️"
+                if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400: title = "عضو مميز 🎖️"
             profile_text = f"**📈 سجلك الشخصي يا [{sender.first_name}](tg://user?id={sender.id})**\n\n"
             profile_text += f"**❤️ الحالة الاجتماعية:** {'مرتبط/ة بـ [' + married_to.get('name') + '](tg://user?id=' + str(married_to.get('id')) + ')' if married_to else 'أعزب/عزباء'}\n"
             if best_friend: profile_text += f"**🫂 الصديق المفضل:** [{best_friend.get('name')}](tg://user?id={best_friend.get('id')})\n"
@@ -147,81 +149,92 @@ async def my_rank_logic(event):
         logger.error(f"استثناء في my_rank_logic: {e}", exc_info=True)
         await event.reply("حدث خطأ، جرب مرة أخرى.")
 
-# --- (تمت الإضافة) القسم الرابع: منطق أمر ايدي ---
 RANDOM_HEADERS = ["شــوف الحــلو؟ 🧐", "تــعال اشــوفك 🫣", "بــاوع الجــمال 🫠", "تــحبني؟ 🤔", "احــبك ❤️", "هــايروحي 🥹"]
 RANDOM_TAFA3UL = ["سايق مخده 🛌", "ياكل تبن 🐐", "نايم بالكروب 😴", "متفاعل نار 🔥", "أسطورة المجموعة 👑", "مدري شيسوي 🤷‍♂️", "يخابر حبيبتة 👩‍❤️‍💋‍👨", "زعطوط الكروب 👶"]
 
 async def id_logic(event, command_text):
-    """منطق أمر ايدي."""
     try:
-        if not await is_command_enabled(event.chat_id, "id_enabled"):
-            return await event.reply("🚫 | **عذراً، أمر الأيدي معطل في هذه المجموعة حالياً.**")
-        
-        target_user = None
-        replied_msg = await event.get_reply_message()
+        if not await is_command_enabled(event.chat_id, "id_enabled"): return await event.reply("🚫 | **عذراً، أمر الأيدي معطل.**")
+        target_user, replied_msg = None, await event.get_reply_message()
         command_parts = command_text.split(maxsplit=1)
         user_input = command_parts[1] if len(command_parts) > 1 else ""
-
-        if replied_msg:
-            target_user = await replied_msg.get_sender()
+        if replied_msg: target_user = await replied_msg.get_sender()
         elif user_input:
-            try:
-                target_user = await client.get_entity(user_input)
-            except (ValueError, TypeError):
-                return await event.reply("**ما لگيت هيج مستخدم.**")
-        else:
-            target_user = await event.get_sender()
-
-        if not target_user:
-            return await event.reply("**ما گدرت أحدد المستخدم.**")
-
+            try: target_user = await client.get_entity(user_input)
+            except (ValueError, TypeError): return await event.reply("**ما لگيت هيج مستخدم.**")
+        else: target_user = await event.get_sender()
+        if not target_user: return await event.reply("**ما گدرت أحدد المستخدم.**")
         async with AsyncDBSession() as session:
             user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
-            msg_count, points, sahaqat = user_obj.msg_count, user_obj.points, user_obj.sahaqat
-            custom_bio, user_achievements_keys = user_obj.bio, user_obj.achievements or []
-            inventory = user_obj.inventory or {}
-
+            msg_count, points, sahaqat, custom_bio, user_achievements_keys, inventory = user_obj.msg_count, user_obj.points, user_obj.sahaqat, user_obj.bio, user_obj.achievements or [], user_obj.inventory or {}
         rank_int = await get_user_rank(target_user.id, event.chat_id)
         rank_map = {Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻", Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️", Ranks.OWNER: "مالك المجموعة 👑", Ranks.CREATOR: "المنشئ ⚜️", Ranks.ADMIN: "ادمن في البوت 🤖", Ranks.MOD: "مشرف في المجموعة 🛡️", Ranks.VIP: "عضو مميز ✨", Ranks.MEMBER: "عضو 👤"}
-        rank = rank_map.get(rank_int, "عضو 👤")
-        
-        badges_str = "".join(ACHIEVEMENTS[key]["icon"] for key in user_achievements_keys if key in ACHIEVEMENTS)
-        
+        rank, badges_str = rank_map.get(rank_int, "عضو 👤"), "".join(ACHIEVEMENTS[key]["icon"] for key in user_achievements_keys if key in ACHIEVEMENTS)
         vip_status_text, custom_title, decoration = None, None, ""
-        
         vip_item = inventory.get("لقب vip")
-        if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-            vip_status_text = "💎 | من كبار الشخصيات VIP"
+        if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400: vip_status_text = "💎 | من كبار الشخصيات VIP"
         custom_title_item = inventory.get("تخصيص لقب")
-        if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400:
-            custom_title = user_obj.custom_title
+        if custom_title_item and time.time() - custom_title_item.get("purchase_time", 0) < custom_title_item.get("duration_days", 0) * 86400: custom_title = user_obj.custom_title
         decoration_item = inventory.get("زخرفة")
-        if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
-            decoration = "✨"
-        
+        if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400: decoration = "✨"
         header, tafa3ul = random.choice(RANDOM_HEADERS), random.choice(RANDOM_TAFA3UL)
-        
         caption = f"**{header}**\n\n"
         if vip_status_text: caption += f"**{vip_status_text}**\n"
-        caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**\n"
-        caption += f"**- ايديك:** `{target_user.id}`\n"
-        caption += f"**- معرفك:** @{target_user.username or 'لا يوجد'}\n"
-        caption += f"**- حسابك:** [{target_user.first_name}](tg://user?id={target_user.id}) {decoration}\n"
-        caption += f"**- رتبتك:** {rank}\n"
-        if custom_title: caption += f"**- لقبك:** {custom_title}\n"
-        caption += f"**- نبذتك:** {custom_bio}\n"
-        caption += f"**- تفاعلك:** {tafa3ul}\n"
-        caption += f"**- رسائلك:** `{msg_count}`\n"
-        caption += f"**- سحكاتك:** `{sahaqat}`\n"
-        caption += f"**- نقاطك:** `{points}`\n"
-        if badges_str: caption += f"**- أوسمتك:** {badges_str}\n"
+        caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**\n- ايديك:** `{target_user.id}`\n- معرفك:** @{target_user.username or 'لا يوجد'}\n- حسابك:** [{target_user.first_name}](tg://user?id={target_user.id}) {decoration}\n- رتبتك:** {rank}\n"
+        if custom_title: caption += f"- لقبك:** {custom_title}\n"
+        caption += f"- نبذتك:** {custom_bio}\n- تفاعلك:** {tafa3ul}\n- رسائلك:** `{msg_count}`\n- سحكاتك:** `{sahaqat}`\n- نقاطك:** `{points}`\n"
+        if badges_str: caption += f"- أوسمتك:** {badges_str}\n"
         caption += f"**⚡️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ⚡️**"
-        
         pfp = await client.get_profile_photos(target_user, limit=1)
-        if pfp:
-            await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
-        else:
-            await event.reply(caption, reply_to=event.id)
+        if pfp: await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
+        else: await event.reply(caption, reply_to=event.id)
     except Exception as e:
         logger.error(f"استثناء في id_logic: {e}", exc_info=True)
         await event.reply("حدث خطأ، جرب مرة أخرى.")
+
+# --- (تمت الإضافة) أوامر إدارية بسيطة ---
+async def get_rules_logic(event):
+    try:
+        async with AsyncDBSession() as session:
+            chat = await get_or_create_chat(session, event.chat_id)
+            rules = (chat.settings or {}).get("rules")
+        if rules: await event.reply(f"**📜 قوانين المجموعة:**\n\n**{rules}**")
+        else: await event.reply("**لم يتم وضع قوانين لهذه المجموعة بعد.**")
+    except Exception as e:
+        logger.error(f"استثناء في get_rules_logic: {e}", exc_info=True)
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
+
+async def toggle_id_photo_logic(event, command_text):
+    try:
+        if not await has_bot_permission(event): return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+        action = "تشغيل" if command_text.startswith("تشغيل") else "تعطيل"
+        if action == "تشغيل":
+            await set_chat_setting(event.chat_id, "id_photo_enabled", True)
+            await event.reply("**✅ | تم تشغيل عرض الصورة في أمر ايدي.**")
+        else:
+            await set_chat_setting(event.chat_id, "id_photo_enabled", False)
+            await event.reply("**☑️ | تم تعطيل عرض الصورة في أمر ايدي.**")
+    except Exception as e:
+        logger.error(f"استثناء في toggle_id_photo_logic: {e}", exc_info=True)
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
+
+async def tag_all_logic(event, command_text):
+    try:
+        if not await has_bot_permission(event): return await event.reply("**هذا الأمر للمشرفين فقط.**")
+        msg = await event.reply("**📣 جاري تحضير النداء...**")
+        text = command_text.replace("نداء", "", 1).strip()
+        users_text = f"**{text}**\n\n"
+        participants = await client.get_participants(event.chat_id)
+        for user in participants:
+            if not user.bot:
+                mention = f"• [{user.first_name}](tg://user?id={user.id})\n"
+                if len(users_text + mention) > 4000:
+                    await client.send_message(event.chat_id, users_text)
+                    users_text = ""
+                    await asyncio.sleep(1) 
+                users_text += mention
+        if users_text.strip(): await client.send_message(event.chat_id, users_text)
+        await msg.delete()
+    except Exception as e:
+        await msg.edit(f"**حدث خطأ أثناء عمل النداء:**\n`{e}`**")
+        logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
