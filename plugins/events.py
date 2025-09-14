@@ -4,7 +4,7 @@ import random
 import time
 import re
 from telethon import events
-from telethon.tl.types import MessageEntityUrl, MessageEntityMention
+from telethon.tl.types import MessageEntityUrl, MessageEntityMention, ChannelParticipantsAdmins, ChatBannedRights
 from sqlalchemy.future import select
 from sqlalchemy import delete, func
 from sqlalchemy.orm.attributes import flag_modified
@@ -12,8 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from database import AsyncDBSession
-from models import Alias, MessageHistory
-
+from models import Alias, MessageHistory, User
 # --- استيراد الأدوات المحدثة ---
 from .utils import (
     check_activation, PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS,
@@ -27,12 +26,92 @@ from .aliases import FIXED_ALIASES
 from .commands_logic import (
     lock_unlock_logic, kick_logic, set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
-    get_rules_logic, toggle_id_photo_logic, tag_all_logic
+    get_rules_logic, toggle_id_photo_logic, tag_all_logic,
+    set_warns_limit_logic, set_mute_duration_logic, unmute_logic # <-- تمت إضافة دالة فك الكتم
 )
 import logging
 
-# إعداد السجل
 logger = logging.getLogger(__name__)
+
+# --- دالة لمعالجة قفل الرسائل والتحذيرات والكتم ---
+async def handle_message_locks(event):
+    # لا نطبق النظام على المطورين
+    if event.sender_id in config.SUDO_USERS:
+        return False
+
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
+        user = await get_or_create_user(session, event.chat_id, event.sender_id)
+
+        # التحقق إذا كان المستخدم مكتومًا بالفعل من خلال البوت
+        if user.mute_end_time and user.mute_end_time > datetime.now():
+            try:
+                await event.delete()
+            except Exception:
+                pass
+            return True # نمنع المستخدم المكتوم من إرسال أي شيء
+
+        sender_rank = await get_user_rank(event.sender_id, event.chat_id)
+        if sender_rank >= Ranks.MOD: # استثناء المشرفين فما فوق
+            return False
+
+        locks = chat.lock_settings or {}
+        settings = chat.settings or {}
+        max_warns = settings.get("max_warns", 3)
+        mute_hours = settings.get("mute_duration_hours", 6)
+        
+        violation_type = None
+        
+        if locks.get("photo") and event.photo: violation_type = "الصور"
+        elif locks.get("video") and event.video: violation_type = "الفيديو"
+        elif locks.get("sticker") and event.sticker: violation_type = "الملصقات"
+        elif locks.get("gif") and event.gif: violation_type = "المتحركات"
+        elif locks.get("url") and any(isinstance(e, MessageEntityUrl) for e in (event.entities or [])): violation_type = "الروابط"
+        elif locks.get("forward") and event.fwd_from: violation_type = "التوجيه"
+        elif locks.get("long_text") and event.text and len(event.text) > 200: violation_type = "الكلايش الطويلة"
+
+        if violation_type:
+            try:
+                await event.delete()
+            except Exception as e:
+                logger.warning(f"Failed to delete locked message: {e}")
+
+            user.warns = (user.warns or 0) + 1
+            sender = await event.get_sender()
+            
+            # التحقق إذا وصل للحد الأقصى
+            if user.warns >= max_warns:
+                mute_until = datetime.now() + timedelta(hours=mute_hours)
+                user.warns = 0 # تصفير التحذيرات
+                user.mute_end_time = mute_until
+
+                try:
+                    await client.edit_permissions(
+                        event.chat_id, 
+                        sender.id, 
+                        until_date=mute_until, 
+                        send_messages=False
+                    )
+                    mute_msg = (
+                        f"**🚫 | العضو [{sender.first_name}](tg://user?id={sender.id}) وصل للحد الأقصى من التحذيرات (`{max_warns}`).**\n"
+                        f"**- تم كتمه تلقائيًا لمدة {mute_hours} ساعات.**"
+                    )
+                    await event.respond(mute_msg)
+                except Exception as e:
+                    logger.error(f"Failed to mute user {sender.id}: {e}")
+                    await event.respond(f"**حاولت اكتم [{sender.first_name}](tg://user?id={sender.id}) بس ماكدرت، يمكن صلاحياتي ناقصة.**")
+            else:
+                warn_msg = (
+                    f"**عزيزي [{sender.first_name}](tg://user?id={sender.id})،**\n"
+                    f"**{violation_type} ممنوعة هنا بأمر من الإدارة.**\n\n"
+                    f"**لقد حصلت على تحذير! ({user.warns}/{max_warns})**"
+                )
+                await event.respond(warn_msg)
+
+            await session.commit()
+            return True
+
+    return False
 
 
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
@@ -40,8 +119,10 @@ async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
 
+    if await handle_message_locks(event):
+        return
+
     try:
-        # --- (النسخة النهائية) محرك ترجمة وتوجيه الأوامر ---
         if event.text:
             command_to_process = None
             async with AsyncDBSession() as session:
@@ -53,25 +134,30 @@ async def general_message_handler(event):
             all_aliases.update(user_aliases)
 
             full_text = event.text.strip()
-            # إزالة العلامات مثل ! أو / من بداية الأمر لتطابق القائمة المعطلة
             clean_full_text = re.sub(r"^[!/]", "", full_text)
             
             translated_command = all_aliases.get(clean_full_text)
             
             command_to_process = translated_command if translated_command is not None else clean_full_text
 
-            # --- التحقق من الأوامر المعطلة عالميًا ---
             disabled_cmds = await get_global_setting("disabled_cmds", [])
             cmd_parts = command_to_process.split()
             base_cmd = cmd_parts[0] if cmd_parts else ""
 
             if command_to_process in disabled_cmds or base_cmd in disabled_cmds:
-                # --- (تم التعديل) إضافة رد بدلاً من التجاهل الصامت ---
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
-                return  # إيقاف تنفيذ الأمر بعد الرد
-            # --- نهاية التعديل ---
-
-            if command_to_process.startswith(("قفل", "فتح")):
+                return
+            
+            if command_to_process.startswith("ضع عدد التحذيرات"):
+                await set_warns_limit_logic(event, command_to_process)
+                return
+            elif command_to_process.startswith("ضع وقت الكتم"):
+                await set_mute_duration_logic(event, command_to_process)
+                return
+            elif command_to_process.startswith("الغاء الكتم"): # <-- تمت الإضافة هنا
+                await unmute_logic(event, command_to_process)
+                return
+            elif command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
                 return
             elif command_to_process == "طرد":
@@ -99,7 +185,6 @@ async def general_message_handler(event):
                 await toggle_id_photo_logic(event, command_to_process)
                 return
 
-        # --- منطق الرسائل العادية (غير الأوامر) ---
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
@@ -107,11 +192,9 @@ async def general_message_handler(event):
             user.msg_count = (user.msg_count or 0) + 1
             chat.total_msgs = (chat.total_msgs or 0) + 1
             
-            # --- نظام الردود (تمت إعادة بناء المنطق بالكامل) ---
             if event.text and (chat.settings or {}).get("public_replies_enabled", True):
                 trigger = event.text.lower()
                 
-                # الخطوة 1: التحقق من ردود المناداة الخاصة أولاً
                 BOT_TRIGGERS = ["سروج", "بوت"]
                 if any(b in trigger for b in BOT_TRIGGERS):
                     current_rank = await get_user_rank(event.sender_id, event.chat_id)
@@ -125,7 +208,6 @@ async def general_message_handler(event):
                         await session.commit()
                         return
                 
-                # الخطوة 2: إذا لم يتم إرسال رد خاص، تحقق من الردود العامة
                 all_replies = DEFAULT_REPLIES.copy()
                 custom_replies = chat.custom_replies or {}
                 all_replies.update({k.lower(): v for k, v in custom_replies.items()})
@@ -156,6 +238,7 @@ async def general_message_handler(event):
 
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
+
 
 @client.on(events.ChatAction)
 async def handle_chat_action(event):
