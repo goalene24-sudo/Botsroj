@@ -8,11 +8,11 @@ import config
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from sqlalchemy import func, delete
+from sqlalchemy import func, delete, text # <-- (تمت إضافة text)
 from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
-# --- (تم التعديل) استيراد الدوال المساعدة من ملف utils ---
+# --- استيراد الدوال المساعدة من ملف utils ---
 from .utils import get_uptime_string, get_global_setting, set_global_setting
 
 
@@ -96,17 +96,33 @@ async def sudo_panel_callback(event):
         except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
+    # --- (تم الإصلاح) ---
     elif action == "get_db":
-        await event.answer("📁 | جاري تحضير الملف...")
+        await event.answer("📁 | جاري تحضير ودمج بيانات القاعدة...")
         db_path = "surooj.db"
         
         if not os.path.exists(db_path):
+            # نستخدم .edit() هنا لأننا بدأنا بـ .answer() الذي لا يعرض رسالة مرئية
             return await client.send_message(event.chat_id, f"**❌ | خطأ: لم يتم العثور على الملف `{db_path}`!**")
         
         try:
-            await client.send_file(event.chat_id, db_path, caption="**🗄️ | النسخة الاحتياطية من قاعدة البيانات**")
+            # الخطوة 1: إجراء "نقطة تفتيش" لدمج ملفات wal في الملف الرئيسي
+            async with AsyncDBSession() as session:
+                async with session.begin():
+                    await session.execute(text("PRAGMA wal_checkpoint(FULL);"))
+            
+            # الخطوة 2: إرسال الملف المكتمل والآمن
+            await client.send_file(
+                event.chat_id, 
+                db_path, 
+                caption="**🗄️ | النسخة الاحتياطية المحدثة من قاعدة البيانات**"
+            )
+            # يمكن حذف رسالة "جار التحضير..." بعد الإرسال بنجاح
+            await event.delete()
+
         except Exception as e:
-            await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء إرسال الملف:**\n`{e}`")
+            # في حال حدوث خطأ، نرسل رسالة للمطور
+            await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء تحضير أو إرسال الملف:**\n`{e}`")
         return
 
     elif action == "gban":
@@ -313,9 +329,9 @@ async def sudo_panel_callback(event):
                     button_text_msg = await conv.get_response()
                     button_text = button_text_msg.text.strip()
                     command_data["button_text"] = button_text
-                    command_data["display_mode"] = "edit" # يبقى هذا الحقل للاستخدام المستقبلي
+                    command_data["display_mode"] = "edit" 
                 else:
-                    command_data["display_mode"] = "popup" # يبقى هذا الحقل للاستخدام المستقبلي
+                    command_data["display_mode"] = "popup" 
                 
                 custom_commands = await get_global_setting("custom_commands", {})
                 custom_commands[cmd_name] = command_data
