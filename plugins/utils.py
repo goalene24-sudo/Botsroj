@@ -19,7 +19,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-# --- (جديد) دوال مساعدة مركزية ---
+# --- دوال مساعدة مركزية ---
 async def get_or_create_chat(session, chat_id):
     """الحصول على مجموعة من قاعدة البيانات أو إنشائها مع تهيئة الحقول."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
@@ -52,7 +52,7 @@ async def get_or_create_user(session, chat_id, user_id):
     return user
 
 async def get_global_setting(key, default=None):
-    """(تم النقل هنا) جلب قيمة إعداد عام من قاعدة البيانات."""
+    """جلب قيمة إعداد عام من قاعدة البيانات."""
     async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
@@ -84,6 +84,7 @@ except (ImportError, AttributeError):
     GEMINI_ENABLED = False
 
 # --- متغيرات وقت التشغيل ---
+RPS_GAMES = {} # <-- (تمت إعادة السطر المفقود هنا)
 XO_GAMES = {}
 FLOOD_TRACKER = {}
 
@@ -141,7 +142,6 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
 async def build_main_menu_buttons():
-    """ (تم التعديل) بناء أزرار القائمة الرئيسية مع قراءة الأزرار المخصصة """
     buttons = [
         [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
         [Button.inline("م4 المتجر 🛒", data="shop_menu"), Button.inline("م3 ملفي 👤", data="profile_menu")],
@@ -149,23 +149,16 @@ async def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
-    
     custom_commands = await get_global_setting("custom_commands", {})
     custom_buttons_row = []
-    
     if custom_commands:
         for name, data in custom_commands.items():
             if isinstance(data, dict) and data.get("button_text"):
-                custom_buttons_row.append(
-                    Button.inline(data["button_text"], data=f"ccmd:{name}")
-                )
-    
+                custom_buttons_row.append(Button.inline(data["button_text"], data=f"ccmd:{name}"))
     if custom_buttons_row:
-        # إضافة صف فارغ للفصل
         buttons.append([]) 
         for i in range(0, len(custom_buttons_row), 2):
             buttons.append(custom_buttons_row[i:i + 2])
-            
     return buttons
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
@@ -205,7 +198,6 @@ async def build_protection_menu(chat_id):
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         locks = chat.lock_settings or {}
-
     for name, key in LOCK_TYPES.items():
         is_locked = locks.get(key, False)
         emoji = "🔒" if is_locked else "🔓"
