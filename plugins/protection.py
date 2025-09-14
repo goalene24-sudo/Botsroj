@@ -1,14 +1,39 @@
 import asyncio
 from datetime import datetime, timedelta
 from telethon import events, Button
-from sqlalchemy.future import select
-from sqlalchemy.orm.attributes import flag_modified
-
+from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
+
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
+from sqlalchemy.future import select
+from sqlalchemy import delete
 from database import AsyncDBSession
+from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
+
 # --- استيراد الدوال المساعدة المحدثة ---
-from .utils import check_activation, get_user_rank, Ranks, get_or_create_chat, get_or_create_user
+from .utils import (
+    check_activation, RPS_GAMES, XO_GAMES,
+    build_protection_menu, build_xo_keyboard,
+    check_xo_winner, add_points, has_bot_permission,
+    RIDDLES, BLESS_COUNTERS, get_user_rank, Ranks
+)
+from .utils import get_or_create_chat
+from .games import MAHIBES_GAMES
+from .services import SEERAH_STAGES
+from .hisn_almuslim_data import HISN_ALMUSLIM
+
+TASBEEH_COOLDOWN = {}
+TASBEEH_CLICK_COOLDOWN = 1
+
+async def handle_interactive_callback(event):
+    user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
+    data_parts = query_data.split(':')
+    action = data_parts[0]
+
+    # ... (الكود هنا يبقى كما هو لأننا سنحذف المعالج المسبب للمشكلة)
+    # ملاحظة: هذا الكود لم يكن موجودًا في الملف الذي أرسلته، لذا يبدو أنك أرسلت ملفًا خاطئًا في المرة السابقة
+    # سأقوم بتجاهل هذا الجزء والتركيز على الملف الصحيح الذي أرسلته الآن.
+    pass # placeholder
 
 # --- معالج الكتم المؤقت عبر الأزرار ---
 @client.on(events.CallbackQuery(pattern=b"^mute_"))
@@ -131,8 +156,9 @@ async def list_filtered_words(event):
     await event.reply(message)
 
 
-# --- المعالج الموحد لأوامر الإدارة ---
-@client.on(events.NewMessage(pattern=r"^(حظر|الغاء الحظر|كتم|الغاء الكتم|تحذير|حذف التحذيرات)$"))
+# --- (تم التعديل) المعالج الموحد لأوامر الإدارة ---
+# تم حذف "الغاء الكتم" من هنا لمنع التضارب
+@client.on(events.NewMessage(pattern=r"^(حظر|الغاء الحظر|كتم|تحذير|حذف التحذيرات)$"))
 async def consolidated_admin_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     
@@ -168,9 +194,9 @@ async def consolidated_admin_handler(event):
                 [Button.inline("إلغاء الأمر ❌", data=f"mute_{user_to_manage.id}_-1")]
             ]
             await event.reply(f"**🤫 تريد تكتم [{user_to_manage.first_name}](tg://user?id={user_to_manage.id})؟ اختار المدة:**", buttons=buttons)
-        elif action == "الغاء الكتم":
-            await client.edit_permissions(event.chat_id, user_to_manage, send_messages=True)
-            await event.reply(f"**🗣️ يلا احچي [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
+        
+        # تم حذف منطق "الغاء الكتم" المكرر من هنا
+
         elif action == "تحذير":
             async with AsyncDBSession() as session:
                 user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
@@ -200,6 +226,7 @@ async def consolidated_admin_handler(event):
                     await event.reply(f"**هذا العضو [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) أصلاً ما عنده أي تحذيرات. 😇**")
     except Exception as e:
         await event.reply(f"**ماگدرت اسويها، اكو مشكلة: `{str(e)}`**")
+
 
 @client.on(events.NewMessage(pattern=r"^كتم (\d+)\s*([ديس])$"))
 async def timed_mute_handler(event):
