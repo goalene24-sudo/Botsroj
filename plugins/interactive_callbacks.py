@@ -5,7 +5,7 @@ from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
-# --- (تم التعديل) استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
+# --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
@@ -50,13 +50,21 @@ async def handle_interactive_callback(event):
             await event.edit(buttons=await build_protection_menu(chat_id))
         return
 
+    # --- (تم الإصلاح) ---
     if action == "rps":
-        msg_id = event.message_id
+        # الخطوة 1: قراءة ID الرسالة من البيانات المضمنة في الزر
+        try:
+            msg_id = int(data_parts[4])
+        except (IndexError, ValueError):
+            return await event.answer("🚫 | **حدث خطأ، الزر لا يحتوي على ID اللعبة.**", alert=True)
+
         game = RPS_GAMES.get(msg_id)
         if not game:
             return await event.answer("🚫 | **هذا التحدي قديم أو انتهى.**", alert=True)
 
-        player_choice, p1_id, p2_id = data_parts[1], int(game["p1"]), int(game["p2"])
+        player_choice = data_parts[1]
+        p1_id = int(data_parts[2])
+        p2_id = int(data_parts[3])
 
         if user_id not in [p1_id, p2_id]:
             return await event.answer("🤨 | **هذا التحدي مو إلك!**", alert=True)
@@ -87,7 +95,7 @@ async def handle_interactive_callback(event):
 
             result_text = f"**انتهى التحدي!**\n\n- **{p1_name} اختار:** {p1_e}\n- **{p2_name} اختار:** {p2_e}\n\n**النتيجة:** {winner_text}"
             await event.edit(result_text, buttons=None)
-            del RPS_GAMES[msg_id]
+            if msg_id in RPS_GAMES: del RPS_GAMES[msg_id]
         else:
             await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
         return
@@ -136,10 +144,7 @@ async def handle_interactive_callback(event):
         return
 
     if action == "tasbeeh":
-        sub_action = data_parts[1]
-        zikr = data_parts[2]
-        goal = int(data_parts[3])
-        current = int(data_parts[4])
+        sub_action, zikr, goal, current = data_parts[1], data_parts[2], int(data_parts[3]), int(data_parts[4])
         
         if sub_action == "click":
             now = time.time()
@@ -193,7 +198,6 @@ async def handle_interactive_callback(event):
         else:
             await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
         return
-
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
         msg_id = event.message_id
