@@ -12,7 +12,7 @@ from bot import client
 from database import AsyncDBSession
 from models import GlobalSetting, User 
 # --- استيراد الدوال المساعدة المحدثة ---
-from .utils import check_activation, add_points, XO_GAMES, build_xo_keyboard, check_xo_winner, is_command_enabled, get_or_create_user
+from .utils import check_activation, add_points, XO_GAMES, build_xo_keyboard, check_xo_winner, is_command_enabled, get_or_create_user, get_global_setting
 from .quiz_data import QUIZ_QUESTIONS
 from .millionaire import start_game as start_millionaire_game
 import logging
@@ -119,6 +119,7 @@ async def xo_game_handler(event):
     game_msg = await event.reply(f"**⚔️ لعبة XO بدت! يلا يا أبطال!**\n\n**- لاعب 𝚇:** [{player1.first_name}](tg://user?id={player1.id})\n**- لاعب 𝙾:** [{player2.first_name}](tg://user?id={player2.id})\n\n**هسه السرة مال {player1.first_name} (𝚇)، شوفنا لعبك!**", buttons=board_buttons)
     XO_GAMES[game_msg.id] = game
 
+# --- (تم الإصلاح) ---
 @client.on(events.NewMessage(pattern="^حجره ورقه مقص$"))
 async def rps_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -134,10 +135,32 @@ async def rps_game_handler(event):
         return await event.reply("**شنو السالفة، تريد تتحده نفسك؟ 😂**")
     if player2.bot: 
         return await event.reply("**البوتات متلعب هاي السوالف، شوفلك عضو.**")
-        
-    buttons = [[Button.inline("🗿 حجرة", data=f"rps:rock:{player1.id}:{player2.id}"), Button.inline("📄 ورقة", data=f"rps:paper:{player1.id}:{player2.id}"), Button.inline("✂️ مقص", data=f"rps:scissors:{player1.id}:{player2.id}")]]
-    challenge_msg = await event.reply(f"**⚔️ تحدي كبييير!**\n\n**[{player1.first_name}](tg://user?id={player1.id}) يتحدى [{player2.first_name}](tg://user?id={player2.id})!**\n\n**يلا كل واحد بيكم يختار على السريع... 👀**", buttons=buttons)
-    RPS_GAMES[challenge_msg.id] = {"p1": player1.id, "p2": player2.id, "p1_choice": None, "p2_choice": None, "p1_name": player1.first_name, "p2_name": player2.first_name}
+
+    # الخطوة 1: إرسال رسالة أولية للحصول على ID
+    challenge_msg = await event.reply("**⚔️ | جاي نحضر التحدي...**")
+    msg_id = challenge_msg.id
+
+    # الخطوة 2: إنشاء الأزرار مع تضمين ID الرسالة بداخلها
+    buttons = [[
+        Button.inline("🗿 حجرة", data=f"rps:rock:{player1.id}:{player2.id}:{msg_id}"),
+        Button.inline("📄 ورقة", data=f"rps:paper:{player1.id}:{player2.id}:{msg_id}"),
+        Button.inline("✂️ مقص", data=f"rps:scissors:{player1.id}:{player2.id}:{msg_id}")
+    ]]
+    
+    # الخطوة 3: تخزين بيانات اللعبة باستخدام ID الرسالة
+    RPS_GAMES[msg_id] = {
+        "p1": player1.id, "p2": player2.id, 
+        "p1_choice": None, "p2_choice": None, 
+        "p1_name": player1.first_name, "p2_name": player2.first_name
+    }
+
+    # الخطوة 4: تعديل الرسالة الأولية بالنص والأزرار النهائية
+    final_text = (
+        f"**⚔️ تحدي كبييير!**\n\n"
+        f"**[{player1.first_name}](tg://user?id={player1.id}) يتحدى [{player2.first_name}](tg://user?id={player2.id})!**\n\n"
+        f"**يلا كل واحد بيكم يختار على السريع... 👀**"
+    )
+    await challenge_msg.edit(final_text, buttons=buttons)
 
 @client.on(events.NewMessage(pattern="^كويز$"))
 async def start_quiz_handler(event):
@@ -218,7 +241,7 @@ async def couple_of_the_day_handler(event):
                 
             user1, user2 = random.sample(real_users, 2)
             
-            settings["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.first_name}
+            settings["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.name}
             chat.settings = settings
             flag_modified(chat, "settings")
             await session.commit()
