@@ -7,13 +7,13 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     UniqueConstraint,
-    DateTime # <-- تمت الإضافة هنا
+    DateTime
 )
-from sqlalchemy.sql import func # <-- تمت الإضافة هنا
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
 
-# --- جدول للإعدادات العامة للبوت (تم تصحيح الاسم) ---
+# --- جدول للإعدادات العامة للبوت ---
 class GlobalSetting(Base):
     __tablename__ = "global_settings"
     
@@ -56,12 +56,17 @@ class User(Base):
     custom_title = Column(String, nullable=True)
     rank = Column(Integer, default=0)
     
+    # --- (تمت الإضافة) حقل جديد لتخزين وقت انتهاء الكتم ---
+    mute_end_time = Column(DateTime, nullable=True)
+    
     achievements = Column(JSON, default=[]) 
     inventory = Column(JSON, default={})
     
     chat = relationship("Chat", back_populates="users")
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
+
+# --- (بقية الكود يبقى كما هو) ---
 
 class Alias(Base):
     __tablename__ = "aliases"
@@ -132,7 +137,6 @@ class Lock(Base):
     is_locked = Column(Boolean, default=False)
     __table_args__ = (UniqueConstraint('chat_id', 'lock_type', name='_lock_chat_type_uc'),)
 
-# --- (تمت الإضافة) جدول جديد لتخزين ألعاب حجرة ورقة مقص ---
 class RPSGame(Base):
     __tablename__ = "rps_games"
     
