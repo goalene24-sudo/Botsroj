@@ -12,38 +12,9 @@ from sqlalchemy import func, delete
 from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
-# --- استيراد الدوال المساعدة ---
-from .utils import get_uptime_string
+# --- (تم التعديل) استيراد الدوال المساعدة من ملف utils ---
+from .utils import get_uptime_string, get_global_setting, set_global_setting
 
-# --- دوال مساعدة لإدارة الإعدادات العامة في قاعدة البيانات ---
-async def get_global_setting(key, default=None):
-    """جلب قيمة إعداد عام من قاعدة البيانات."""
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
-        setting = result.scalar_one_or_none()
-        if setting and setting.value:
-            try:
-                return json.loads(setting.value)
-            except json.JSONDecodeError:
-                return setting.value
-        return default
-
-async def set_global_setting(key, value):
-    """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
-    async with AsyncDBSession() as session:
-        if isinstance(value, (dict, list)):
-            value_to_store = json.dumps(value, ensure_ascii=False)
-        else:
-            value_to_store = str(value)
-
-        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
-        setting = result.scalar_one_or_none()
-        if setting:
-            setting.value = value_to_store
-        else:
-            new_setting = GlobalSetting(key=key, value=value_to_store)
-            session.add(new_setting)
-        await session.commit()
 
 # --- الدالة الرئيسية لبناء أزرار لوحة التحكم ---
 def build_sudo_panel():
@@ -342,9 +313,9 @@ async def sudo_panel_callback(event):
                     button_text_msg = await conv.get_response()
                     button_text = button_text_msg.text.strip()
                     command_data["button_text"] = button_text
-                    command_data["display_mode"] = "edit"
+                    command_data["display_mode"] = "edit" # يبقى هذا الحقل للاستخدام المستقبلي
                 else:
-                    command_data["display_mode"] = "popup"
+                    command_data["display_mode"] = "popup" # يبقى هذا الحقل للاستخدام المستقبلي
                 
                 custom_commands = await get_global_setting("custom_commands", {})
                 custom_commands[cmd_name] = command_data
