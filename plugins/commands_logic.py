@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
-import config # <-- (تمت الإضافة هنا)
+import config
 from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled
 from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, Vip
@@ -45,33 +45,78 @@ LOCK_TYPES_MAP = {
     "الانكليزيه": "english", "التعديل": "edit",
 }
 
+# --- (تم التعديل بالكامل) ---
 async def lock_unlock_logic(event, command_text):
     try:
-        if not await has_bot_permission(event): return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+        if not await has_bot_permission(event): 
+            return await event.reply("** جماعت الأدمنية بس همه يكدرون يستخدمون هذا الأمر 😉**")
+
         match = re.match(r"^(قفل|فتح) (.+)$", command_text)
-        if not match: return 
+        if not match: 
+            return
+
         action, target = match.group(1), match.group(2).strip()
         lock_key = LOCK_TYPES_MAP.get(target)
-        if not lock_key: return await event.reply(f"**⚠️ | الأمر `{target}` غير معروف.**")
+
+        if not lock_key:
+            return await event.reply(f"**شنو هاي `{target}`؟ ماعرفها والله 🧐**")
+
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+
+        # --- قواميس الردود باللهجة العراقية ---
+        LOCK_REPLIES = {
+            "الصور": "بعد محد يكدر يدز صور 😠",
+            "الروابط": "ممنوع نشر الروابط بعد خوش؟ 😉",
+            "التوجيه": "سديت التوجيه حتى لتدوخونا 😒",
+            "المعرف": "بعد محد يكدر يدز معرفات هنا 🤫",
+            "الملصقات": "كافي ملصقات دوختونا 😠",
+            "البوتات": "ممنوع اضافه بوتات بدون اذني 😡",
+            "الدردشه": "قفلت الدردشه محد يحجي بعد 🤫",
+        }
+        UNLOCK_REPLIES = {
+            "الصور": "هسه تكدرون دزون صور براحتكم 🏞️",
+            "الروابط": "يلا عادي نشرو روابط 👍",
+            "التوجيه": "فتحت التوجيه، وجهو براحتكم ↪️",
+            "المعرف": "يلا عادي دزو معرفات هسه.",
+            "الملصقات": "فتحته للملصقات، طلعو إبداعكم 😂",
+            "البوتات": "فتحت اضافه البوتات بس ديرو بالكم 🤔",
+            "الدردشه": "فتحت الدردشه سولفو براحتكم 🥰",
+        }
+
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
-            if chat.lock_settings is None: chat.lock_settings = {}
-            new_lock_settings, current_state_is_locked = chat.lock_settings.copy(), chat.lock_settings.get(lock_key, False)
+            if chat.lock_settings is None: 
+                chat.lock_settings = {}
+                
+            new_lock_settings = chat.lock_settings.copy()
+            current_state_is_locked = chat.lock_settings.get(lock_key, False)
+
             if action == "قفل":
-                if current_state_is_locked: return await event.reply(f"**🔒 | {target} مقفلة بالفعل.**")
+                if current_state_is_locked:
+                    return await event.reply(f"**يابه هيه {target} اصلاً مقفولة 😒**")
+                
                 new_lock_settings[lock_key] = True
-                await event.reply(f"**✅ | تم قفل {target} بنجاح.**")
-            else:
-                if not current_state_is_locked: return await event.reply(f"**🔓 | {target} مفتوحة بالفعل.**")
+                fun_phrase = LOCK_REPLIES.get(target, f"بعد محد يكدر يستخدم {target} هنا.")
+                reply_msg = f"**🔒 | تم قفل {target} بواسطة {actor_mention}**\n\n**- {fun_phrase}**"
+                await event.reply(reply_msg)
+            else: # "فتح"
+                if not current_state_is_locked:
+                    return await event.reply(f"**ولك هيه {target} اصلاً مفتوحة شبيك 😂**")
+
                 new_lock_settings[lock_key] = False
-                await event.reply(f"**✅ | تم فتح {target} بنجاح.**")
+                fun_phrase = UNLOCK_REPLIES.get(target, f"يلا عادي استخدموا {target} هسه.")
+                reply_msg = f"**🔓 | تم فتح {target} بواسطة {actor_mention}**\n\n**- {fun_phrase}**"
+                await event.reply(reply_msg)
+            
             chat.lock_settings = new_lock_settings
             await session.commit()
+            
     except Exception as e:
         logger.error(f"استثناء في lock_unlock_logic: {e}", exc_info=True)
-        await event.reply("حدث خطأ، جرب مرة أخرى.")
+        await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
 
-# --- (تم التعديل هنا) ---
+
 async def kick_logic(event, command_text):
     try:
         if not await has_bot_permission(event): 
@@ -84,11 +129,9 @@ async def kick_logic(event, command_text):
         user_to_kick = await reply.get_sender()
         me = await event.client.get_me()
 
-        # التحقق من طرد البوت
         if user_to_kick.id == me.id:
             return await event.reply("✦تريدني اطرد نفسي شدتحس بله 😒✦")
 
-        # التحقق من طرد المطور
         if user_to_kick.id in config.SUDO_USERS:
             return await event.reply("✦دي..ما اكدر اطرد مطوري..دعبل✦")
             
