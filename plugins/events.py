@@ -18,7 +18,7 @@ from models import Alias, MessageHistory
 from .utils import (
     check_activation, PERCENT_COMMANDS, GAME_COMMANDS, ADMIN_COMMANDS,
     FLOOD_TRACKER, get_user_rank, Ranks, get_or_create_chat, get_or_create_user,
-    get_global_setting  # <-- (تمت الإضافة هنا)
+    get_global_setting
 )
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
@@ -60,16 +60,16 @@ async def general_message_handler(event):
             
             command_to_process = translated_command if translated_command is not None else clean_full_text
 
-            # --- (تمت الإضافة) التحقق من الأوامر المعطلة عالميًا ---
+            # --- التحقق من الأوامر المعطلة عالميًا ---
             disabled_cmds = await get_global_setting("disabled_cmds", [])
-            # نتحقق من الأمر الأساسي (الكلمة الأولى) وكذلك الأمر كاملاً
             cmd_parts = command_to_process.split()
             base_cmd = cmd_parts[0] if cmd_parts else ""
 
             if command_to_process in disabled_cmds or base_cmd in disabled_cmds:
-                logger.info(f"Command '{command_to_process}' is globally disabled. Ignoring.")
-                return  # إيقاف تنفيذ الأمر إذا كان معطلاً
-            # --- نهاية الإضافة ---
+                # --- (تم التعديل) إضافة رد بدلاً من التجاهل الصامت ---
+                await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
+                return  # إيقاف تنفيذ الأمر بعد الرد
+            # --- نهاية التعديل ---
 
             if command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
