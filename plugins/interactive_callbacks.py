@@ -3,10 +3,13 @@ import random
 from telethon import events, Button
 from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.future import select
+from sqlalchemy import delete
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
+from models import RPSGame # <-- تمت إضافة RPSGame
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
@@ -50,54 +53,69 @@ async def handle_interactive_callback(event):
             await event.edit(buttons=await build_protection_menu(chat_id))
         return
 
-    # --- (تم الإصلاح) ---
+    # --- (تم الإصلاح النهائي بالكامل باستخدام قاعدة البيانات) ---
     if action == "rps":
-        # الخطوة 1: قراءة ID الرسالة من البيانات المضمنة في الزر
-        try:
-            msg_id = int(data_parts[4])
-        except (IndexError, ValueError):
-            return await event.answer("🚫 | **حدث خطأ، الزر لا يحتوي على ID اللعبة.**", alert=True)
-
-        game = RPS_GAMES.get(msg_id)
-        if not game:
-            return await event.answer("🚫 | **هذا التحدي قديم أو انتهى.**", alert=True)
-
-        player_choice = data_parts[1]
-        p1_id = int(data_parts[2])
-        p2_id = int(data_parts[3])
-
-        if user_id not in [p1_id, p2_id]:
-            return await event.answer("🤨 | **هذا التحدي مو إلك!**", alert=True)
+        msg_id = event.message_id
         
-        player_key = "p1_choice" if user_id == p1_id else "p2_choice"
-        if game[player_key]:
-            return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
+        async with AsyncDBSession() as session:
+            # البحث عن اللعبة في قاعدة البيانات
+            result = await session.execute(select(RPSGame).where(RPSGame.message_id == msg_id))
+            game = result.scalar_one_or_none()
 
-        game[player_key] = player_choice
-        
-        if game["p1_choice"] and game["p2_choice"]:
-            p1_name, p2_name = game["p1_name"], game["p2_name"]
-            p1_c, p2_c = game["p1_choice"], game["p2_choice"]
-            
-            choice_emojis = {"rock": "🗿", "paper": "📄", "scissors": "✂️"}
-            p1_e, p2_e = choice_emojis[p1_c], choice_emojis[p2_c]
+            if not game:
+                return await event.answer("🚫 | **هذا التحدي قديم أو انتهى.**", alert=True)
 
-            win_conditions = {("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")}
+            p1_id, p2_id = game.player1_id, game.player2_id
             
-            if p1_c == p2_c:
-                winner_text = "**تعادل! ماكو فايز.**"
-            elif (p1_c, p2_c) in win_conditions:
-                winner_text = f"**الف مبروك! [{p1_name}](tg://user?id={p1_id}) فاز.**"
-                await add_points(chat_id, p1_id, 25)
+            # استخراج اللاعبين من بيانات الزر للتحقق الأولي
+            p1_id_from_data = int(data_parts[2])
+            p2_id_from_data = int(data_parts[3])
+
+            if user_id not in [p1_id_from_data, p2_id_from_data]:
+                return await event.answer("🤨 | **هذا التحدي مو إلك!**", alert=True)
+            
+            player_choice = data_parts[1]
+            
+            # تحديد أي لاعب ضغط على الزر وتحديث اختياره
+            if user_id == p1_id:
+                if game.player1_choice:
+                    return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
+                game.player1_choice = player_choice
+            else: # user_id == p2_id
+                if game.player2_choice:
+                    return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
+                game.player2_choice = player_choice
+            
+            # التحقق إذا كان كلا اللاعبين قد اختارا
+            if game.player1_choice and game.player2_choice:
+                p1_name, p2_name = game.player1_name, game.player2_name
+                p1_c, p2_c = game.player1_choice, game.player2_choice
+                
+                choice_emojis = {"rock": "🗿", "paper": "📄", "scissors": "✂️"}
+                p1_e, p2_e = choice_emojis[p1_c], choice_emojis[p2_c]
+
+                win_conditions = {("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")}
+                
+                if p1_c == p2_c:
+                    winner_text = "**تعادل! ماكو فايز.**"
+                elif (p1_c, p2_c) in win_conditions:
+                    winner_text = f"**الف مبروك! [{p1_name}](tg://user?id={p1_id}) فاز.**"
+                    await add_points(chat_id, p1_id, 25)
+                else:
+                    winner_text = f"**الف مبروك! [{p2_name}](tg://user?id={p2_id}) فاز.**"
+                    await add_points(chat_id, p2_id, 25)
+
+                result_text = f"**انتهى التحدي!**\n\n- **{p1_name} اختار:** {p1_e}\n- **{p2_name} اختار:** {p2_e}\n\n**النتيجة:** {winner_text}"
+                await event.edit(result_text, buttons=None)
+                
+                # حذف اللعبة من قاعدة البيانات بعد انتهائها
+                await session.execute(delete(RPSGame).where(RPSGame.message_id == msg_id))
+
             else:
-                winner_text = f"**الف مبروك! [{p2_name}](tg://user?id={p2_id}) فاز.**"
-                await add_points(chat_id, p2_id, 25)
-
-            result_text = f"**انتهى التحدي!**\n\n- **{p1_name} اختار:** {p1_e}\n- **{p2_name} اختار:** {p2_e}\n\n**النتيجة:** {winner_text}"
-            await event.edit(result_text, buttons=None)
-            if msg_id in RPS_GAMES: del RPS_GAMES[msg_id]
-        else:
-            await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
+                await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
+            
+            # حفظ التغييرات في قاعدة البيانات
+            await session.commit()
         return
 
     if action == "xo":
@@ -198,6 +216,9 @@ async def handle_interactive_callback(event):
         else:
             await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
         return
+    
+    # ... (الكود المتبقي يبقى كما هو)
+
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
         msg_id = event.message_id
@@ -276,10 +297,6 @@ async def handle_interactive_callback(event):
             buttons = Button.inline("🔙 رجوع إلى القائمة", data="seerah_main")
             await event.edit(f"**{text}**", buttons=buttons)
         await event.answer()
-        return
-
-    if action == "asma_husna":
-        # ... (منطق أسماء الله الحسنى لا يتغير) ...
         return
         
     if action == "show_rules":
