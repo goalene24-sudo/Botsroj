@@ -1,7 +1,6 @@
 import json
 from telethon import Button
 import config
-# from bot import client  # <-- تم حذف هذا السطر من هنا لمنع الخطأ الدائري
 from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
@@ -12,19 +11,49 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.future import select
 from database import AsyncDBSession
 from models import (
-    User, Vip, SecondaryDev, Creator, BotAdmin, Chat, 
+    User, Vip, SecondaryDev, Creator, BotAdmin, Chat,  
     CommandSetting, Lock, CustomCommand, GlobalSetting
 )
 
-# --- (جديد) دوال مساعدة مركزية ---
+# --- (جديد) دوال الإعدادات العامة - تم نقلها هنا لتكون مركزية ---
+async def get_global_setting(key, default=None):
+    """جلب قيمة إعداد عام من قاعدة البيانات."""
+    async with AsyncDBSession() as session:
+        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting and setting.value:
+            try:
+                return json.loads(setting.value)
+            except json.JSONDecodeError:
+                return setting.value
+        return default
+
+async def set_global_setting(key, value):
+    """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
+    async with AsyncDBSession() as session:
+        if isinstance(value, (dict, list)):
+            value_to_store = json.dumps(value, ensure_ascii=False)
+        else:
+            value_to_store = str(value)
+
+        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = value_to_store
+        else:
+            new_setting = GlobalSetting(key=key, value=value_to_store)
+            session.add(new_setting)
+        await session.commit()
+
+# --- دوال مساعدة مركزية ---
 async def get_or_create_chat(session, chat_id):
     """الحصول على مجموعة من قاعدة البيانات أو إنشائها مع تهيئة الحقول."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat = result.scalar_one_or_none()
     if not chat:
         chat = Chat(
-            id=chat_id, 
-            settings={}, 
+            id=chat_id,  
+            settings={},  
             lock_settings={},
             filtered_words=[],
             custom_replies={}
@@ -153,6 +182,7 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
+# --- (تم الإصلاح) ---
 async def build_main_menu_buttons():
     buttons = [
         [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
@@ -161,14 +191,23 @@ async def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(CustomCommand))
-        custom_commands = result.scalars().all()
     
-    custom_buttons_row = [Button.inline(cmd.name.capitalize(), data=f"ccmd:{cmd.name}") for cmd in custom_commands if cmd.show_button]
+    # --- (جديد) قراءة الأوامر المخصصة من المكان الصحيح ---
+    custom_commands_dict = await get_global_setting("custom_commands", {})
+    
+    custom_buttons_row = []
+    if custom_commands_dict:
+        for name, data in custom_commands_dict.items():
+            # التأكد من وجود مفتاح 'button_text'
+            if "button_text" in data and data["button_text"]:
+                button = Button.inline(data["button_text"], data=f"custom_cmd:{name}")
+                custom_buttons_row.append(button)
+
     if custom_buttons_row:
+        # إضافة الأزرار المخصصة سطرًا سطرًا، كل سطر يحتوي على زرين
         for i in range(0, len(custom_buttons_row), 2):
             buttons.append(custom_buttons_row[i:i + 2])
+            
     return buttons
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
