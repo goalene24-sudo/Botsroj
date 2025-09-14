@@ -8,6 +8,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
+import config # <-- (تمت الإضافة هنا)
 from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled
 from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, Vip
@@ -70,18 +71,37 @@ async def lock_unlock_logic(event, command_text):
         logger.error(f"استثناء في lock_unlock_logic: {e}", exc_info=True)
         await event.reply("حدث خطأ، جرب مرة أخرى.")
 
+# --- (تم التعديل هنا) ---
 async def kick_logic(event, command_text):
     try:
-        if not await has_bot_permission(event): return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+        if not await has_bot_permission(event): 
+            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
+            
         reply = await event.get_reply_message()
-        if not reply: return await event.reply("**⚠️ | يجب الرد على رسالة.**")
-        user_to_kick, actor = await reply.get_sender(), await event.get_sender()
+        if not reply: 
+            return await event.reply("**⚠️ | يجب الرد على رسالة.**")
+            
+        user_to_kick = await reply.get_sender()
         me = await event.client.get_me()
-        if user_to_kick.id in [me.id, actor.id]: return
-        actor_rank, target_rank = await get_user_rank(actor.id, event.chat_id), await get_user_rank(user_to_kick.id, event.chat_id)
-        if target_rank >= actor_rank: return await event.reply("**❌ | لا يمكنك طرد رتبة أعلى منك أو مساوية لك.**")
+
+        # التحقق من طرد البوت
+        if user_to_kick.id == me.id:
+            return await event.reply("✦تريدني اطرد نفسي شدتحس بله 😒✦")
+
+        # التحقق من طرد المطور
+        if user_to_kick.id in config.SUDO_USERS:
+            return await event.reply("✦دي..ما اكدر اطرد مطوري..دعبل✦")
+            
+        actor = await event.get_sender()
+        actor_rank = await get_user_rank(actor.id, event.chat_id)
+        target_rank = await get_user_rank(user_to_kick.id, event.chat_id)
+        
+        if target_rank >= actor_rank: 
+            return await event.reply("**❌ | لا يمكنك طرد رتبة أعلى منك أو مساوية لك.**")
+            
         await event.client.kick_participant(event.chat_id, user_to_kick.id)
         await event.reply(f"**✅ | تم طرد [{user_to_kick.first_name}](tg://user?id={user_to_kick.id}) بنجاح.**")
+        
     except Exception as e:
         logger.error(f"استثناء في kick_logic: {e}", exc_info=True)
         await event.reply(f"**حدث خطأ:**\n`{e}`")
