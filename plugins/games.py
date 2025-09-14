@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from database import AsyncDBSession
-from models import GlobalSetting, User 
+from models import GlobalSetting, User, RPSGame # <-- تمت إضافة RPSGame
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, XO_GAMES, build_xo_keyboard, check_xo_winner, is_command_enabled, get_or_create_user, get_global_setting
 from .quiz_data import QUIZ_QUESTIONS
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # --- متغيرات خاصة بالألعاب (لا تحتاج قاعدة بيانات) ---
 MAHIBES_GAMES = {}
 CURRENT_QUIZZES = {}
-RPS_GAMES = {}
+RPS_GAMES = {} # <-- سيبقى هذا حاليًا لكن اللعبة لن تستخدمه بعد الآن
 LUCK_BOX_MESSAGES = [
     "فتحت الصندوق و لگيت بي ورقة مكتوب عليها 'حاول مرة أخرى'... بس الخط حلو!",
     "الصندوق طلع فارغ، بس بي ريحة دولمة. بالعافية عاللي أكلها قبلك.",
@@ -32,8 +32,6 @@ LUCK_BOX_MESSAGES = [
 ]
 
 async def is_globally_disabled(command_name):
-    # This function is a bit redundant now that events.py handles it,
-    # but we'll keep it for now to avoid breaking anything.
     disabled_list = await get_global_setting("disabled_cmds", [])
     return command_name in disabled_list
 
@@ -119,7 +117,7 @@ async def xo_game_handler(event):
     game_msg = await event.reply(f"**⚔️ لعبة XO بدت! يلا يا أبطال!**\n\n**- لاعب 𝚇:** [{player1.first_name}](tg://user?id={player1.id})\n**- لاعب 𝙾:** [{player2.first_name}](tg://user?id={player2.id})\n\n**هسه السرة مال {player1.first_name} (𝚇)، شوفنا لعبك!**", buttons=board_buttons)
     XO_GAMES[game_msg.id] = game
 
-# --- (تم الإصلاح) ---
+# --- (تم التعديل بالكامل لاستخدام قاعدة البيانات) ---
 @client.on(events.NewMessage(pattern="^حجره ورقه مقص$"))
 async def rps_game_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -136,31 +134,37 @@ async def rps_game_handler(event):
     if player2.bot: 
         return await event.reply("**البوتات متلعب هاي السوالف، شوفلك عضو.**")
 
-    # الخطوة 1: إرسال رسالة أولية للحصول على ID
-    challenge_msg = await event.reply("**⚔️ | جاي نحضر التحدي...**")
-    msg_id = challenge_msg.id
-
-    # الخطوة 2: إنشاء الأزرار مع تضمين ID الرسالة بداخلها
-    buttons = [[
-        Button.inline("🗿 حجرة", data=f"rps:rock:{player1.id}:{player2.id}:{msg_id}"),
-        Button.inline("📄 ورقة", data=f"rps:paper:{player1.id}:{player2.id}:{msg_id}"),
-        Button.inline("✂️ مقص", data=f"rps:scissors:{player1.id}:{player2.id}:{msg_id}")
-    ]]
-    
-    # الخطوة 3: تخزين بيانات اللعبة باستخدام ID الرسالة
-    RPS_GAMES[msg_id] = {
-        "p1": player1.id, "p2": player2.id, 
-        "p1_choice": None, "p2_choice": None, 
-        "p1_name": player1.first_name, "p2_name": player2.first_name
-    }
-
-    # الخطوة 4: تعديل الرسالة الأولية بالنص والأزرار النهائية
-    final_text = (
+    # إرسال الرسالة والحصول على ID الخاص بها
+    challenge_msg = await event.reply(
         f"**⚔️ تحدي كبييير!**\n\n"
         f"**[{player1.first_name}](tg://user?id={player1.id}) يتحدى [{player2.first_name}](tg://user?id={player2.id})!**\n\n"
         f"**يلا كل واحد بيكم يختار على السريع... 👀**"
     )
-    await challenge_msg.edit(final_text, buttons=buttons)
+    msg_id = challenge_msg.id
+
+    # إنشاء وتخزين اللعبة في قاعدة البيانات
+    new_game = RPSGame(
+        message_id=msg_id,
+        chat_id=event.chat_id,
+        player1_id=player1.id,
+        player2_id=player2.id,
+        player1_name=player1.first_name,
+        player2_name=player2.first_name
+    )
+    async with AsyncDBSession() as session:
+        session.add(new_game)
+        await session.commit()
+
+    # إنشاء الأزرار (لم نعد بحاجة لتضمين ID الرسالة هنا)
+    buttons = [[
+        Button.inline("🗿 حجرة", data=f"rps:rock:{player1.id}:{player2.id}"),
+        Button.inline("📄 ورقة", data=f"rps:paper:{player1.id}:{player2.id}"),
+        Button.inline("✂️ مقص", data=f"rps:scissors:{player1.id}:{player2.id}")
+    ]]
+    
+    # تعديل الرسالة لإضافة الأزرار
+    await challenge_msg.edit(challenge_msg.text, buttons=buttons)
+
 
 @client.on(events.NewMessage(pattern="^كويز$"))
 async def start_quiz_handler(event):
@@ -241,7 +245,7 @@ async def couple_of_the_day_handler(event):
                 
             user1, user2 = random.sample(real_users, 2)
             
-            settings["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.name}
+            settings["daily_couple"] = {"couple": [user1.id, user2.id], "date": now.strftime("%Y-%m-%d"), "user1_name": user1.first_name, "user2_name": user2.first_name}
             chat.settings = settings
             flag_modified(chat, "settings")
             await session.commit()
