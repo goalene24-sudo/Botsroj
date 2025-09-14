@@ -1,5 +1,3 @@
-# models.py
-
 from sqlalchemy import (
     Column,
     Integer,
@@ -9,7 +7,9 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     UniqueConstraint,
+    DateTime # <-- تمت الإضافة هنا
 )
+from sqlalchemy.sql import func # <-- تمت الإضافة هنا
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -18,7 +18,7 @@ class GlobalSetting(Base):
     __tablename__ = "global_settings"
     
     key = Column(String, primary_key=True)
-    value = Column(String) # تم التغيير من JSON إلى String ليتوافق مع confess.py
+    value = Column(String)
 
 # --- جدول المجموعات (Chats) ---
 class Chat(Base):
@@ -28,10 +28,7 @@ class Chat(Base):
     is_active = Column(Boolean, default=True)
     total_msgs = Column(Integer, default=0)
     
-    # --- (جديد) حقل JSON لتخزين جميع إعدادات المجموعة ---
     settings = Column(JSON, default={})
-    # سيحتوي هذا على: dhikr_enabled, dhikr_interval, max_warns, welcome_msg, dev_reply, etc.
-    
     lock_settings = Column(JSON, default={})
     filtered_words = Column(JSON, default=[])
     custom_replies = Column(JSON, default={})
@@ -40,7 +37,6 @@ class Chat(Base):
     aliases = relationship("Alias", back_populates="chat", cascade="all, delete-orphan")
     message_history = relationship("MessageHistory", back_populates="chat", cascade="all, delete-orphan")
 
-# (تمت الإضافة) هذا السطر سيقوم بحل خطأ استيراد 'Group'
 Group = Chat
 
 # --- جدول المستخدمين في المجموعات (Users) ---
@@ -54,7 +50,7 @@ class User(Base):
     msg_count = Column(Integer, default=0)
     points = Column(Integer, default=0)
     sahaqat = Column(Integer, default=0)
-    warns = Column(Integer, default=0) # <-- (جديد) عمود للتحذيرات
+    warns = Column(Integer, default=0)
     join_date = Column(String)
     bio = Column(String, default="لم يتم تعيين نبذة بعد.")
     custom_title = Column(String, nullable=True)
@@ -67,7 +63,6 @@ class User(Base):
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
 
-# --- (لا تغيير على الجداول التالية) ---
 class Alias(Base):
     __tablename__ = "aliases"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -83,8 +78,6 @@ class MessageHistory(Base):
     msg_id = Column(BigInteger, nullable=False)
     msg_type = Column(String)
     chat = relationship("Chat", back_populates="message_history")
-
-# --- (تمت الإضافة) الجداول المفقودة التي تم استنتاجها ---
 
 class Vip(Base):
     __tablename__ = "vips"
@@ -139,5 +132,18 @@ class Lock(Base):
     is_locked = Column(Boolean, default=False)
     __table_args__ = (UniqueConstraint('chat_id', 'lock_type', name='_lock_chat_type_uc'),)
 
+# --- (تمت الإضافة) جدول جديد لتخزين ألعاب حجرة ورقة مقص ---
+class RPSGame(Base):
+    __tablename__ = "rps_games"
+    
+    message_id = Column(BigInteger, primary_key=True)
+    chat_id = Column(BigInteger, nullable=False)
+    player1_id = Column(BigInteger, nullable=False)
+    player2_id = Column(BigInteger, nullable=False)
+    player1_name = Column(String, nullable=False)
+    player2_name = Column(String, nullable=False)
+    player1_choice = Column(String, nullable=True)
+    player2_choice = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 print(">> تم تحميل نماذج البيانات (الجداول) النهائية والشاملة بنجاح. <<")
