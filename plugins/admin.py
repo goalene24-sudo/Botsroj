@@ -6,7 +6,6 @@ import json
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-# (تم التعديل) استيراد الجلسة الغير متزامنة الجديدة
 from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User
 
@@ -14,7 +13,6 @@ from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User
 from .utils import check_activation, has_bot_permission, get_user_rank, Ranks, build_protection_menu
 import logging
 
-# إعداد السجل
 logger = logging.getLogger(__name__)
 
 # --- دوال مساعدة لإدارة إعدادات المجموعة ---
@@ -28,24 +26,6 @@ async def get_or_create_chat(session, chat_id):
         session.add(chat)
         await session.commit()
     return chat
-
-async def get_or_create_user(session, user_id, username=None, first_name=None, last_name=None):
-    """الحصول على مستخدم من قاعدة البيانات أو إنشاء واحد جديد إذا لم يكن موجودًا."""
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        user = User(id=user_id, username=username, first_name=first_name, last_name=last_name)
-        session.add(user)
-        await session.commit()
-    return user
-
-async def get_chat_setting(chat_id, key, default=None):
-    """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
-    async with AsyncDBSession() as session:
-        chat = await get_or_create_chat(session, chat_id)
-        if chat.settings is None:
-            chat.settings = {}
-        return chat.settings.get(key, default)
 
 async def set_chat_setting(chat_id, key, value):
     """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
@@ -70,8 +50,7 @@ async def del_chat_setting(chat_id, key):
             chat.settings = new_settings
             await session.commit()
 
-# --- (تم حذف المعالجات المكررة من هنا) ---
-
+# --- الأوامر المتبقية والفريدة لهذا الملف ---
 
 @client.on(events.NewMessage(pattern="^ضع قوانين$"))
 async def set_rules_handler(event):
@@ -88,26 +67,7 @@ async def set_rules_handler(event):
         await event.reply("**تأخرت هواي ومادزيت شي. من تريد تعدل صيحني مرة لخ.**")
     except Exception as e:
         logger.error(f"استثناء في set_rules_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-@client.on(events.NewMessage(pattern="^القوانين$"))
-async def get_rules_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        rules = await get_chat_setting(event.chat_id, "rules")
-        if rules:
-            await event.reply(f"**📜 قوانين المجموعة:**\n\n**{rules}**")
-        else:
-            await event.reply("**لم يتم وضع قوانين لهذه المجموعة بعد.**")
-    except Exception as e:
-        logger.error(f"استثناء في get_rules_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
 
 @client.on(events.NewMessage(pattern="^حذف القوانين$"))
 async def delete_rules_handler(event):
@@ -123,10 +83,7 @@ async def delete_rules_handler(event):
             await event.reply("**هي أصلاً ماكو قوانين حتى أحذفها.**")
     except Exception as e:
         logger.error(f"استثناء في delete_rules_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
 
 @client.on(events.NewMessage(pattern="^(ضع ترحيب|حذف الترحيب)$"))
 async def welcome_handler(event):
@@ -152,31 +109,7 @@ async def welcome_handler(event):
         await event.reply("**تأخرت هواي ومادزيت شي. حاول مرة لخ.**")
     except Exception as e:
         logger.error(f"استثناء في welcome_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-@client.on(events.NewMessage(pattern="^(تشغيل|تعطيل) صورة ايدي$"))
-async def toggle_id_photo_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
-            return await event.reply("**🚫 | هذا الأمر للمشرفين فما فوق.**")
-        
-        action = event.pattern_match.group(1)
-        if action == "تشغيل":
-            await set_chat_setting(event.chat_id, "id_photo_enabled", True)
-            await event.reply("**✅ | تم تشغيل عرض الصورة في أمر ايدي.**")
-        else:
-            await set_chat_setting(event.chat_id, "id_photo_enabled", False)
-            await event.reply("**☑️ | تم تعطيل عرض الصورة في أمر ايدي.**")
-    except Exception as e:
-        logger.error(f"استثناء في toggle_id_photo_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
 
 @client.on(events.NewMessage(pattern=r"^(رفع مشرف|تنزيل مشرف)$"))
 async def promote_demote_handler(event):
@@ -220,10 +153,7 @@ async def promote_demote_handler(event):
             await event.reply(f"**حدث خطأ:**\n`{str(e)}`")
     except Exception as e:
         logger.error(f"استثناء في promote_demote_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
 
 @client.on(events.NewMessage(pattern="^(رفع مطور ثانوي|تنزيل مطور ثانوي|المطورين الثانويين|مسح المطورين الثانويين)$"))
 async def secondary_dev_handler(event):
@@ -281,10 +211,7 @@ async def secondary_dev_handler(event):
             await event.reply(list_text)
     except Exception as e:
         logger.error(f"استثناء في secondary_dev_handler: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
 
 @client.on(events.NewMessage(pattern=r"^ضع حجم الكلايش (\d+)$"))
 async def set_long_text_size(event):
@@ -305,38 +232,4 @@ async def set_long_text_size(event):
         await event.reply(f"✅ **تم تحديث الإعدادات بنجاح.**\nسيتم اعتبار أي رسالة أطول من **{size}** حرف 'كليشة'.")
     except Exception as e:
         logger.error(f"استثناء في set_long_text_size: {e}", exc_info=True)
-        try:
-            await event.reply("حدث خطأ، جرب مرة أخرى.")
-        except:
-            pass
-
-@client.on(events.NewMessage(pattern=r"^(نداء|@all)(?: ([\s\S]*))?$"))
-async def tag_all_handler(event):
-    try:
-        if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
-            return await event.reply("**هذا الأمر للمشرفين فقط.**")
-        
-        msg = await event.reply("**📣 جاري تحضير النداء...**")
-        
-        text = event.pattern_match.group(2) or ""
-        users_text = f"**{text}**\n\n"
-        
-        participants = await client.get_participants(event.chat_id)
-        for user in participants:
-            if not user.bot:
-                mention = f"• [{user.first_name}](tg://user?id={user.id})\n"
-                if len(users_text + mention) > 4000:
-                    await client.send_message(event.chat_id, users_text)
-                    users_text = ""
-                    await asyncio.sleep(1) 
-                users_text += mention
-        
-        if users_text.strip():
-            await client.send_message(event.chat_id, users_text)
-        
-        await msg.delete()
-        
-    except Exception as e:
-        await msg.edit(f"**حدث خطأ أثناء عمل النداء:**\n`{e}`**")
-        logger.error(f"استثناء في tag_all_handler: {e}", exc_info=True)
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
