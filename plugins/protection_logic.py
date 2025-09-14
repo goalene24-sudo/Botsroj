@@ -118,25 +118,25 @@ async def kick_logic(event, command_text):
         if not reply: 
             return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
             
-        user_to_kick = await reply.get_sender()
+        user_to_manage = await reply.get_sender()
         me = await event.client.get_me()
 
-        if user_to_kick.id == me.id:
+        if user_to_manage.id == me.id:
             return await event.reply("✦تريدني اطرد نفسي شدتحس بله 😒✦")
 
-        if user_to_kick.id in config.SUDO_USERS:
+        if user_to_manage.id in config.SUDO_USERS:
             return await event.reply("✦دي..ما اكدر اطرد مطوري..دعبل✦")
             
         actor = await event.get_sender()
         actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
         actor_rank = await get_user_rank(actor.id, event.chat_id)
-        target_rank = await get_user_rank(user_to_kick.id, event.chat_id)
+        target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
         
         if target_rank >= actor_rank: 
             return await event.reply("**عيب تطرد واحد رتبته اعلى منك او بكدك 😒**")
             
-        await event.client.kick_participant(event.chat_id, user_to_kick.id)
-        user_mention = f"[{user_to_kick.first_name}](tg://user?id={user_to_kick.id})"
+        await event.client.kick_participant(event.chat_id, user_to_manage.id)
+        user_mention = f"[{user_to_manage.first_name}](tg://user?id={user_to_manage.id})"
         await event.reply(f"**✈️ | العضو {user_mention} تم طرده بواسطة {actor_mention}**\n\n**- يلا ليشوفنه وجهه بعد 👋**")
         
     except Exception as e:
@@ -153,15 +153,23 @@ async def unmute_logic(event, command_text):
         if not reply: 
             return await event.reply("**رد على رسالة الشخص الي تريد تفك الكتم عنه 🧐**")
         
-        user_to_unmute = await reply.get_sender()
+        user_to_manage = await reply.get_sender()
+        me = await client.get_me()
+
+        if user_to_manage.id == me.id:
+            return await event.reply("**اني اصلا ما انكتل حتى تفك كتمي 😑**")
+            
+        if user_to_manage.id in config.SUDO_USERS:
+            return await event.reply("**المطور خط أحمر 😠**")
+
         actor = await event.get_sender()
         actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
-        user_mention = f"[{user_to_unmute.first_name}](tg://user?id={user_to_unmute.id})"
+        user_mention = f"[{user_to_manage.first_name}](tg://user?id={user_to_manage.id})"
 
-        await client.edit_permissions(event.chat_id, user_to_unmute.id, send_messages=True)
+        await client.edit_permissions(event.chat_id, user_to_manage.id, send_messages=True)
 
         async with AsyncDBSession() as session:
-            result = await session.execute(select(User).where(User.chat_id == event.chat_id, User.user_id == user_to_unmute.id))
+            result = await session.execute(select(User).where(User.chat_id == event.chat_id, User.user_id == user_to_manage.id))
             user_obj = result.scalar_one_or_none()
             if user_obj:
                 user_obj.warns = 0
@@ -174,6 +182,7 @@ async def unmute_logic(event, command_text):
         logger.error(f"Error in unmute_logic: {e}", exc_info=True)
         await event.reply(f"**ماكدرت افك الكتم، اكو مشكلة 😢:**\n`{e}`")
 
+# --- قسم إعدادات التحذيرات ---
 
 async def set_warns_limit_logic(event, command_text):
     try:
@@ -221,14 +230,28 @@ async def set_mute_duration_logic(event, command_text):
         logger.error(f"Error in set_mute_duration_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت اضبط الوقت 😢**")
 
-# --- أوامر الحظر والكتم والتحذير اليدوية (من ملف protection.py القديم) ---
+
+# --- أوامر الحظر والكتم والتحذير اليدوية ---
 
 async def ban_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
+    
     user_to_manage = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_manage.id == me.id:
+        return await event.reply("✦تريدني احظر نفسي؟ صدك تحجي؟ 😒✦")
+
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank: 
+        return await event.reply("**عيب تحظر واحد رتبته اعلى منك او بكدك 😒**")
+
     try:
         await client.edit_permissions(event.chat_id, user_to_manage, view_messages=False)
         await event.reply(f"**🚫 طار [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
@@ -239,8 +262,21 @@ async def unban_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
+    
     user_to_manage = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_manage.id == me.id:
+        return await event.reply("✦اني اصلا ما انحظر 😑✦")
+            
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦المطور خط أحمر 😠✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank: 
+        return await event.reply("**عيب تسوي هيج لواحد رتبته اعلى منك او بكدك 😒**")
+
     try:
         await client.edit_permissions(event.chat_id, user_to_manage, view_messages=True)
         await event.reply(f"**✅ يلا رجعنا [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}).**")
@@ -251,8 +287,21 @@ async def mute_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
+    
     user_to_manage = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_manage.id == me.id:
+        return await event.reply("✦صوتي ميطلع؟ غير جاي احجي وياك 😒✦")
+
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank: 
+        return await event.reply("**عيب تكتم واحد رتبته اعلى منك او بكدك 😒**")
+        
     buttons = [
         [Button.inline("ساعة 🕐", data=f"mute_{user_to_manage.id}_60"), Button.inline("يوم 🗓️", data=f"mute_{user_to_manage.id}_1440")],
         [Button.inline("كتم دائم ♾️", data=f"mute_{user_to_manage.id}_0")],
@@ -265,8 +314,21 @@ async def warn_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
+    
     user_to_manage = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_manage.id == me.id:
+        return await event.reply("✦تحذرني الي؟ والله يا الله 😒✦")
+
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank: 
+        return await event.reply("**عيب تحذر واحد رتبته اعلى منك او بكدك 😒**")
+
     async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
         chat_obj = await get_or_create_chat(session, event.chat_id)
@@ -289,8 +351,21 @@ async def clear_warns_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
+
     user_to_manage = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_manage.id == me.id:
+        return await event.reply("✦اني ما عندي تحذيرات اصلاً 😇✦")
+
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦المطور ما عنده تحذيرات يمعود 😑✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+    if target_rank >= actor_rank: 
+        return await event.reply("**عيب تسوي هيج لواحد رتبته اعلى منك او بكدك 😒**")
+        
     async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
         if user_obj.warns and user_obj.warns > 0:
@@ -305,8 +380,21 @@ async def timed_mute_logic(event, command_text):
     if not await has_bot_permission(event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو؟ لازم تسوي رپلَي على رسالة الشخص.**")
+    
     user_to_mute = await reply.get_sender()
-    # ... بقية منطق التحقق من الرتب ...
+    me = await client.get_me()
+
+    if user_to_mute.id == me.id:
+        return await event.reply("✦صوتي ميطلع؟ غير جاي احجي وياك 😒✦")
+
+    if user_to_mute.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
+    actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+    target_rank = await get_user_rank(user_to_mute.id, event.chat_id)
+    if target_rank >= actor_rank:
+        return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
+        
     try:
         match = re.match(r"^كتم (\d+)\s*([ديس])$", command_text)
         if not match: return
@@ -320,7 +408,7 @@ async def timed_mute_logic(event, command_text):
         elif time_unit == 'س':
             until_date = datetime.now() + timedelta(hours=time_value)
             duration_text = f"{time_value} ساعات"
-        else: return # 'ي' for days, etc. can be added.
+        else: return
         
         await client.edit_permissions(event.chat_id, user_to_mute, send_messages=False, until_date=until_date)
         await event.reply(f"**🤫 خوش، [{user_to_mute.first_name}](tg://user?id={user_to_mute.id}) انلصم لمدة {duration_text}.**")
@@ -357,7 +445,6 @@ async def remove_filter_logic(event, command_text):
         return await event.reply("**الأمر يحتاج كلمة. الاستخدام الصحيح:\n`حذف كلمة ممنوعة [الكلمة اللي تريد تحذفها]`**")
     
     word_to_remove = word_to_remove.lower()
-    word_found = None
     
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
@@ -424,6 +511,6 @@ async def mute_callback_handler(event):
 
     try:
         await client.edit_permissions(event.chat_id, user_to_mute_entity, send_messages=False, until_date=until_date)
-        await event.edit(f"**🤫 تم كتم [{user_to_mute_entity.first_name}](tg://user?id={user_id_to_mute}) {duration_text}.**")
+        await event.edit(f"**🤫 تم كتم [{user_to_mute_entity.first_name}](tg://user?id={user_to_mute_entity}) {duration_text}.**")
     except Exception as e:
         await event.edit(f"**❌ | حدث خطأ أثناء الكتم:**\n`{e}`")
