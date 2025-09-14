@@ -1,38 +1,46 @@
 import json
 from telethon import Button
 import config
-# from bot import client # <-- تم حذف هذا السطر من هنا
+# from bot import client  # <-- تم حذف هذا السطر من هنا لمنع الخطأ الدائري
 from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 from sqlalchemy.orm.attributes import flag_modified
-import logging
 
 # --- استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
 from database import AsyncDBSession
 from models import (
-    User, Vip, SecondaryDev, Creator, BotAdmin, Chat,    
-    CommandSetting, Lock, GlobalSetting
+    User, Vip, SecondaryDev, Creator, BotAdmin, Chat, 
+    CommandSetting, Lock, CustomCommand, GlobalSetting
 )
 
-logger = logging.getLogger(__name__)
-
-# --- دوال مساعدة مركزية ---
+# --- (جديد) دوال مساعدة مركزية ---
 async def get_or_create_chat(session, chat_id):
+    """الحصول على مجموعة من قاعدة البيانات أو إنشائها مع تهيئة الحقول."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat = result.scalar_one_or_none()
     if not chat:
-        chat = Chat(id=chat_id, settings={}, lock_settings={}, filtered_words=[], custom_replies={})
+        chat = Chat(
+            id=chat_id, 
+            settings={}, 
+            lock_settings={},
+            filtered_words=[],
+            custom_replies={}
+        )
         session.add(chat)
         await session.flush()
         await session.refresh(chat)
     return chat
 
 async def get_or_create_user(session, chat_id, user_id):
-    result = await session.execute(select(User).where(User.chat_id == chat_id, User.user_id == user_id))
+    """الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا."""
+    result = await session.execute(
+        select(User).where(User.chat_id == chat_id, User.user_id == user_id)
+    )
     user = result.scalar_one_or_none()
+
     if not user:
         user = User(chat_id=chat_id, user_id=user_id)
         session.add(user)
@@ -40,20 +48,16 @@ async def get_or_create_user(session, chat_id, user_id):
         await session.refresh(user)
     return user
 
-async def get_global_setting(key, default=None):
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
-        setting = result.scalar_one_or_none()
-        if setting and setting.value:
-            try:
-                return json.loads(setting.value)
-            except (json.JSONDecodeError, TypeError):
-                return setting.value
-        return default
-
 # --- تعريف مستويات الرتب ---
 class Ranks:
-    MEMBER, VIP, MOD, ADMIN, CREATOR, OWNER, SECONDARY_DEV, MAIN_DEV = range(8)
+    MEMBER = 0
+    VIP = 1
+    MOD = 2
+    ADMIN = 3
+    CREATOR = 4
+    OWNER = 5
+    SECONDARY_DEV = 6
+    MAIN_DEV = 7
 
 try:
     import google.generativeai as genai
@@ -61,57 +65,84 @@ try:
     GEMINI_ENABLED = True
     print(">> تم تفعيل الذكاء الاصطناعي Gemini بنجاح.")
 except (ImportError, AttributeError):
-    print(">> تحذير: مكتبة Gemini غير مثبتة أو لم يتم العثور على المفتاح.")
+    print(">> تحذير: مكتبة Gemini غير مثبتة أو لم يتم العثور على المفتاح. ميزات الذكاء الاصطناعي ستكون معطلة.")
     GEMINI_ENABLED = False
 
-# --- متغيرات وقت التشغيل ---
+# --- متغيرات وقت التشغيل (لا تحتاج قاعدة بيانات) ---
 RPS_GAMES = {}
 XO_GAMES = {}
 FLOOD_TRACKER = {}
+BLESS_COUNTERS = {}
 
 # --- قوائم ثابتة ---
-PERCENT_COMMANDS = [ "نسبة الحب", "نسبة الكره", "نسبة الجمال", "نسبة الغباء", "نسبة الخيانة", "نسبة الشجاعة", "نسبة الذكاء" ]
-GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "xo", "الترتيب", "زواج", "كويز", "تخمين", "سمايلات", "سمايل", "سجلي", "المختلف", "اعلام الدول", "عواصم الدول", "رياضيات", "العكس", "اكمل المثل", "محيبس"]
-ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
+JOKES = [
+    "اكو واحد راح للطبيب گاله دكتور عندي إسهال، الطبيب گاله حلّل، گال لعد شعبالك قابل مخثر؟",
+    "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح.",
+]
+RIDDLES = [
+    ("شنو الشي اللي كلما تاخذ منه يكبر؟", "الحفرة"),
+    ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة"),
+]
+QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
+
 
 def get_rank_name(rank_level):
-    ranks_map = {
-        Ranks.MAIN_DEV: "المطور الرئيسي", Ranks.SECONDARY_DEV: "مطور ثانوي",
-        Ranks.OWNER: "مالك المجموعة", Ranks.CREATOR: "منشئ",
-        Ranks.ADMIN: "ادمن", Ranks.MOD: "مشرف",
-        Ranks.VIP: "عضو مميز", Ranks.MEMBER: "عضو"
-    }
-    return ranks_map.get(rank_level, "عضو")
+    if rank_level == Ranks.MAIN_DEV: return "المطور الرئيسي"
+    elif rank_level == Ranks.SECONDARY_DEV: return "مطور ثانوي"
+    elif rank_level == Ranks.OWNER: return "مالك المجموعة"
+    elif rank_level == Ranks.CREATOR: return "منشئ"
+    elif rank_level == Ranks.ADMIN: return "ادمن"
+    elif rank_level == Ranks.MOD: return "مشرف"
+    elif rank_level == Ranks.VIP: return "عضو مميز"
+    else: return "عضو"
 
 async def get_user_rank(user_id, chat_id):
     from bot import client # <-- تم نقل الاستيراد إلى هنا
-    if user_id in config.SUDO_USERS: return Ranks.MAIN_DEV
+    if user_id in config.SUDO_USERS:
+        return Ranks.MAIN_DEV
+
     async with AsyncDBSession() as session:
-        if (await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))).scalar_one_or_none(): return Ranks.SECONDARY_DEV
+        if (await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))).scalar_one_or_none():
+            return Ranks.SECONDARY_DEV
+
     try:
         participant = await client.get_participant(chat_id, user_id)
-        if isinstance(participant, ChannelParticipantCreator): return Ranks.OWNER
+        if isinstance(participant, ChannelParticipantCreator):
+            return Ranks.OWNER
     except UserNotParticipantError: pass
     except Exception: pass
+
     async with AsyncDBSession() as session:
-        if (await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))).scalar_one_or_none(): return Ranks.CREATOR
-        if (await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id))).scalar_one_or_none(): return Ranks.ADMIN
+        if (await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))).scalar_one_or_none():
+            return Ranks.CREATOR
+        
+        if (await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id))).scalar_one_or_none():
+            return Ranks.ADMIN
+
     try:
         perms = await client.get_permissions(chat_id, user_id)
-        if perms.is_admin: return Ranks.MOD
+        if perms.is_admin:
+            return Ranks.MOD
     except (UserNotParticipantError, ChatAdminRequiredError): pass
     except Exception: pass
+    
     async with AsyncDBSession() as session:
-        if (await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))).scalar_one_or_none(): return Ranks.VIP
+        if (await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))).scalar_one_or_none():
+            return Ranks.VIP
+
     return Ranks.MEMBER
 
 def get_uptime_string(start_time):
-    uptime_delta, parts = datetime.now() - start_time, []
-    days, hours, rem = uptime_delta.days, *divmod(uptime_delta.seconds, 3600)
+    uptime_delta = datetime.now() - start_time
+    days = uptime_delta.days
+    hours, rem = divmod(uptime_delta.seconds, 3600)
     minutes, _ = divmod(rem, 60)
+    
+    parts = []
     if days > 0: parts.append(f"{days} يوم")
     if hours > 0: parts.append(f"{hours} ساعة")
     if minutes > 0: parts.append(f"{minutes} دقيقة")
+    
     return " و ".join(parts) if parts else "بضع ثواني"
 
 MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
@@ -130,19 +161,20 @@ async def build_main_menu_buttons():
         [Button.inline("م8 الردود 💬", data="replies_menu"), Button.inline("م7 الدينيه 🕌", data="services_menu")],
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
-    custom_commands = await get_global_setting("custom_commands", {})
-    custom_buttons_row = []
-    if custom_commands:
-        for name, data in custom_commands.items():
-            if isinstance(data, dict) and data.get("button_text"):
-                custom_buttons_row.append(Button.inline(data["button_text"], data=f"ccmd:{name}"))
+    async with AsyncDBSession() as session:
+        result = await session.execute(select(CustomCommand))
+        custom_commands = result.scalars().all()
+    
+    custom_buttons_row = [Button.inline(cmd.name.capitalize(), data=f"ccmd:{cmd.name}") for cmd in custom_commands if cmd.show_button]
     if custom_buttons_row:
-        buttons.append([]) 
         for i in range(0, len(custom_buttons_row), 2):
             buttons.append(custom_buttons_row[i:i + 2])
     return buttons
 
 LOCK_TYPES = { "الصور": "photo", "الفيديو": "video", "المتحركة": "gif", "الملصقات": "sticker", "الروابط": "url", "المعرفات": "username", "التوجيه": "forward", "البوتات": "bot", "التكرار": "anti_flood" }
+PERCENT_COMMANDS = [ "نسبة الحب", "نسبة الكره", "نسبة الجمال", "نسبة الغباء", "نسبة الخيانة", "نسبة الشجاعة", "نسبة الذكاء" ]
+GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "xo", "الترتيب", "زواج", "كويز", "تخمين", "سمايلات", "سمايل", "سجلي", "المختلف", "اعلام الدول", "عواصم الدول", "رياضيات", "العكس", "اكمل المثل", "محيبس"]
+ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
 
 async def is_command_enabled(chat_id, command_key):
     async with AsyncDBSession() as session:
@@ -180,6 +212,7 @@ async def build_protection_menu(chat_id):
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         locks = chat.lock_settings or {}
+
     for name, key in LOCK_TYPES.items():
         is_locked = locks.get(key, False)
         emoji = "🔒" if is_locked else "🔓"
