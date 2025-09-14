@@ -15,7 +15,7 @@ from models import Chat, User, GlobalSetting
 from .utils import (
     is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,    
     build_main_menu_buttons, build_protection_menu, get_uptime_string,
-    get_or_create_user, add_points
+    get_or_create_user, add_points, get_global_setting  # <-- (تمت إضافة get_global_setting)
 )
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
@@ -31,12 +31,62 @@ from .games import CURRENT_QUIZZES
 async def callback_handler(event):
     query_data = event.data.decode('utf-8')
     
-    # --- (الكود هنا يبقى كما هو حتى نصل إلى قسم الكويز) ---
     main_menus = [
         "fun_menu", "profile_menu", "shop_menu", "tools_menu",
         "services_menu", "replies_menu", "about_menu", "back_to_main",
         "protection_menu", "seerah_main", "hisn_main", "social_menu"
     ]
+
+    # --- (جديد) قسم معالجة الأزرار المخصصة ---
+    if query_data.startswith("custom_cmd:"):
+        command_name = query_data.split(':')[1]
+        
+        custom_commands = await get_global_setting("custom_commands", {})
+        
+        if command_name not in custom_commands:
+            return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
+
+        command_data = custom_commands[command_name]
+        reply_template = command_data.get("reply")
+        display_mode = command_data.get("display_mode", "popup")
+
+        if not reply_template:
+            return await event.answer("⚠️ | لا يوجد نص رد لهذا الأمر.", alert=True)
+
+        async with AsyncDBSession() as session:
+            sender = await event.get_sender()
+            chat = await event.get_chat()
+            user = await get_or_create_user(session, chat.id, sender.id)
+
+            try:
+                if not isinstance(reply_template, str):
+                    reply_template = str(reply_template)
+                
+                final_reply = reply_template.format(
+                    user_first_name=sender.first_name,
+                    user_mention=f"[{sender.first_name}](tg://user?id={sender.id})",
+                    user_id=sender.id,
+                    points=user.points,
+                    msg_count=user.msg_count,
+                    chat_title=chat.title
+                )
+
+                if display_mode == "edit":
+                    back_button = Button.inline("🔙 رجوع", data="back_to_main")
+                    try:
+                        await event.edit(final_reply, buttons=back_button, parse_mode='md', link_preview=False)
+                    except MessageNotModifiedError:
+                        pass
+                else: # popup mode
+                    # إزالة تنسيق الماركداون من الردود المنبثقة لتجنب المشاكل
+                    popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
+                    await event.answer(popup_reply, alert=True)
+
+            except Exception as e:
+                print(f"Error in custom command formatting: {e}")
+                await event.answer(f"⚠️ | خطأ في عرض الرد.", alert=True)
+        return # ننهي التنفيذ هنا
+
     if query_data.startswith("activate_"):
         chat_id = int(query_data.split('_')[1])
         if not await is_admin(chat_id, event.sender_id):
@@ -52,8 +102,8 @@ async def callback_handler(event):
                     return
             try:
                 me = await client.get_me()
-                if not await is_admin(chat_id, me.id):
-                    return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً.", alert=True)
+                #if not await is_admin(chat_id, me.id):
+                #    return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً.", alert=True)
                 chat.is_active = True
                 await session.commit()
                 buttons = await build_main_menu_buttons()
@@ -61,6 +111,7 @@ async def callback_handler(event):
                 await event.answer("✅ | تم تفعيل البوت بنجاح!", alert=True)
             except MessageNotModifiedError: pass
         return
+
     if query_data in main_menus:
         text_to_show, buttons_to_show = None, await build_main_menu_buttons()
         if query_data == "fun_menu":
@@ -111,7 +162,6 @@ async def callback_handler(event):
             except MessageNotModifiedError: pass
 
     elif query_data.startswith("quiz:"):
-        # --- (تم التعديل هنا) ---
         result = query_data.split(":")[1]
         user_id = event.sender_id
         msg_id = event.message_id
@@ -143,14 +193,8 @@ async def callback_handler(event):
             await event.edit(reply_text, buttons=None)
             del CURRENT_QUIZZES[msg_id]
         else:
-            reply_text = (
-                f"**{question_text}**\n\n"
-                f"**للاسف إجابتك خاطئة يا [{user_entity.first_name}](tg://user?id={user_id})! 😥**\n"
-                f"**الإجابة الصحيحة كانت: {correct_answer_text}**"
-            )
-            await event.edit(reply_text, buttons=None)
-            # يمكنك أن تقرر إذا كنت تريد إنهاء الكويز بعد إجابة خاطئة واحدة
-            # del CURRENT_QUIZZES[msg_id] 
+            await event.answer(f"للاسف إجابتك خاطئة يا {user_entity.first_name}! 😥", alert=True)
+            # We don't edit the message on wrong answer to allow others to try
         return
         
     elif query_data.startswith("toggle_lock:"):
@@ -171,30 +215,4 @@ async def callback_handler(event):
     elif not query_data.startswith("admin_hub:") and not query_data.startswith("settings:"):
         await handle_interactive_callback(event)
 
-@client.on(events.CallbackQuery(pattern=b"^ccmd:(.+)"))
-async def custom_command_button_handler(event):
-    command_name = event.data.decode().split(':')[1]
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == "custom_commands"))
-        settings = result.scalar_one_or_none()
-        custom_commands = {}
-        if settings and settings.value:
-            try: custom_commands = json.loads(settings.value)
-            except (json.JSONDecodeError, TypeError): pass
-        if command_name not in custom_commands: return await event.answer("⚠️ | عذراً، لم يعد هذا الأمر موجوداً.", alert=True)
-        command_data, reply_template = custom_commands[command_name], command_data.get("reply")
-        display_mode = command_data.get("display_mode", "popup")
-        if not reply_template: return await event.answer("⚠️ | لا يوجد نص رد لهذا الأمر.", alert=True)
-        sender, chat, user = await event.get_sender(), await event.get_chat(), await get_or_create_user(session, chat.id, sender.id)
-        try:
-            if not isinstance(reply_template, str): reply_template = str(reply_template)
-            final_reply = reply_template.format(user_first_name=sender.first_name, user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_id=sender.id, points=user.points, msg_count=user.msg_count, chat_title=chat.title)
-            if display_mode == "edit":
-                back_button = Button.inline("🔙 رجوع", data="back_to_main")
-                try: await event.edit(final_reply, buttons=back_button, parse_mode='md')
-                except MessageNotModifiedError: pass
-            else:
-                popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
-                await event.answer(popup_reply, alert=True)
-        except Exception as e:
-            await event.answer(f"⚠️ | خطأ في عرض الرد: {e}", alert=True)
+# --- (تم الحذف) تم حذف الدالة القديمة والخاطئة من هنا ---
