@@ -11,7 +11,7 @@ from bot import client
 import config
 from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled
 from database import AsyncDBSession
-from models import Chat, BotAdmin, Creator, Vip
+from models import Chat, BotAdmin, Creator, Vip, User
 from .achievements import ACHIEVEMENTS
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,7 @@ async def lock_unlock_logic(event, command_text):
         logger.error(f"استثناء في lock_unlock_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
 
+
 async def kick_logic(event, command_text):
     try:
         if not await has_bot_permission(event): 
@@ -137,6 +138,7 @@ async def kick_logic(event, command_text):
     except Exception as e:
         logger.error(f"استثناء في kick_logic: {e}", exc_info=True)
         await event.reply(f"**ماكدرت اطرده، اكو مشكلة 😢:**\n`{e}`")
+
 
 async def set_rank_logic(event, command_text):
     try:
@@ -187,6 +189,52 @@ async def set_rank_logic(event, command_text):
     except Exception as e:
         logger.error(f"استثناء في set_rank_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
+
+async def set_warns_limit_logic(event, command_text):
+    try:
+        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+        if actor_rank < Ranks.CREATOR:
+            return await event.reply("**هاي الشغلات بس للمنشئين والمالك 👑**")
+
+        parts = command_text.split()
+        if len(parts) < 3 or not parts[2].isdigit():
+            return await event.reply("**شكد يعني؟ اكتب الأمر هيج: `ضع عدد التحذيرات 3`**")
+
+        limit = int(parts[2])
+        if not 1 <= limit <= 10:
+            return await event.reply("**الرقم لازم يكون بين 1 و 10 تحذيرات.**")
+
+        await set_chat_setting(event.chat_id, "max_warns", limit)
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+        await event.reply(f"**✅ | صار وتدلل {actor_mention}**\n\n**- هسه العضو الي يوصل `{limit}` تحذيرات راح يتعاقب.**")
+
+    except Exception as e:
+        logger.error(f"Error in set_warns_limit_logic: {e}", exc_info=True)
+        await event.reply("**صارت مشكلة وماكدرت اضبط العدد 😢**")
+
+async def set_mute_duration_logic(event, command_text):
+    try:
+        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+        if actor_rank < Ranks.CREATOR:
+            return await event.reply("**هاي الشغلات بس للمنشئين والمالك 👑**")
+
+        parts = command_text.split()
+        if len(parts) < 4 or not parts[3].isdigit():
+            return await event.reply("**شكد تريد وقت الكتم؟ اكتب الأمر هيج: `ضع وقت الكتم 6` (يعني 6 ساعات)**")
+
+        duration = int(parts[3])
+        if not 1 <= duration <= 168: # 1 hour to 1 week
+            return await event.reply("**الوقت لازم يكون بالساعات، بين ساعة وحدة و 168 ساعة (اسبوع).**")
+
+        await set_chat_setting(event.chat_id, "mute_duration_hours", duration)
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+        await event.reply(f"**✅ | صار وتدلل {actor_mention}**\n\n**- هسه مدة الكتم التلقائي صارت `{duration}` ساعات.**")
+
+    except Exception as e:
+        logger.error(f"Error in set_mute_duration_logic: {e}", exc_info=True)
+        await event.reply("**صارت مشكلة وماكدرت اضبط الوقت 😢**")
 
 async def my_stats_logic(event, command_text):
     try:
@@ -378,3 +426,36 @@ async def tag_all_logic(event, command_text):
     except Exception as e:
         await msg.edit(f"**ماكدرت اسوي نداء، صارت مشكلة 😢:**\n`{e}`**")
         logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
+
+# --- (تمت الإضافة) دالة جديدة لفك الكتم ---
+async def unmute_logic(event, command_text):
+    try:
+        if not await has_bot_permission(event): 
+            return await event.reply("**بس للمشرفين والكاعدين فوك 👑**")
+        
+        reply = await event.get_reply_message()
+        if not reply: 
+            return await event.reply("**رد على رسالة الشخص الي تريد تفك الكتم عنه 🧐**")
+        
+        user_to_unmute = await reply.get_sender()
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+        user_mention = f"[{user_to_unmute.first_name}](tg://user?id={user_to_unmute.id})"
+
+        # فك الكتم باستخدام تيليثون
+        await client.edit_permissions(event.chat_id, user_to_unmute.id, send_messages=True)
+
+        # تحديث قاعدة البيانات
+        async with AsyncDBSession() as session:
+            result = await session.execute(select(User).where(User.chat_id == event.chat_id, User.user_id == user_to_unmute.id))
+            user_obj = result.scalar_one_or_none()
+            if user_obj:
+                user_obj.warns = 0
+                user_obj.mute_end_time = None
+                await session.commit()
+        
+        await event.reply(f"**✅ | تم فك الكتم عن {user_mention} بواسطة {actor_mention}**\n\n**- هسه يكدر يرجع يسولف طبيعي.**")
+
+    except Exception as e:
+        logger.error(f"Error in unmute_logic: {e}", exc_info=True)
+        await event.reply(f"**ماكدرت افك الكتم، اكو مشكلة 😢:**\n`{e}`")
