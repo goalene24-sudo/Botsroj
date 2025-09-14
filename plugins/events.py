@@ -10,6 +10,7 @@ from sqlalchemy import delete, func
 from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
+import config # <-- (تمت إضافة هذا السطر لإصلاح الخطأ)
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from database import AsyncDBSession
 from models import Alias, MessageHistory, User
@@ -27,7 +28,7 @@ from .commands_logic import (
     lock_unlock_logic, kick_logic, set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
     get_rules_logic, toggle_id_photo_logic, tag_all_logic,
-    set_warns_limit_logic, set_mute_duration_logic, unmute_logic # <-- تمت إضافة دالة فك الكتم
+    set_warns_limit_logic, set_mute_duration_logic, unmute_logic
 )
 import logging
 
@@ -118,11 +119,12 @@ async def handle_message_locks(event):
 async def general_message_handler(event):
     if not await check_activation(event.chat_id):
         return
-
-    if await handle_message_locks(event):
-        return
-
+    
+    # وضعنا كتلة try...except شاملة هنا لالتقاط أي خطأ غير متوقع
     try:
+        if await handle_message_locks(event):
+            return
+
         if event.text:
             command_to_process = None
             async with AsyncDBSession() as session:
@@ -148,13 +150,14 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
+            # --- توجيه الأوامر ---
             if command_to_process.startswith("ضع عدد التحذيرات"):
                 await set_warns_limit_logic(event, command_to_process)
                 return
             elif command_to_process.startswith("ضع وقت الكتم"):
                 await set_mute_duration_logic(event, command_to_process)
                 return
-            elif command_to_process.startswith("الغاء الكتم"): # <-- تمت الإضافة هنا
+            elif command_to_process.startswith("الغاء الكتم"):
                 await unmute_logic(event, command_to_process)
                 return
             elif command_to_process.startswith(("قفل", "فتح")):
@@ -185,6 +188,7 @@ async def general_message_handler(event):
                 await toggle_id_photo_logic(event, command_to_process)
                 return
 
+        # --- منطق الرسائل العادية (غير الأوامر) ---
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
             user = await get_or_create_user(session, event.chat_id, event.sender_id)
@@ -233,7 +237,6 @@ async def general_message_handler(event):
                             await event.reply(final_reply)
                         except KeyError:
                             await event.reply(reply_template)
-
             await session.commit()
 
     except Exception as e:
