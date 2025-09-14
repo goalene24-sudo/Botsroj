@@ -15,8 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- دوال مساعدة لإدارة إعدادات المجموعة ---
-
+# --- (تمت الإعادة) دوال مساعدة لإدارة إعدادات المجموعة ---
 async def get_or_create_chat(session, chat_id):
     """الحصول على مجموعة من قاعدة البيانات أو إنشائها إذا لم تكن موجودة."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
@@ -26,6 +25,14 @@ async def get_or_create_chat(session, chat_id):
         session.add(chat)
         await session.commit()
     return chat
+
+async def get_chat_setting(chat_id, key, default=None):
+    """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, chat_id)
+        if chat.settings is None:
+            chat.settings = {}
+        return chat.settings.get(key, default)
 
 async def set_chat_setting(chat_id, key, value):
     """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
