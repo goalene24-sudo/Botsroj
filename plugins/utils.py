@@ -14,6 +14,9 @@ from models import (
     User, Vip, SecondaryDev, Creator, BotAdmin, Chat,  
     CommandSetting, Lock, CustomCommand, GlobalSetting
 )
+# --- (تمت الإضافة) استيراد البيانات الجديدة من الملف المنفصل ---
+from .fun_data import JOKES, RIDDLES
+
 
 # --- (جديد) دوال الإعدادات العامة - تم نقلها هنا لتكون مركزية ---
 async def get_global_setting(key, default=None):
@@ -103,15 +106,7 @@ XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
 
-# --- قوائم ثابتة ---
-JOKES = [
-    "اكو واحد راح للطبيب گاله دكتور عندي إسهال، الطبيب گاله حلّل، گال لعد شعبالك قابل مخثر؟",
-    "فد يوم واحد گال لمرته: اليوم اريد اكل بره، مرته حطتله الاكل بالسطح.",
-]
-RIDDLES = [
-    ("شنو الشي اللي كلما تاخذ منه يكبر؟", "الحفرة"),
-    ("شنو الشي اللي يمشي بلا رجلين ويبچي بلا عيون؟", "الغيمة"),
-]
+# --- (تم الحذف) تم نقل القوائم الكبيرة إلى ملف fun_data.py ---
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
 
@@ -182,7 +177,6 @@ MAIN_MENU_MESSAGE = """- - - - - - - - - - - - - - - - - -
 
 اختر أحد الأقسام من القائمة أدناه: 👇"""
 
-# --- (تم الإصلاح) ---
 async def build_main_menu_buttons():
     buttons = [
         [Button.inline("م2 التفاعل 👥", data="social_menu"), Button.inline("م1 الالعاب 🎮", data="fun_menu")],
@@ -192,19 +186,16 @@ async def build_main_menu_buttons():
         [Button.inline("م9 حول البوت ℹ️", data="about_menu")]
     ]
     
-    # --- (جديد) قراءة الأوامر المخصصة من المكان الصحيح ---
     custom_commands_dict = await get_global_setting("custom_commands", {})
     
     custom_buttons_row = []
     if custom_commands_dict:
         for name, data in custom_commands_dict.items():
-            # التأكد من وجود مفتاح 'button_text'
             if "button_text" in data and data["button_text"]:
                 button = Button.inline(data["button_text"], data=f"custom_cmd:{name}")
                 custom_buttons_row.append(button)
 
     if custom_buttons_row:
-        # إضافة الأزرار المخصصة سطرًا سطرًا، كل سطر يحتوي على زرين
         for i in range(0, len(custom_buttons_row), 2):
             buttons.append(custom_buttons_row[i:i + 2])
             
