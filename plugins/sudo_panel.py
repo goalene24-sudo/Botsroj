@@ -23,7 +23,6 @@ async def get_global_setting(key, default=None):
         setting = result.scalar_one_or_none()
         if setting and setting.value:
             try:
-                # محاولة فك تشفير JSON، إذا فشل، أرجع القيمة كنص عادي
                 return json.loads(setting.value)
             except json.JSONDecodeError:
                 return setting.value
@@ -32,7 +31,6 @@ async def get_global_setting(key, default=None):
 async def set_global_setting(key, value):
     """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
     async with AsyncDBSession() as session:
-        # تحويل القيمة إلى JSON إذا كانت قاموسًا أو قائمة
         if isinstance(value, (dict, list)):
             value_to_store = json.dumps(value, ensure_ascii=False)
         else:
