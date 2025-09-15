@@ -230,6 +230,39 @@ async def set_mute_duration_logic(event, command_text):
         logger.error(f"Error in set_mute_duration_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت اضبط الوقت 😢**")
 
+# --- (جديد) الوظيفة المفقودة ---
+async def toggle_id_photo_logic(event, command_text):
+    """
+    Handles enabling or disabling the photo in the ID command.
+    """
+    try:
+        if not await has_bot_permission(event):
+            return await event.reply("**جماعت الأدمنية بس همه يكدرون يغيرون هاي الإعدادات 😉**")
+
+        if command_text == "تشغيل صورة ايدي":
+            new_value = True
+            action_text = "راح تظهر"
+        elif command_text == "تعطيل صورة ايدي":
+            new_value = False
+            action_text = "راح تختفي"
+        else:
+            return
+
+        await set_chat_setting(event.chat_id, "show_id_photo", new_value)
+        
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+        
+        reply_msg = (
+            f"**✅ | صار وتدلل {actor_mention}**\n\n"
+            f"**- هسه صورة الايدي {action_text} بأمر `ايدي`.**"
+        )
+        await event.reply(reply_msg)
+
+    except Exception as e:
+        logger.error(f"Error in toggle_id_photo_logic: {e}", exc_info=True)
+        await event.reply("**صارت مشكلة وماكدرت اغير الإعداد 😢**")
+
 
 # --- أوامر الحظر والكتم والتحذير اليدوية ---
 
@@ -511,6 +544,6 @@ async def mute_callback_handler(event):
 
     try:
         await client.edit_permissions(event.chat_id, user_to_mute_entity, send_messages=False, until_date=until_date)
-        await event.edit(f"**🤫 تم كتم [{user_to_mute_entity.first_name}](tg://user?id={user_to_mute_entity}) {duration_text}.**")
+        await event.edit(f"**🤫 تم كتم [{user_to_mute_entity.first_name}](tg://user?id={user_to_mute_entity.id}) {duration_text}.**")
     except Exception as e:
         await event.edit(f"**❌ | حدث خطأ أثناء الكتم:**\n`{e}`")
