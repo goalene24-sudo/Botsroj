@@ -6,7 +6,8 @@ import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
-from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
+# --- (تم التعديل) ---
+from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
 
 from bot import client
 import config
@@ -170,7 +171,6 @@ async def id_logic(event, command_text):
         async with AsyncDBSession() as session:
             user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
             chat = await get_or_create_chat(session, event.chat_id)
-            # --- (تم التصحيح) ---
             id_photo_enabled = (chat.settings or {}).get("show_id_photo", True)
             msg_count = user_obj.msg_count or 0
             points = user_obj.points or 0
@@ -210,7 +210,7 @@ async def id_logic(event, command_text):
         if id_photo_enabled: 
             try:
                 pfp = await client.get_profile_photos(target_user, limit=1)
-            except Exception: # Handle cases where user has no pfp or restricted
+            except Exception:
                 pfp = None
                 
         if pfp: 
@@ -263,7 +263,7 @@ async def tag_all_logic(event, command_text):
         await msg.edit(f"**ماكدرت اسوي نداء، صارت مشكلة 😢:**\n`{e}`**")
         logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
 
-# --- (تمت الإضافة) دالة جديدة لعرض قائمة المدراء ---
+# --- دالة جديدة لعرض قائمة المدراء ---
 async def list_admins_logic(event, command_text):
     try:
         msg = await event.reply("جاي احسب الكادر... 📊")
@@ -274,11 +274,9 @@ async def list_admins_logic(event, command_text):
         bot_admins_text = ""
         vips_text = ""
 
-        # جلب مطوري البوت من الكونفك ومن قاعدة البيانات
         main_dev_ids = config.SUDO_USERS
         
         async with AsyncDBSession() as session:
-            # جلب المطورين الثانويين
             sec_devs_res = await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id))
             secondary_dev_ids = [dev.user_id for dev in sec_devs_res.scalars().all()]
             
@@ -292,7 +290,6 @@ async def list_admins_logic(event, command_text):
                 except:
                     dev_text += f"• `{dev_id}`\n"
             
-            # جلب ادمنية البوت
             bot_admins_res = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == event.chat_id))
             for admin in bot_admins_res.scalars().all():
                 try:
@@ -301,7 +298,6 @@ async def list_admins_logic(event, command_text):
                 except:
                     bot_admins_text += f"• `{admin.user_id}`\n"
             
-            # جلب المميزين
             vips_res = await session.execute(select(Vip).where(Vip.chat_id == event.chat_id))
             for vip in vips_res.scalars().all():
                 try:
@@ -310,8 +306,8 @@ async def list_admins_logic(event, command_text):
                 except:
                     vips_text += f"• `{vip.user_id}`\n"
 
-        # جلب مشرفي المجموعة من تيليجرام
-        tg_participants = await client.get_participants(event.chat_id, filter=ChannelParticipantAdmin)
+        # --- (تم التصحيح) ---
+        tg_participants = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
         for p in tg_participants:
             mention = f"• [{p.first_name}](tg://user?id={p.id})\n"
             if isinstance(p.participant, ChannelParticipantCreator):
@@ -319,7 +315,6 @@ async def list_admins_logic(event, command_text):
             else:
                 tg_admins_text += mention
 
-        # بناء الرسالة النهائية
         final_text = "⚜️ **قائمة كادر الإدارة بالكروب** ⚜️\n\n"
         if owner_text:
             final_text += f"**👑 مالك المجموعة:**\n{owner_text}\n"
@@ -332,7 +327,6 @@ async def list_admins_logic(event, command_text):
         if vips_text:
             final_text += f"**✨ المميزين:**\n{vips_text}\n"
         
-        # في حال كانت كل القوائم فارغة
         if not owner_text and not dev_text and not tg_admins_text and not bot_admins_text and not vips_text:
             final_text += "ماكو أي أحد بالكادر حالياً."
 
