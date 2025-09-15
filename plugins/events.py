@@ -23,7 +23,7 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- استيراد الدوال المنطقية من ملفاتها الصحيحة ---
+# --- (تم التحديث) استيراد كل الدوال المنطقية الجديدة ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
@@ -35,17 +35,18 @@ from .protection_logic import (
     set_warns_limit_logic, set_mute_duration_logic,
     ban_logic, unban_logic, mute_logic, warn_logic, clear_warns_logic, timed_mute_logic,
     add_filter_logic, remove_filter_logic, list_filters_logic,
-    toggle_id_photo_logic
+    toggle_id_photo_logic,
+    set_rules_logic, clear_rules_logic,
+    list_bot_admins_logic, clear_all_bot_admins_logic,
+    list_vips_logic, clear_all_vips_logic,
+    list_creators_logic, clear_all_creators_logic
 )
 import logging
 
 logger = logging.getLogger(__name__)
 
-# --- (جديد) دالة منع التكرار ---
+# --- دالة منع التكرار ---
 async def handle_flood_lock(event):
-    """
-    Handles message flood detection and penalizes the user.
-    """
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
         locks = chat.lock_settings or {}
@@ -65,36 +66,26 @@ async def handle_flood_lock(event):
     if user_id not in FLOOD_TRACKER[chat_id]:
         FLOOD_TRACKER[chat_id][user_id] = []
 
-    # إضافة الرسالة الحالية مع وقتها
     FLOOD_TRACKER[chat_id][user_id].append((now, event.text))
-    
-    # إبقاء آخر 5 رسائل فقط
     FLOOD_TRACKER[chat_id][user_id] = FLOOD_TRACKER[chat_id][user_id][-5:]
     
-    # التحقق من التكرار
     if len(FLOOD_TRACKER[chat_id][user_id]) == 5:
         first_time = FLOOD_TRACKER[chat_id][user_id][0][0]
-        # إذا كانت آخر 5 رسائل في أقل من 5 ثواني
         if (now - first_time) < 5:
-            # التحقق مما إذا كانت كل الرسائل متشابهة
             messages = [msg for _, msg in FLOOD_TRACKER[chat_id][user_id]]
             if len(set(messages)) == 1:
                 try:
-                    # حذف الرسالة المكررة
                     await event.delete()
-                    # كتم المستخدم لمدة 5 دقائق
                     mute_until = datetime.now() + timedelta(minutes=5)
                     await client.edit_permissions(event.chat_id, event.sender_id, until_date=mute_until, send_messages=False)
                     sender = await event.get_sender()
                     await event.respond(f"**🤫 | [{sender.first_name}](tg://user?id={sender.id}) لزكت بالرسالة، اكلت كتم 5 دقايق.**")
-                    # تنظيف سجل المستخدم لمنع العقوبة مرة أخرى فورًا
                     FLOOD_TRACKER[chat_id][user_id] = []
-                    return True # تم اكتشاف ومعاقبة التكرار
+                    return True
                 except Exception as e:
                     logger.warning(f"Failed to handle flood for user {user_id}: {e}")
 
-    return False # لا يوجد تكرار
-
+    return False
 
 # --- دالة الحماية والتحذيرات والكتم ---
 async def handle_message_locks(event):
@@ -171,7 +162,6 @@ async def general_message_handler(event):
         return
     
     try:
-        # --- (تم التعديل) إضافة التحقق من التكرار أولاً ---
         if await handle_flood_lock(event):
             return
             
@@ -202,11 +192,27 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
-            # --- الموزع الجديد والمنظم ---
+            # --- (تم التحديث) الموزع الجديد والمنظم ---
             
             # --- أوامر الحماية (من protection_logic.py) ---
             if command_to_process.startswith(("قفل", "فتح")):
                 await lock_unlock_logic(event, command_to_process)
+            elif command_to_process.startswith("ضع قوانين"):
+                await set_rules_logic(event, command_to_process)
+            elif command_to_process == "مسح القوانين":
+                await clear_rules_logic(event, command_to_process)
+            elif command_to_process == "الادمنيه":
+                await list_bot_admins_logic(event, command_to_process)
+            elif command_to_process == "مسح كل الادمنيه":
+                await clear_all_bot_admins_logic(event, command_to_process)
+            elif command_to_process == "المميزين":
+                await list_vips_logic(event, command_to_process)
+            elif command_to_process == "مسح المميزين":
+                await clear_all_vips_logic(event, command_to_process)
+            elif command_to_process == "المنشئين":
+                await list_creators_logic(event, command_to_process)
+            elif command_to_process == "مسح المنشئين":
+                await clear_all_creators_logic(event, command_to_process)
             elif command_to_process == "طرد":
                 await kick_logic(event, command_to_process)
             elif command_to_process == "الغاء الكتم":
@@ -257,7 +263,6 @@ async def general_message_handler(event):
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, event.chat_id)
                     user = await get_or_create_user(session, event.chat_id, event.sender_id)
-
                     user.msg_count = (user.msg_count or 0) + 1
                     chat.total_msgs = (chat.total_msgs or 0) + 1
                     
@@ -281,7 +286,6 @@ async def general_message_handler(event):
                         custom_replies = chat.custom_replies or {}
                         all_replies.update({k.lower(): v for k, v in custom_replies.items()})
                         reply_data = all_replies.get(trigger)
-
                         if reply_data:
                             reply_template = None
                             if isinstance(reply_data, str):
@@ -303,7 +307,6 @@ async def general_message_handler(event):
                                 except KeyError:
                                     await event.reply(reply_template)
                     await session.commit()
-
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
 
