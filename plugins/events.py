@@ -195,7 +195,7 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
-            # --- (تم التحديث) الموزع الجديد والدقيق ---
+            # --- الموزع المحدث والكامل ---
             
             # --- أوامر الحماية (من protection_logic.py) ---
             if command_to_process.startswith("قفل ") or command_to_process.startswith("فتح "):
@@ -228,11 +228,11 @@ async def general_message_handler(event):
                 await list_filters_logic(event, command_to_process)
             
             # --- أوامر الإعدادات (من settings_logic.py) ---
-            elif command_to_process.startswith("ضع قوانين "):
+            elif command_to_process.startswith("ضع قوانين"):
                 await set_rules_logic(event, command_to_process)
             elif command_to_process == "مسح القوانين":
                 await clear_rules_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع ترحيب "):
+            elif command_to_process.startswith("ضع ترحيب"):
                 await set_welcome_logic(event, command_to_process)
             elif command_to_process == "حذف الترحيب":
                 await clear_welcome_logic(event, command_to_process)
@@ -250,7 +250,7 @@ async def general_message_handler(event):
                 await clear_all_creators_logic(event, command_to_process)
             elif command_to_process in ["رفع مشرف", "تنزيل مشرف"]:
                 await promote_demote_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع حجم الكلايش "):
+            elif command_to_process.startswith("ضع حجم الكلايش"):
                 await set_long_text_size_logic(event, command_to_process)
             elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
                 await toggle_id_photo_logic(event, command_to_process)
@@ -266,13 +266,12 @@ async def general_message_handler(event):
                 await my_stats_logic(event, command_to_process)
             elif command_to_process == "رتبتي":
                 await my_rank_logic(event, command_to_process)
-            elif command_to_process == "ايدي" or command_to_process.startswith("ايدي "):
-                await id_logic(event, command_to_process)
-            elif command_to_process == "id" or command_to_process.startswith("id "):
+            # --- (تم التعديل) شرط دقيق ومبسط لأمر ايدي ---
+            elif base_cmd in ["ايدي", "id"]:
                 await id_logic(event, command_to_process)
             elif command_to_process == "القوانين":
                 await get_rules_logic(event, command_to_process)
-            elif command_to_process == "نداء" or command_to_process.startswith("نداء "):
+            elif base_cmd == "نداء":
                 await tag_all_logic(event, command_to_process)
             
             # --- منطق الرسائل العادية (غير الأوامر) ---
