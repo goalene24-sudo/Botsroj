@@ -170,7 +170,8 @@ async def id_logic(event, command_text):
         async with AsyncDBSession() as session:
             user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
             chat = await get_or_create_chat(session, event.chat_id)
-            id_photo_enabled = (chat.settings or {}).get("id_photo_enabled", True)
+            # --- (تم التصحيح) ---
+            id_photo_enabled = (chat.settings or {}).get("show_id_photo", True)
             msg_count = user_obj.msg_count or 0
             points = user_obj.points or 0
             sahaqat = user_obj.sahaqat or 0
@@ -207,7 +208,11 @@ async def id_logic(event, command_text):
         
         pfp = None
         if id_photo_enabled: 
-            pfp = await client.get_profile_photos(target_user, limit=1)
+            try:
+                pfp = await client.get_profile_photos(target_user, limit=1)
+            except Exception: # Handle cases where user has no pfp or restricted
+                pfp = None
+                
         if pfp: 
             await client.send_file(event.chat_id, pfp[0], caption=caption, reply_to=event.id)
         else: 
