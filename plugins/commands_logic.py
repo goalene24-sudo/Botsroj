@@ -196,12 +196,23 @@ RANDOM_TAFA3UL = ["سايق مخده 🛌", "ياكل تبن 🐐", "نايم ب
 
 async def id_logic(event, command_text):
     try:
+        command_parts = command_text.split(maxsplit=1)
+        user_input = command_parts[1] if len(command_parts) > 1 else ""
+
+        # --- (تم التعديل) فحص ذكي لمنع الرد على الجمل العادية ---
+        if user_input:
+            # إذا كان هناك نص بعد الأمر، تحقق مما إذا كان يبدو ككيان مستخدم صالح
+            # إذا لم يبدأ بـ @ ولم يكن رقمًا، فمن المحتمل أنه جملة عادية
+            if not user_input.startswith('@') and not user_input.isdigit():
+                 # هذه جملة مثل "ايدي انكسرت". تجاهلها ولا تفعل شيئًا
+                 return 
+        # --- نهاية التعديل ---
+
         if not await is_command_enabled(event.chat_id, "id_enabled"): 
             return await event.reply("🚫 | **أمر الايدي واكف هسه بأمر من الادمنية.**")
             
-        target_user, replied_msg = None, await event.get_reply_message()
-        command_parts = command_text.split(maxsplit=1)
-        user_input = command_parts[1] if len(command_parts) > 1 else ""
+        target_user = None
+        replied_msg = await event.get_reply_message()
         
         if replied_msg: 
             target_user = await replied_msg.get_sender()
