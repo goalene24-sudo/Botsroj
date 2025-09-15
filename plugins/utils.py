@@ -80,6 +80,39 @@ async def get_or_create_user(session, chat_id, user_id):
         await session.refresh(user)
     return user
 
+# --- (جديد) دوال مساعدة لإدارة إعدادات المجموعة ---
+async def get_chat_setting(chat_id, key, default=None):
+    """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, chat_id)
+        if chat.settings is None:
+            chat.settings = {}
+        return chat.settings.get(key, default)
+
+async def set_chat_setting(chat_id, key, value):
+    """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, chat_id)
+        if chat.settings is None: chat.settings = {}
+        
+        new_settings = chat.settings.copy()
+        new_settings[key] = value
+        chat.settings = new_settings
+        flag_modified(chat, "settings")
+        
+        await session.commit()
+
+async def del_chat_setting(chat_id, key):
+    """حذف إعداد معين من حقل JSON."""
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, chat_id)
+        if chat.settings and key in chat.settings:
+            new_settings = chat.settings.copy()
+            del new_settings[key]
+            chat.settings = new_settings
+            flag_modified(chat, "settings")
+            await session.commit()
+            
 # --- تعريف مستويات الرتب ---
 class Ranks:
     MEMBER = 0
