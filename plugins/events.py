@@ -40,6 +40,7 @@ from .protection_logic import (
 from .settings_logic import (
     set_rules_logic, clear_rules_logic,
     set_welcome_logic, clear_welcome_logic,
+    pin_logic, unpin_logic,
     list_bot_admins_logic, clear_all_bot_admins_logic,
     list_vips_logic, clear_all_vips_logic,
     list_creators_logic, clear_all_creators_logic,
@@ -236,6 +237,10 @@ async def general_message_handler(event):
                 await set_welcome_logic(event, command_to_process)
             elif command_to_process == "حذف الترحيب":
                 await clear_welcome_logic(event, command_to_process)
+            elif command_to_process == "تثبيت":
+                await pin_logic(event, command_to_process)
+            elif command_to_process == "الغاء التثبيت":
+                await unpin_logic(event, command_to_process)
             elif command_to_process == "الادمنيه":
                 await list_bot_admins_logic(event, command_to_process)
             elif command_to_process == "مسح كل الادمنيه":
@@ -266,7 +271,6 @@ async def general_message_handler(event):
                 await my_stats_logic(event, command_to_process)
             elif command_to_process == "رتبتي":
                 await my_rank_logic(event, command_to_process)
-            # --- (تم التعديل) شرط دقيق ومبسط لأمر ايدي ---
             elif base_cmd in ["ايدي", "id"]:
                 await id_logic(event, command_to_process)
             elif command_to_process == "القوانين":
