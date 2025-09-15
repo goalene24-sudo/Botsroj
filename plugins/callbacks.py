@@ -24,7 +24,7 @@ from .menu_texts import (
     FUN_MENU_TEXT, PROFILE_MENU_TEXT, SOCIAL_MENU_TEXT, TOOLS_MENU_TEXT,
     SERVICES_MENU_TEXT, REPLIES_MENU_TEXT, SHOP_MENU_TEXT
 )
-from .admin import get_or_create_chat, set_chat_setting
+from .utils import get_or_create_chat, set_chat_setting
 from .games import CURRENT_QUIZZES
 
 @client.on(events.CallbackQuery)
