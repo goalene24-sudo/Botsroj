@@ -71,7 +71,7 @@ async def clear_rules_logic(event, command_text):
     except Exception as e:
         logger.error(f"Error in clear_rules_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت امسح القوانين 😢**")
-
+        
 async def set_welcome_logic(event, command_text):
     try:
         if not await has_bot_permission(event):
@@ -97,6 +97,37 @@ async def clear_welcome_logic(event, command_text):
     except Exception as e:
         logger.error(f"Error in clear_welcome_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت امسح الترحيب 😢**")
+
+# --- (جديد) قسم التثبيت ---
+async def pin_logic(event, command_text):
+    try:
+        if not await has_bot_permission(event):
+            return await event.reply("**بس المشرفين يكدرون يثبتون رسائل 📌**")
+        
+        reply = await event.get_reply_message()
+        if not reply:
+            return await event.reply("**لازم ترد على رسالة حتى اثبتها.**")
+            
+        # notify=True لإرسال إشعار لأعضاء المجموعة
+        await reply.pin(notify=True)
+        await event.reply("**📌 | تمام، ثبتت الرسالة.**")
+        
+    except Exception as e:
+        logger.error(f"Error in pin_logic: {e}", exc_info=True)
+        await event.reply(f"**ماكدرت اثبت الرسالة، اكو مشكلة يمكن صلاحياتي ناقصة.**\n`{e}`")
+
+async def unpin_logic(event, command_text):
+    try:
+        if not await has_bot_permission(event):
+            return await event.reply("**بس المشرفين يكدرون يلغون التثبيت 📌**")
+            
+        await client.pin_message(event.chat_id, message=None, notify=True)
+        await event.reply("**🚮 | تمام، لغيت تثبيت كل الرسائل.**")
+
+    except Exception as e:
+        logger.error(f"Error in unpin_logic: {e}", exc_info=True)
+        await event.reply(f"**ماكدرت الغي التثبيت، اكو مشكلة يمكن صلاحياتي ناقصة.**\n`{e}`")
+
 
 # --- قسم عرض ومسح الرتب ---
 async def list_bot_admins_logic(event, command_text):
