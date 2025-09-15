@@ -9,7 +9,7 @@ import config
 from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, get_or_create_user
-from .admin import get_or_create_chat
+from .utils import get_or_create_chat
 
 
 # تعريف أغراض المتجر
