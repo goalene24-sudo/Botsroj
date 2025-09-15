@@ -13,7 +13,7 @@ from database import AsyncDBSession
 from models import GlobalSetting, User
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation
-from .admin import get_or_create_chat
+from .utils import get_or_create_chat
 
 # --- قواميس مساعدة ---
 TIMEZONE_MAP = {
