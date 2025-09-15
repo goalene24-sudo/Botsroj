@@ -14,7 +14,7 @@ from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
     MAIN_MENU_MESSAGE, is_admin
 )
-from .admin import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
+from .utils import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
 
 WELCOMED_RECENTLY = set()
 
