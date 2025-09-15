@@ -6,12 +6,13 @@ import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
+from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 
 from bot import client
 import config
 from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled
 from database import AsyncDBSession
-from models import Chat, BotAdmin, Creator, Vip, User
+from models import Chat, BotAdmin, Creator, Vip, User, SecondaryDev
 from .achievements import ACHIEVEMENTS
 
 logger = logging.getLogger(__name__)
@@ -229,26 +230,6 @@ async def get_rules_logic(event, command_text):
         logger.error(f"استثناء في get_rules_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
 
-async def toggle_id_photo_logic(event, command_text):
-    try:
-        if not await has_bot_permission(event): 
-            return await event.reply("**بس الادمنية يكدرون يسوون هيج 😉**")
-        
-        actor = await event.get_sender()
-        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
-        action = "تشغيل" if command_text.startswith("تشغيل") else "تعطيل"
-        
-        if action == "تشغيل":
-            await set_chat_setting(event.chat_id, "id_photo_enabled", True)
-            await event.reply(f"**🖼️ | خوش، من اليوم ورايح الصور تطلع بأمر ايدي بأمر من {actor_mention}**")
-        else:
-            await set_chat_setting(event.chat_id, "id_photo_enabled", False)
-            await event.reply(f"**✖️ | ماشي، بعد ماكو صور بأمر ايدي بأمر من {actor_mention}**")
-            
-    except Exception as e:
-        logger.error(f"استثناء في toggle_id_photo_logic: {e}", exc_info=True)
-        await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
-
 async def tag_all_logic(event, command_text):
     try:
         if not await has_bot_permission(event): 
@@ -276,3 +257,82 @@ async def tag_all_logic(event, command_text):
     except Exception as e:
         await msg.edit(f"**ماكدرت اسوي نداء، صارت مشكلة 😢:**\n`{e}`**")
         logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
+
+# --- (تمت الإضافة) دالة جديدة لعرض قائمة المدراء ---
+async def list_admins_logic(event, command_text):
+    try:
+        msg = await event.reply("جاي احسب الكادر... 📊")
+
+        owner_text = ""
+        dev_text = ""
+        tg_admins_text = ""
+        bot_admins_text = ""
+        vips_text = ""
+
+        # جلب مطوري البوت من الكونفك ومن قاعدة البيانات
+        main_dev_ids = config.SUDO_USERS
+        
+        async with AsyncDBSession() as session:
+            # جلب المطورين الثانويين
+            sec_devs_res = await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id))
+            secondary_dev_ids = [dev.user_id for dev in sec_devs_res.scalars().all()]
+            
+            all_dev_ids = main_dev_ids + [dev_id for dev_id in secondary_dev_ids if dev_id not in main_dev_ids]
+
+            for dev_id in all_dev_ids:
+                try:
+                    user = await client.get_entity(dev_id)
+                    role = "(الرئيسي)" if dev_id in main_dev_ids else ""
+                    dev_text += f"• [{user.first_name}](tg://user?id={user.id}) {role}\n"
+                except:
+                    dev_text += f"• `{dev_id}`\n"
+            
+            # جلب ادمنية البوت
+            bot_admins_res = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == event.chat_id))
+            for admin in bot_admins_res.scalars().all():
+                try:
+                    user = await client.get_entity(admin.user_id)
+                    bot_admins_text += f"• [{user.first_name}](tg://user?id={user.id})\n"
+                except:
+                    bot_admins_text += f"• `{admin.user_id}`\n"
+            
+            # جلب المميزين
+            vips_res = await session.execute(select(Vip).where(Vip.chat_id == event.chat_id))
+            for vip in vips_res.scalars().all():
+                try:
+                    user = await client.get_entity(vip.user_id)
+                    vips_text += f"• [{user.first_name}](tg://user?id={user.id})\n"
+                except:
+                    vips_text += f"• `{vip.user_id}`\n"
+
+        # جلب مشرفي المجموعة من تيليجرام
+        tg_participants = await client.get_participants(event.chat_id, filter=ChannelParticipantAdmin)
+        for p in tg_participants:
+            mention = f"• [{p.first_name}](tg://user?id={p.id})\n"
+            if isinstance(p.participant, ChannelParticipantCreator):
+                owner_text = mention
+            else:
+                tg_admins_text += mention
+
+        # بناء الرسالة النهائية
+        final_text = "⚜️ **قائمة كادر الإدارة بالكروب** ⚜️\n\n"
+        if owner_text:
+            final_text += f"**👑 مالك المجموعة:**\n{owner_text}\n"
+        if dev_text:
+            final_text += f"**👨‍💻 مطورين البوت:**\n{dev_text}\n"
+        if tg_admins_text:
+            final_text += f"**🛡️ المشرفين:**\n{tg_admins_text}\n"
+        if bot_admins_text:
+            final_text += f"**🤖 الادمنية في البوت:**\n{bot_admins_text}\n"
+        if vips_text:
+            final_text += f"**✨ المميزين:**\n{vips_text}\n"
+        
+        # في حال كانت كل القوائم فارغة
+        if not owner_text and not dev_text and not tg_admins_text and not bot_admins_text and not vips_text:
+            final_text += "ماكو أي أحد بالكادر حالياً."
+
+        await msg.edit(final_text)
+
+    except Exception as e:
+        logger.error(f"Error in list_admins_logic: {e}", exc_info=True)
+        await msg.edit("**صارت مشكلة وماكدرت اجيب القائمة 😢**")
