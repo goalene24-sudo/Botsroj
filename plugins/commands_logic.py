@@ -5,8 +5,8 @@ import random
 import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
+from sqlalchemy import delete
 from sqlalchemy.orm.attributes import flag_modified
-# --- (تم التعديل) ---
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
 
 from bot import client
@@ -26,15 +26,6 @@ async def get_or_create_chat(session, chat_id):
         chat = Chat(id=chat_id, settings={}, lock_settings={})
         session.add(chat)
     return chat
-
-async def set_chat_setting(chat_id, key, value):
-    async with AsyncDBSession() as session:
-        chat = await get_or_create_chat(session, chat_id)
-        if chat.settings is None: chat.settings = {}
-        new_settings = chat.settings.copy()
-        new_settings[key] = value
-        chat.settings = new_settings
-        await session.commit()
 
 # --- قسم منطق الأوامر ---
 
@@ -87,6 +78,63 @@ async def set_rank_logic(event, command_text):
     except Exception as e:
         logger.error(f"استثناء في set_rank_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
+
+async def secondary_dev_logic(event, command_text):
+    try:
+        action = command_text
+        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+
+        if action in ["رفع مطور ثانوي", "تنزيل مطور ثانوي", "مسح المطورين الثانويين"]:
+            if actor_rank not in [Ranks.MAIN_DEV, Ranks.OWNER]:
+                return await event.reply("**فقط المطور الرئيسي ومالك المجموعة يستطيعون استخدام هذا الأمر.**")
+            
+            async with AsyncDBSession() as session:
+                if action == "مسح المطورين الثانويين":
+                    await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id))
+                    await session.commit()
+                    return await event.reply("**✅ تم مسح قائمة المطورين الثانويين لهذه المجموعة بنجاح.**")
+
+                reply = await event.get_reply_message()
+                if not reply: return await event.reply("**لازم تسوي رپلَي على رسالة الشخص.**")
+                user_to_manage = await reply.get_sender()
+                if user_to_manage.bot: return await event.reply("**لا يمكنك ترقية البوتات.**")
+                
+                target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+                if target_rank >= actor_rank:
+                    return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
+
+                result = await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_to_manage.id))
+                is_dev = result.scalar_one_or_none()
+
+                if action == "رفع مطور ثانوي":
+                    if is_dev: return await event.reply("**هذا الشخص هو أصلاً مطور ثانوي.**")
+                    session.add(SecondaryDev(chat_id=event.chat_id, user_id=user_to_manage.id))
+                    await event.reply(f"**✅ تم رفع [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) إلى مطور ثانوي.**")
+                else: # تنزيل مطور ثانوي
+                    if not is_dev: return await event.reply("**هذا الشخص ليس مطور ثانوي أصلاً.**")
+                    await session.delete(is_dev)
+                    await event.reply(f"**☑️ تم تنزيل [{user_to_manage.first_name}](tg://user?id={user_to_manage.id}) من المطورين الثانويين.**")
+                await session.commit()
+
+        elif action == "المطورين الثانويين":
+            if actor_rank < Ranks.ADMIN: return
+            async with AsyncDBSession() as session:
+                result = await session.execute(select(SecondaryDev.user_id).where(SecondaryDev.chat_id == event.chat_id))
+                dev_ids = result.scalars().all()
+            
+            if not dev_ids: return await event.reply("**لا يوجد أي مطورين ثانويين في المجموعة.**")
+            list_text = "**⚜️ قائمة المطورين الثانويين:**\n\n"
+            for user_id in dev_ids:
+                try:
+                    user = await client.get_entity(user_id)
+                    list_text += f"- [{user.first_name}](tg://user?id={user_id})\n"
+                except Exception:
+                    list_text += f"- `{user_id}` (ربما غادر المجموعة)\n"
+            await event.reply(list_text)
+    except Exception as e:
+        logger.error(f"استثناء في secondary_dev_logic: {e}", exc_info=True)
+        await event.reply("حدث خطأ، جرب مرة أخرى.")
+
 
 async def my_stats_logic(event, command_text):
     try:
@@ -263,7 +311,6 @@ async def tag_all_logic(event, command_text):
         await msg.edit(f"**ماكدرت اسوي نداء، صارت مشكلة 😢:**\n`{e}`**")
         logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
 
-# --- دالة جديدة لعرض قائمة المدراء ---
 async def list_admins_logic(event, command_text):
     try:
         msg = await event.reply("جاي احسب الكادر... 📊")
@@ -306,7 +353,6 @@ async def list_admins_logic(event, command_text):
                 except:
                     vips_text += f"• `{vip.user_id}`\n"
 
-        # --- (تم التصحيح) ---
         tg_participants = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
         for p in tg_participants:
             mention = f"• [{p.first_name}](tg://user?id={p.id})\n"
