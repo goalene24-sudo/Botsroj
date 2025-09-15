@@ -7,7 +7,7 @@ from bot import client
 from database import AsyncDBSession
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, has_bot_permission
-from .admin import get_or_create_chat
+from .utils import get_or_create_chat
 from .default_replies import DEFAULT_REPLIES
 
 @client.on(events.NewMessage(pattern="^اضف رد$"))
