@@ -6,7 +6,6 @@ ALL_MODULES = [
     "plugins.callbacks",
     "plugins.interactive_callbacks",
     "plugins.cleaning",
-    "plugins.admin",
     "plugins.tagging",
     "plugins.aliases",
     "plugins.dictionary",
