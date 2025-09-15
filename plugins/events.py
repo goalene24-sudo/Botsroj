@@ -28,14 +28,14 @@ from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
     get_rules_logic, tag_all_logic,
-    list_admins_logic,
-    toggle_id_photo_logic # <-- تم إرجاعه إلى مكانه الصحيح
+    list_admins_logic
 )
 from .protection_logic import (
     lock_unlock_logic, kick_logic, unmute_logic,
     set_warns_limit_logic, set_mute_duration_logic,
     ban_logic, unban_logic, mute_logic, warn_logic, clear_warns_logic, timed_mute_logic,
-    add_filter_logic, remove_filter_logic, list_filters_logic
+    add_filter_logic, remove_filter_logic, list_filters_logic,
+    toggle_id_photo_logic # <-- تم نقل الاستيراد إلى هنا، وهو مكانه الصحيح
 )
 import logging
 
@@ -174,6 +174,8 @@ async def general_message_handler(event):
                 await remove_filter_logic(event, command_to_process)
             elif command_to_process == "الكلمات الممنوعة":
                 await list_filters_logic(event, command_to_process)
+            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]: # <-- تم نقل الموجه هنا أيضاً
+                await toggle_id_photo_logic(event, command_to_process)
 
             # --- أوامر الرتب والملف الشخصي (من commands_logic.py) ---
             elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
@@ -190,8 +192,6 @@ async def general_message_handler(event):
                 await get_rules_logic(event, command_to_process)
             elif command_to_process.startswith("نداء"):
                 await tag_all_logic(event, command_to_process)
-            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
-                await toggle_id_photo_logic(event, command_to_process)
             
             # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
