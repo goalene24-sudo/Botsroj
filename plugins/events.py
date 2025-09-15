@@ -23,7 +23,7 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- (تم التحديث) استيراد كل الدوال المنطقية من جميع الملفات ---
+# --- استيراد كل الدوال المنطقية من جميع الملفات ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
@@ -195,44 +195,44 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
-            # --- الموزع المحدث والكامل ---
+            # --- (تم التحديث) الموزع الجديد والدقيق ---
             
             # --- أوامر الحماية (من protection_logic.py) ---
-            if command_to_process.startswith(("قفل", "فتح")):
+            if command_to_process.startswith("قفل ") or command_to_process.startswith("فتح "):
                 await lock_unlock_logic(event, command_to_process)
             elif command_to_process == "طرد":
                 await kick_logic(event, command_to_process)
             elif command_to_process == "الغاء الكتم":
                 await unmute_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع عدد التحذيرات"):
+            elif command_to_process.startswith("ضع عدد التحذيرات "):
                 await set_warns_limit_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع وقت الكتم"):
+            elif command_to_process.startswith("ضع وقت الكتم "):
                 await set_mute_duration_logic(event, command_to_process)
             elif command_to_process == "حظر":
                 await ban_logic(event, command_to_process)
             elif command_to_process == "الغاء الحظر":
                 await unban_logic(event, command_to_process)
-            elif command_to_process == "كتم" and len(cmd_parts) == 1:
+            elif command_to_process == "كتم":
                 await mute_logic(event, command_to_process)
-            elif command_to_process.startswith("كتم"):
+            elif re.match(r"^كتم \d+ [ديس]$", command_to_process):
                 await timed_mute_logic(event, command_to_process)
             elif command_to_process == "تحذير":
                 await warn_logic(event, command_to_process)
             elif command_to_process == "حذف التحذيرات":
                 await clear_warns_logic(event, command_to_process)
-            elif command_to_process.startswith("اضف كلمة ممنوعة"):
+            elif command_to_process.startswith("اضف كلمة ممنوعة "):
                 await add_filter_logic(event, command_to_process)
-            elif command_to_process.startswith("حذف كلمة ممنوعة"):
+            elif command_to_process.startswith("حذف كلمة ممنوعة "):
                 await remove_filter_logic(event, command_to_process)
             elif command_to_process == "الكلمات الممنوعة":
                 await list_filters_logic(event, command_to_process)
             
             # --- أوامر الإعدادات (من settings_logic.py) ---
-            elif command_to_process.startswith("ضع قوانين"):
+            elif command_to_process.startswith("ضع قوانين "):
                 await set_rules_logic(event, command_to_process)
             elif command_to_process == "مسح القوانين":
                 await clear_rules_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع ترحيب"):
+            elif command_to_process.startswith("ضع ترحيب "):
                 await set_welcome_logic(event, command_to_process)
             elif command_to_process == "حذف الترحيب":
                 await clear_welcome_logic(event, command_to_process)
@@ -250,7 +250,7 @@ async def general_message_handler(event):
                 await clear_all_creators_logic(event, command_to_process)
             elif command_to_process in ["رفع مشرف", "تنزيل مشرف"]:
                 await promote_demote_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع حجم الكلايش"):
+            elif command_to_process.startswith("ضع حجم الكلايش "):
                 await set_long_text_size_logic(event, command_to_process)
             elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
                 await toggle_id_photo_logic(event, command_to_process)
@@ -266,17 +266,65 @@ async def general_message_handler(event):
                 await my_stats_logic(event, command_to_process)
             elif command_to_process == "رتبتي":
                 await my_rank_logic(event, command_to_process)
-            elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"):
+            elif command_to_process == "ايدي" or command_to_process.startswith("ايدي "):
+                await id_logic(event, command_to_process)
+            elif command_to_process == "id" or command_to_process.startswith("id "):
                 await id_logic(event, command_to_process)
             elif command_to_process == "القوانين":
                 await get_rules_logic(event, command_to_process)
-            elif command_to_process.startswith("نداء"):
+            elif command_to_process == "نداء" or command_to_process.startswith("نداء "):
                 await tag_all_logic(event, command_to_process)
             
             # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
-                # ... (الكود هنا يبقى كما هو بدون تغيير)
-                pass # هذا السطر للتوضيح فقط، الكود الفعلي لا يحتاجه
+                async with AsyncDBSession() as session:
+                    chat = await get_or_create_chat(session, event.chat_id)
+                    user = await get_or_create_user(session, event.chat_id, event.sender_id)
+
+                    user.msg_count = (user.msg_count or 0) + 1
+                    chat.total_msgs = (chat.total_msgs or 0) + 1
+                    
+                    if event.text and (chat.settings or {}).get("public_replies_enabled", True):
+                        trigger = event.text.lower()
+                        
+                        BOT_TRIGGERS = ["سروج", "بوت"]
+                        if any(b in trigger for b in BOT_TRIGGERS):
+                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                            chat_settings = chat.settings or {}
+                            if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
+                                await event.reply(chat_settings["dev_reply"])
+                                await session.commit()
+                                return
+                            if chat_settings.get("call_reply"):
+                                await event.reply(chat_settings["call_reply"])
+                                await session.commit()
+                                return
+                        
+                        all_replies = DEFAULT_REPLIES.copy()
+                        custom_replies = chat.custom_replies or {}
+                        all_replies.update({k.lower(): v for k, v in custom_replies.items()})
+                        reply_data = all_replies.get(trigger)
+                        if reply_data:
+                            reply_template = None
+                            if isinstance(reply_data, str):
+                                reply_template = reply_data
+                            elif isinstance(reply_data, dict):
+                                current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                                if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
+                                elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
+                                elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
+                                elif "member" in reply_data: reply_list = reply_data["member"]
+                                else: reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
+                                if reply_list: reply_template = random.choice(reply_list)
+                            
+                            if reply_template:
+                                sender = await event.get_sender()
+                                try:
+                                    final_reply = reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name)
+                                    await event.reply(final_reply)
+                                except KeyError:
+                                    await event.reply(reply_template)
+                    await session.commit()
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
 
