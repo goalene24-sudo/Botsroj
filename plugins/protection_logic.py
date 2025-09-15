@@ -46,6 +46,7 @@ LOCK_TYPES_MAP = {
     "الكلايش": "long_text", "الدردشه": "text", "الانلاين": "inline", "البوتات": "bot",
     "الجهات": "contact", "الموقع": "location", "الفشار": "game",
     "الانكليزيه": "english", "التعديل": "edit",
+    "التكرار": "flood", # <-- تمت الإضافة
 }
 
 async def lock_unlock_logic(event, command_text):
@@ -70,12 +71,14 @@ async def lock_unlock_logic(event, command_text):
             "التوجيه": "سديت التوجيه حتى لتدوخونا 😒", "المعرف": "بعد محد يكدر يدز معرفات هنا 🤫",
             "الملصقات": "كافي ملصقات دوختونا 😠", "البوتات": "ممنوع اضافه بوتات بدون اذني 😡",
             "الدردشه": "قفلت الدردشه محد يحجي بعد 🤫",
+            "التكرار": "سديت التكرار، الي يكرر رسائلة ياخذ كتم 😠", # <-- تمت الإضافة
         }
         UNLOCK_REPLIES = {
             "الصور": "هسه تكدرون دزون صور براحتكم 🏞️", "الروابط": "يلا عادي نشرو روابط 👍",
             "التوجيه": "فتحت التوجيه، وجهو براحتكم ↪️", "المعرف": "يلا عادي دزو معرفات هسه.",
             "الملصقات": "فتحته للملصقات، طلعو إبداعكم 😂", "البوتات": "فتحت اضافه البوتات بس ديرو بالكم 🤔",
             "الدردشه": "فتحت الدردشه سولفو براحتكم 🥰",
+            "التكرار": "فتحت التكرار، بس على كيفكم لتلحون 😂", # <-- تمت الإضافة
         }
 
         async with AsyncDBSession() as session:
@@ -230,11 +233,8 @@ async def set_mute_duration_logic(event, command_text):
         logger.error(f"Error in set_mute_duration_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت اضبط الوقت 😢**")
 
-# --- (جديد) الوظيفة المفقودة ---
+# --- الوظيفة الخاصة بإعدادات صورة الايدي ---
 async def toggle_id_photo_logic(event, command_text):
-    """
-    Handles enabling or disabling the photo in the ID command.
-    """
     try:
         if not await has_bot_permission(event):
             return await event.reply("**جماعت الأدمنية بس همه يكدرون يغيرون هاي الإعدادات 😉**")
