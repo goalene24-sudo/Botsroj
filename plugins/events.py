@@ -23,19 +23,19 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- استيراد الدوال المنطقية من ملفاتها المنظمة ---
+# --- (تم التصحيح) استيراد الدوال المنطقية من ملفاتها الصحيحة ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
     get_rules_logic, tag_all_logic,
-    list_admins_logic # <-- تمت إضافة دالة المدراء الجديدة
+    list_admins_logic,
+    toggle_id_photo_logic # <-- تم إرجاعه إلى مكانه الصحيح
 )
 from .protection_logic import (
     lock_unlock_logic, kick_logic, unmute_logic,
     set_warns_limit_logic, set_mute_duration_logic,
     ban_logic, unban_logic, mute_logic, warn_logic, clear_warns_logic, timed_mute_logic,
-    add_filter_logic, remove_filter_logic, list_filters_logic,
-    toggle_id_photo_logic
+    add_filter_logic, remove_filter_logic, list_filters_logic
 )
 import logging
 
@@ -174,13 +174,11 @@ async def general_message_handler(event):
                 await remove_filter_logic(event, command_to_process)
             elif command_to_process == "الكلمات الممنوعة":
                 await list_filters_logic(event, command_to_process)
-            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
-                await toggle_id_photo_logic(event, command_to_process)
 
             # --- أوامر الرتب والملف الشخصي (من commands_logic.py) ---
             elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
                 await set_rank_logic(event, command_to_process)
-            elif command_to_process == "المدراء": # <-- تمت الإضافة هنا
+            elif command_to_process == "المدراء":
                 await list_admins_logic(event, command_to_process)
             elif command_to_process == "سجلي":
                 await my_stats_logic(event, command_to_process)
@@ -192,6 +190,8 @@ async def general_message_handler(event):
                 await get_rules_logic(event, command_to_process)
             elif command_to_process.startswith("نداء"):
                 await tag_all_logic(event, command_to_process)
+            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
+                await toggle_id_photo_logic(event, command_to_process)
             
             # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
