@@ -14,7 +14,7 @@ import config
 # --- استيراد كل المكونات اللازمة للحذف الكامل ---
 from database import AsyncDBSession
 from models import Alias, User, Chat, BotAdmin, Creator, Vip, SecondaryDev
-# --- (تم التعديل) استيراد الأدوات المحدثة وقائمة الحظر ---
+# --- استيراد الأدوات المحدثة وقائمة الحظر ---
 from .utils import (
     check_activation,
     KICKED_CHATS,
@@ -38,7 +38,9 @@ from .protection_logic import (
     add_filter_logic, remove_filter_logic, list_filters_logic,
     toggle_id_photo_logic
 )
+# --- (تم التعديل) استيراد دالة التفعيل الجديدة ---
 from .settings_logic import (
+    activation_logic,
     set_rules_logic, clear_rules_logic,
     set_welcome_logic, clear_welcome_logic,
     pin_logic, unpin_logic,
@@ -163,9 +165,18 @@ async def handle_message_locks(event):
 
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
-    if not await check_activation(event.chat_id):
-        return
-    
+    # --- (تم التعديل) منطق تجاوز التحقق من التفعيل لأمر "تفعيل" ---
+    is_activation_cmd = False
+    if event.text:
+        clean_text = re.sub(r"^[!/]", "", event.text.strip())
+        if clean_text in ["تفعيل", "activate"]:
+            is_activation_cmd = True
+
+    if not is_activation_cmd:
+        if not await check_activation(event.chat_id):
+            return
+    # --- نهاية التعديل ---
+
     try:
         if await handle_flood_lock(event):
             return
@@ -199,7 +210,10 @@ async def general_message_handler(event):
             
             # --- الموزع المحدث والكامل ---
             
-            if base_cmd in ["ايدي", "id"]:
+            # --- (تم التعديل) إضافة أمر تفعيل ---
+            if base_cmd in ["تفعيل", "activate"]:
+                await activation_logic(event, command_to_process)
+            elif base_cmd in ["ايدي", "id"]:
                 await id_logic(event, command_to_process)
             elif command_to_process.startswith("قفل ") or command_to_process.startswith("فتح "):
                 await lock_unlock_logic(event, command_to_process)
@@ -336,7 +350,7 @@ async def handle_chat_action(event):
         if event.user_id == me.id:
             chat_id = event.chat_id
             
-            # --- (تم التعديل) إضافة المجموعة إلى قائمة الحظر المؤقتة ---
+            # --- إضافة المجموعة إلى قائمة الحظر المؤقتة ---
             KICKED_CHATS.add(chat_id)
             
             logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
