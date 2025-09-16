@@ -1,147 +1,168 @@
 import asyncio
+import logging
+from datetime import datetime
 from telethon import events, Button
-from telethon.tl.types import ChannelParticipantsAdmins
-from bot import client
+from telethon.tl.types import ChannelParticipantsAdmins, ChannelParticipantCreator
 
-# --- استيراد مكونات قاعدة البيانات الجديدة ---
+from bot import client
+from database import AsyncDBSession
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import AsyncDBSession  # تم التعديل هنا
-from models import Chat, Vip, BotAdmin, Creator, SecondaryDev
+from models import Chat, User, Vip, BotAdmin, Creator, SecondaryDev, Alias
+from .utils import KICKED_CHATS, get_or_create_chat, check_activation, get_chat_setting, get_or_create_user
 
-# --- استيراد الدوال المساعدة المحدثة ---
-from .utils import (
-    check_activation, is_command_enabled, build_main_menu_buttons, 
-    MAIN_MENU_MESSAGE, is_admin
-)
-from .utils import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
+logger = logging.getLogger(__name__)
 
-WELCOMED_RECENTLY = set()
+# --- دالة التفعيل الموحدة (للنص والزر) ---
+async def perform_activation(event):
+    try:
+        user_id = event.sender_id
+        chat_id = event.chat_id
 
-@client.on(events.ChatAction)
-async def chat_action_handler(event):
-    me = await client.get_me()
-    chat_id = event.chat_id
+        # التحقق من أن المستخدم مشرف
+        try:
+            participant = await client.get_participant(chat_id, user_id)
+            if not (participant.admin_rights or isinstance(participant.participant, ChannelParticipantCreator)):
+                msg = "**عذرًا، فقط مشرفي المجموعة يمكنهم تفعيل البوت.**"
+                return await event.answer(msg, alert=True) if hasattr(event, 'answer') else await event.reply(msg)
+        except Exception:
+            msg = "**لا أستطيع رؤية صلاحياتك، هل أنت متأكد من أنك عضو في المجموعة؟**"
+            return await event.answer(msg, alert=True) if hasattr(event, 'answer') else await event.reply(msg)
 
-    # عند إضافة البوت إلى مجموعة جديدة
-    if event.user_added and event.user_id == me.id:
-        if chat_id in WELCOMED_RECENTLY: 
-            return
-        WELCOMED_RECENTLY.add(chat_id)
-        
+        # التحقق من أن البوت مشرف
+        try:
+            me = await client.get_me()
+            bot_participant = await client.get_participant(chat_id, me.id)
+            if not bot_participant.admin_rights:
+                msg = "**⚠️ | لست مشرفًا في المجموعة! يرجى رفعي كمشرف أولاً ثم حاول مجددًا.**"
+                return await event.answer(msg, alert=True) if hasattr(event, 'answer') else await event.reply(msg)
+        except Exception:
+             msg = "**⚠️ | لا أستطيع التحقق من صلاحياتي. يرجى رفعي كمشرف أولاً.**"
+             return await event.answer(msg, alert=True) if hasattr(event, 'answer') else await event.reply(msg)
+
+        KICKED_CHATS.discard(chat_id)
+
         async with AsyncDBSession() as session:
-            # التأكد من وجود سجل للمجموعة في قاعدة البيانات
-            await get_or_create_chat(session, chat_id)
+            chat = await get_or_create_chat(session, chat_id)
+            if chat.is_active:
+                msg = "**✅ | البوت مفعل بالفعل في هذه المجموعة!**"
+                return await event.answer(msg, alert=True) if hasattr(event, 'answer') else await event.reply(msg)
+            
+            chat.is_active = True
+            await session.commit()
+        
+        msg = "**✅ | تم تفعيل البوت بنجاح في هذه المجموعة.**\n**- أرسل `الاوامر` لعرض قائمة الأوامر.**"
+        if hasattr(event, 'edit'):
+            await event.edit(msg)
+        else:
+            await event.reply(msg)
+            
+    except Exception as e:
+        logger.error(f"Error in activation logic: {e}", exc_info=True)
+        if hasattr(event, 'answer'):
+            await event.answer("حدث خطأ أثناء التفعيل. 😢", alert=True)
+        else:
+            await event.reply("**حدث خطأ أثناء محاولة تفعيل البوت. 😢**")
+
+# --- معالج أحداث المجموعة (إضافة/طرد/انضمام) ---
+@client.on(events.ChatAction)
+async def core_chat_action_handler(event):
+    me = await client.get_me()
+
+    # 1. عند إضافة البوت لمجموعة جديدة
+    if event.user_added and event.user_id == me.id:
+        chat_id = event.chat_id
+        logger.info(f"Bot added to new group: {chat_id}")
+
+        async with AsyncDBSession() as session:
+            chat_db = await get_or_create_chat(session, chat_id)
+            if chat_db:
+                chat_db.is_active = False
+                await session.commit()
+        
+        KICKED_CHATS.discard(chat_id)
 
         try:
-            chat = await event.get_chat()
+            chat_info = await event.get_chat()
             member_count = (await client.get_participants(chat_id, limit=0)).total
             admin_list = await client.get_participants(chat_id, filter=ChannelParticipantsAdmins)
             admin_count = len(admin_list)
-            bot_pfp = await client.get_profile_photos('me', limit=1)
-        except Exception as e:
-            print(f"لا يمكن جلب معلومات المجموعة {chat_id}: {e}")
-            return
             
-        welcome_text = (
-            f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
-            f"**📊 اسم المجموعة: {chat.title}**\n"
-            f"**👥 عددكم: {member_count} نفر**\n"
-            f"**🛡️ المشرفين: {admin_count} مدير**\n"
-            f"**💻 المطور مالتي: @tit_50**\n\n"
-            "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
-        )
-        
-        activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
-        
-        if bot_pfp:
-            await client.send_file(chat_id, bot_pfp[0], caption=welcome_text, buttons=activate_button)
-        else:
+            welcome_text = (
+                f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
+                f"**📊 اسم المجموعة: {chat_info.title}**\n"
+                f"**👥 عددكم: {member_count} نفر**\n"
+                f"**🛡️ المشرفين: {admin_count} مدير**\n"
+                f"**💻 المطور مالتي: @tit_50**\n\n"
+                "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
+            )
+            
+            activate_button = Button.inline("✅ تفعيل البوت ✅", data="core_activate")
             await client.send_message(chat_id, welcome_text, buttons=activate_button)
-        
-        await asyncio.sleep(10)
-        if chat_id in WELCOMED_RECENTLY:
-            WELCOMED_RECENTLY.remove(chat_id)
-    
-    # عند انضمام عضو جديد
-    elif event.user_joined and event.user_id != me.id:
-        if not await check_activation(event.chat_id): 
-            return
-        
-        # التحقق إذا كان الترحيب مفعلاً
-        if not await is_command_enabled(event.chat_id, "welcome_enabled"):
-            return
+        except Exception as e:
+            logger.error(f"Failed to send welcome message to {chat_id}: {e}")
+        return
 
-        chat = await event.get_chat()
-        new_user = await event.get_user()
+    # 2. عند طرد البوت من المجموعة
+    if (event.user_left or event.user_kicked) and event.user_id == me.id:
+        chat_id = event.chat_id
+        KICKED_CHATS.add(chat_id)
+        logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
+        try:
+            async with AsyncDBSession() as session:
+                await session.execute(delete(User).where(User.chat_id == chat_id))
+                await session.execute(delete(Alias).where(Alias.chat_id == chat_id))
+                await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
+                await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
+                await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
+                await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
+                await session.execute(delete(Chat).where(Chat.id == chat_id))
+                await session.commit()
+                logger.info(f"Successfully deleted all data for chat {chat_id}.")
+        except Exception as e:
+            logger.error(f"Failed to delete data for chat {chat_id}: {e}", exc_info=True)
+        return
+
+    # 3. عند انضمام عضو جديد للمجموعة
+    if event.user_joined and event.user_id != me.id:
+        if not await check_activation(event.chat_id): return
         
         custom_welcome = await get_chat_setting(event.chat_id, "welcome_message")
-        
         if custom_welcome:
-            welcome_text = custom_welcome.format(
-                user=f"[{new_user.first_name}](tg://user?id={new_user.id})",
-                group=chat.title
-            )
-        else:
-            welcome_text = f"**هلا بالضلع الجديد [{new_user.first_name}](tg://user?id={new_user.id}) نورت الكروب يا غالي 🥳**"
-        
-        buttons = Button.inline("📜 عرض القوانين", data="show_rules")
-        await client.send_message(event.chat_id, f"**{welcome_text}**", buttons=buttons)
-    
-    # عند مغادرة/طرد/حظر عضو
-    elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
-        user_id_to_clear = event.user_id
-        async with AsyncDBSession() as session:
-            # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
-            await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
-            await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
-            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
-            await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
-            await session.commit()
-            print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
+            try:
+                user_entity = await event.get_user()
+                chat_entity = await event.get_chat()
+                formatted_message = custom_welcome.format(user=f"[{user_entity.first_name}](tg://user?id={user_entity.id})", group=chat_entity.title)
+                await client.send_message(event.chat_id, formatted_message)
+            except Exception as e:
+                logger.error(f"Error in custom welcome: {e}")
 
-    # عند طرد البوت من المجموعة
-    elif (event.user_kicked or event.user_left) and event.user_id == me.id:
-        async with AsyncDBSession() as session:
-            chat = await get_or_create_chat(session, event.chat_id)
-            chat.is_active = False # تعطيل المجموعة
-            await session.commit()
-        print(f"تمت إزالة البوت من المجموعة {event.chat_id} وتم إيقافه فيها تلقائياً.")
+# --- معالج زر التفعيل ---
+@client.on(events.CallbackQuery(pattern=b"core_activate"))
+async def handle_core_activation_button(event):
+    await perform_activation(event)
 
-# أمر تفعيل/ايقاف البوت
-@client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
-async def toggle_bot_status(event):
-    if event.is_private: 
-        return
-    if not await is_admin(event.chat_id, event.sender_id):
-        return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
-        
-    action = event.raw_text
-    me = await client.get_me()
-    
-    async with AsyncDBSession() as session:
-        chat = await get_or_create_chat(session, event.chat_id)
-        
-        if action == "ايقاف":
-            if not chat.is_active:
-                return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
-            chat.is_active = False
-            await session.commit()
-            await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
-        else:  # تفعيل
-            if chat.is_active:
-                return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
-            
-            if not await is_admin(event.chat_id, me.id): 
-                return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
+# --- معالج أوامر تفعيل/ايقاف النصية ---
+@client.on(events.NewMessage(pattern=r"^[!/](تفعيل|ايقاف)$"))
+async def toggle_bot_status_handler(event):
+    if event.raw_text.strip() in ["تفعيل", "/تفعيل", "!تفعيل"]:
+        await perform_activation(event)
+    else: # إيقاف
+        if not await check_activation(event.chat_id):
+            return
+        try:
+            participant = await client.get_participant(event.chat_id, event.sender_id)
+            if not (participant.admin_rights or isinstance(participant.participant, ChannelParticipantCreator)):
+                return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
+
+            async with AsyncDBSession() as session:
+                chat = await get_or_create_chat(session, event.chat_id)
+                if not chat.is_active:
+                    return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
                 
-            chat.is_active = True
-            await session.commit()
-            await event.reply("**🟢 رجعتلكم! يلا شنو الأوامر؟**")
-
-@client.on(events.NewMessage(pattern='^الاوامر$'))
-async def main_menu_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): 
-        return
-    buttons = await build_main_menu_buttons()
-    await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
+                chat.is_active = False
+                await session.commit()
+            
+            await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
+        except Exception as e:
+            logger.error(f"Error in deactivation: {e}")
