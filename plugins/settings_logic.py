@@ -44,12 +44,15 @@ async def del_chat_setting(chat_id, key):
             flag_modified(chat, "settings")
             await session.commit()
 
-# --- (جديد) دالة تفعيل البوت ---
-async def activation_logic(event, command_text):
+# --- دالة تفعيل البوت ---
+async def activation_logic(event, command_text=None):
     try:
+        user_id = event.sender_id
+        chat_id = event.chat_id
+
         # الخطوة 1: التحقق من أن المستخدم هو مشرف
         try:
-            participant = await client.get_participant(event.chat_id, event.sender_id)
+            participant = await client.get_participant(chat_id, user_id)
             if not (participant.admin_rights or isinstance(participant.participant, ChannelParticipantCreator)):
                 return await event.reply("**عذرًا، فقط مشرفي المجموعة يمكنهم تفعيل البوت.**")
         except Exception:
@@ -58,18 +61,18 @@ async def activation_logic(event, command_text):
         # الخطوة 2: التحقق من أن البوت مشرف
         try:
             me = await client.get_me()
-            bot_participant = await client.get_participant(event.chat_id, me.id)
+            bot_participant = await client.get_participant(chat_id, me.id)
             if not bot_participant.admin_rights:
-                return await event.reply("**⚠️ | لست مشرفًا في المجموعة! يرجى رفعي كمشرف أولاً ثم اكتب `تفعيل`.**")
+                return await event.reply("**⚠️ | لست مشرفًا في المجموعة! يرجى رفعي كمشرف أولاً ثم حاول مجددًا.**")
         except Exception:
              return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي. يرجى رفعي كمشرف أولاً.**")
 
         # الخطوة 3: (الحل) إزالة المجموعة من قائمة الحظر المؤقتة
-        KICKED_CHATS.discard(event.chat_id)
+        KICKED_CHATS.discard(chat_id)
 
         # الخطوة 4: تحديث قاعدة البيانات
         async with AsyncDBSession() as session:
-            chat = await get_or_create_chat(session, event.chat_id)
+            chat = await get_or_create_chat(session, chat_id)
             if chat.is_active:
                 return await event.reply("**✅ | البوت مفعل بالفعل في هذه المجموعة!**")
             
@@ -82,6 +85,28 @@ async def activation_logic(event, command_text):
     except Exception as e:
         logger.error(f"Error in activation_logic: {e}", exc_info=True)
         await event.reply("**حدث خطأ أثناء محاولة تفعيل البوت. 😢**")
+
+# --- دالة إيقاف البوت ---
+async def deactivation_logic(event, command_text):
+    try:
+        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+        if actor_rank < Ranks.MOD:
+            return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
+
+        async with AsyncDBSession() as session:
+            chat = await get_or_create_chat(session, event.chat_id)
+            if not chat.is_active:
+                return await event.reply("**أنا معطل أصلاً, شتريد مني بعد 😢**")
+            
+            chat.is_active = False
+            await session.commit()
+        
+        await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
+
+    except Exception as e:
+        logger.error(f"Error in deactivation_logic: {e}", exc_info=True)
+        await event.reply("**حدث خطأ أثناء محاولة إيقاف البوت. 😢**")
+
 
 # --- قسم إدارة القوانين والترحيب ---
 async def set_rules_logic(event, command_text):
@@ -138,7 +163,7 @@ async def clear_welcome_logic(event, command_text):
         logger.error(f"Error in clear_welcome_logic: {e}", exc_info=True)
         await event.reply("**صارت مشكلة وماكدرت امسح الترحيب 😢**")
 
-# --- (جديد) قسم التثبيت ---
+# --- قسم التثبيت ---
 async def pin_logic(event, command_text):
     try:
         if not await has_bot_permission(event):
@@ -148,7 +173,6 @@ async def pin_logic(event, command_text):
         if not reply:
             return await event.reply("**لازم ترد على رسالة حتى اثبتها.**")
             
-        # notify=True لإرسال إشعار لأعضاء المجموعة
         await reply.pin(notify=True)
         await event.reply("**📌 | تمام، ثبتت الرسالة.**")
         
