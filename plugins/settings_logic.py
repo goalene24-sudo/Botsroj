@@ -8,9 +8,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 import config
-from .utils import has_bot_permission, get_user_rank, Ranks
+from .utils import has_bot_permission, get_user_rank, Ranks, KICKED_CHATS
 from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, Vip
+from telethon.tl.types import ChannelParticipantCreator
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,45 @@ async def del_chat_setting(chat_id, key):
             chat.settings = new_settings
             flag_modified(chat, "settings")
             await session.commit()
+
+# --- (جديد) دالة تفعيل البوت ---
+async def activation_logic(event, command_text):
+    try:
+        # الخطوة 1: التحقق من أن المستخدم هو مشرف
+        try:
+            participant = await client.get_participant(event.chat_id, event.sender_id)
+            if not (participant.admin_rights or isinstance(participant.participant, ChannelParticipantCreator)):
+                return await event.reply("**عذرًا، فقط مشرفي المجموعة يمكنهم تفعيل البوت.**")
+        except Exception:
+            return await event.reply("**لا أستطيع رؤية صلاحياتك، هل أنت متأكد من أنك عضو في المجموعة؟**")
+            
+        # الخطوة 2: التحقق من أن البوت مشرف
+        try:
+            me = await client.get_me()
+            bot_participant = await client.get_participant(event.chat_id, me.id)
+            if not bot_participant.admin_rights:
+                return await event.reply("**⚠️ | لست مشرفًا في المجموعة! يرجى رفعي كمشرف أولاً ثم اكتب `تفعيل`.**")
+        except Exception:
+             return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي. يرجى رفعي كمشرف أولاً.**")
+
+        # الخطوة 3: (الحل) إزالة المجموعة من قائمة الحظر المؤقتة
+        KICKED_CHATS.discard(event.chat_id)
+
+        # الخطوة 4: تحديث قاعدة البيانات
+        async with AsyncDBSession() as session:
+            chat = await get_or_create_chat(session, event.chat_id)
+            if chat.is_active:
+                return await event.reply("**✅ | البوت مفعل بالفعل في هذه المجموعة!**")
+            
+            chat.is_active = True
+            await session.commit()
+            
+        # الخطوة 5: رسالة نجاح
+        await event.reply("**✅ | تم تفعيل البوت بنجاح في هذه المجموعة.**\n**- أرسل `الاوامر` لعرض قائمة الأوامر.**")
+        
+    except Exception as e:
+        logger.error(f"Error in activation_logic: {e}", exc_info=True)
+        await event.reply("**حدث خطأ أثناء محاولة تفعيل البوت. 😢**")
 
 # --- قسم إدارة القوانين والترحيب ---
 async def set_rules_logic(event, command_text):
