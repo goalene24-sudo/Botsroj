@@ -196,9 +196,10 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
+            # --- الموزع المحدث والكامل ---
+            
             if base_cmd in ["ايدي", "id"]:
                 await id_logic(event, command_to_process)
-            # --- (تم التعديل) تم نقل كل الشروط إلى هنا لتكون في مكان واحد ---
             elif command_to_process.startswith("قفل ") or command_to_process.startswith("فتح "):
                 await lock_unlock_logic(event, command_to_process)
             elif command_to_process == "طرد":
@@ -272,10 +273,55 @@ async def general_message_handler(event):
             elif base_cmd == "نداء":
                 await tag_all_logic(event, command_to_process)
             
+            # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
                 async with AsyncDBSession() as session:
-                    # ... (الكود هنا يبقى كما هو بدون تغيير)
-                    pass
+                    chat = await get_or_create_chat(session, event.chat_id)
+                    user = await get_or_create_user(session, event.chat_id, event.sender_id)
+                    user.msg_count = (user.msg_count or 0) + 1
+                    chat.total_msgs = (chat.total_msgs or 0) + 1
+                    
+                    if event.text and (chat.settings or {}).get("public_replies_enabled", True):
+                        trigger = event.text.lower()
+                        
+                        BOT_TRIGGERS = ["سروج", "بوت"]
+                        if any(b in trigger for b in BOT_TRIGGERS):
+                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                            chat_settings = chat.settings or {}
+                            if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
+                                await event.reply(chat_settings["dev_reply"])
+                                await session.commit()
+                                return
+                            if chat_settings.get("call_reply"):
+                                await event.reply(chat_settings["call_reply"])
+                                await session.commit()
+                                return
+                        
+                        all_replies = DEFAULT_REPLIES.copy()
+                        custom_replies = chat.custom_replies or {}
+                        all_replies.update({k.lower(): v for k, v in custom_replies.items()})
+                        reply_data = all_replies.get(trigger)
+                        if reply_data:
+                            reply_template = None
+                            if isinstance(reply_data, str):
+                                reply_template = reply_data
+                            elif isinstance(reply_data, dict):
+                                current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                                if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
+                                elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
+                                elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
+                                elif "member" in reply_data: reply_list = reply_data["member"]
+                                else: reply_list = next((v for v in reply_data.values() if isinstance(v, list)), None)
+                                if reply_list: reply_template = random.choice(reply_list)
+                            
+                            if reply_template:
+                                sender = await event.get_sender()
+                                try:
+                                    final_reply = reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name)
+                                    await event.reply(final_reply)
+                                except KeyError:
+                                    await event.reply(reply_template)
+                    await session.commit()
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
 
@@ -284,7 +330,6 @@ async def general_message_handler(event):
 async def handle_chat_action(event):
     me = await client.get_me()
     
-    # --- (جديد) معالجة مغادرة البوت أو طرده ---
     if event.user_left or event.user_kicked:
         if event.user_id == me.id:
             logger.info(f"لقد غادرت أو طُردت من المجموعة {event.chat_id}. سيتم حذف بياناتها.")
