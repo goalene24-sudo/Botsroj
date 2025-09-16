@@ -14,9 +14,10 @@ import config
 # --- استيراد كل المكونات اللازمة للحذف الكامل ---
 from database import AsyncDBSession
 from models import Alias, User, Chat, BotAdmin, Creator, Vip, SecondaryDev
-# --- استيراد الأدوات المحدثة ---
+# --- (تم التعديل) استيراد الأدوات المحدثة وقائمة الحظر ---
 from .utils import (
     check_activation,
+    KICKED_CHATS,
     FLOOD_TRACKER, get_user_rank, Ranks, get_or_create_chat, get_or_create_user,
     get_global_setting
 )
@@ -326,7 +327,7 @@ async def general_message_handler(event):
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
 
 
-# --- (تم التعديل) دالة شاملة للتعامل مع انضمام ومغادرة الأعضاء والبوت ---
+# --- دالة شاملة للتعامل مع انضمام ومغادرة الأعضاء والبوت ---
 @client.on(events.ChatAction)
 async def handle_chat_action(event):
     # --- الجزء الخاص بمغادرة أو طرد البوت ---
@@ -334,6 +335,10 @@ async def handle_chat_action(event):
         me = await client.get_me()
         if event.user_id == me.id:
             chat_id = event.chat_id
+            
+            # --- (تم التعديل) إضافة المجموعة إلى قائمة الحظر المؤقتة ---
+            KICKED_CHATS.add(chat_id)
+            
             logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
             try:
                 async with AsyncDBSession() as session:
@@ -349,7 +354,7 @@ async def handle_chat_action(event):
                     logger.info(f"Successfully deleted all data for chat {chat_id}.")
             except Exception as e:
                 logger.error(f"Failed to delete data for chat {chat_id}: {e}", exc_info=True)
-            return # إنهاء الدالة هنا لأن البوت غادر
+            return
 
     # --- الجزء الخاص بانضمام الأعضاء الجدد ---
     if event.user_joined or event.user_added:
