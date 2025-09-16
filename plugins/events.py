@@ -11,9 +11,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 import config
-# --- استيراد مكونات قاعدة البيانات الجديدة ---
+# --- (تم التعديل) استيراد كل المكونات اللازمة للحذف الكامل ---
 from database import AsyncDBSession
-from models import Alias, MessageHistory, User, Chat
+from models import Alias, User, Chat, BotAdmin, Creator, Vip, SecondaryDev
 # --- استيراد الأدوات المحدثة ---
 from .utils import (
     check_activation,
@@ -326,19 +326,10 @@ async def general_message_handler(event):
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
 
 
+# --- (تم التعديل) دالة الترحيب بالأعضاء الجدد فقط ---
 @client.on(events.ChatAction)
 async def handle_chat_action(event):
-    me = await client.get_me()
-    
-    if event.user_left or event.user_kicked:
-        if event.user_id == me.id:
-            logger.info(f"لقد غادرت أو طُردت من المجموعة {event.chat_id}. سيتم حذف بياناتها.")
-            async with AsyncDBSession() as session:
-                await session.execute(delete(Chat).where(Chat.id == event.chat_id))
-                await session.execute(delete(User).where(User.chat_id == event.chat_id))
-                await session.commit()
-            return
-
+    # This function now ONLY handles welcoming new users.
     if event.user_joined or event.user_added:
         async with AsyncDBSession() as session:
             try:
@@ -355,3 +346,26 @@ async def handle_chat_action(event):
             except Exception as e:
                 logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
                 await session.rollback()
+
+# --- (جديد) دالة متخصصة وموثوقة لحذف بيانات المجموعة عند طرد البوت ---
+@client.on(events.LeftChannel)
+async def handle_bot_kicked(event):
+    chat_id = event.chat_id
+    logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
+    try:
+        async with AsyncDBSession() as session:
+            # Delete all data linked to this chat_id
+            await session.execute(delete(User).where(User.chat_id == chat_id))
+            await session.execute(delete(Alias).where(Alias.chat_id == chat_id))
+            await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
+            await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
+            await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
+            await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
+            
+            # Finally, delete the chat record itself
+            await session.execute(delete(Chat).where(Chat.id == chat_id))
+            
+            await session.commit()
+            logger.info(f"Successfully deleted all data for chat {chat_id}.")
+    except Exception as e:
+        logger.error(f"Failed to delete data for chat {chat_id}: {e}", exc_info=True)
