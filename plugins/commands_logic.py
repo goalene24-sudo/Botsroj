@@ -201,7 +201,7 @@ async def id_logic(event, command_text):
 
         if user_input:
             if not user_input.startswith('@') and not user_input.isdigit():
-                 return 
+                return 
 
         if not await is_command_enabled(event.chat_id, "id_enabled"): 
             return await event.reply("🚫 | **أمر الايدي واكف هسه بأمر من الادمنية.**")
@@ -237,7 +237,7 @@ async def id_logic(event, command_text):
         special_title = None
         vip_item = inventory.get("لقب vip")
         if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-            special_title = "من كبار الشخصيات-VIP"
+            special_title = "من كبار الشخصيات 🎖️ VIP"
             
         user_name = target_user.first_name
         decoration_item = inventory.get("زخرفة اسم")
@@ -253,15 +253,19 @@ async def id_logic(event, command_text):
             Ranks.VIP: "عضو مميز ✨", Ranks.MEMBER: "عضو عادي 👤"
         }
         rank = rank_map.get(rank_int, "عضو 👤")
-        if special_title:
-            rank = f"{rank} | {special_title}" # إضافة اللقب الخاص بجانب الرتبة
-
+        
         badges_str = "".join(ACHIEVEMENTS[key]["icon"] for key in user_achievements_keys if key in ACHIEVEMENTS)
         
         header = random.choice(RANDOM_HEADERS)
         tafa3ul = random.choice(RANDOM_TAFA3UL)
         
-        caption = f"**{header}**\n\n"
+        # --- (تم التعديل) بناء الكابشن بالترتيب الجديد ---
+        caption = f"**{header}**\n"
+        if special_title:
+            caption += f"**{special_title}**\n\n"
+        else:
+            caption += "\n"
+        
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
@@ -275,6 +279,7 @@ async def id_logic(event, command_text):
         if badges_str: 
             caption += f"**- أوسمتك:** {badges_str}\n"
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**"
+        # --- نهاية التعديل ---
         
         pfp = None
         if id_photo_enabled: 
