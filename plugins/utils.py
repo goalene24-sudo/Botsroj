@@ -138,6 +138,7 @@ RPS_GAMES = {}
 XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
+KICKED_CHATS = set() # <-- (جديد) قائمة الحظر المؤقتة
 
 # --- (تم الحذف) تم نقل القوائم الكبيرة إلى ملف fun_data.py ---
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
@@ -259,6 +260,10 @@ async def has_bot_permission(event):
     return rank >= Ranks.MOD
 
 async def check_activation(chat_id):
+    # --- (تم التعديل) إضافة التحقق من قائمة الحظر المؤقتة ---
+    if chat_id in KICKED_CHATS:
+        return False
+        
     async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
