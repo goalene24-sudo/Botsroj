@@ -199,14 +199,9 @@ async def id_logic(event, command_text):
         command_parts = command_text.split(maxsplit=1)
         user_input = command_parts[1] if len(command_parts) > 1 else ""
 
-        # --- (تم التعديل) فحص ذكي لمنع الرد على الجمل العادية ---
         if user_input:
-            # إذا كان هناك نص بعد الأمر، تحقق مما إذا كان يبدو ككيان مستخدم صالح
-            # إذا لم يبدأ بـ @ ولم يكن رقمًا، فمن المحتمل أنه جملة عادية
             if not user_input.startswith('@') and not user_input.isdigit():
-                 # هذه جملة مثل "ايدي انكسرت". تجاهلها ولا تفعل شيئًا
                  return 
-        # --- نهاية التعديل ---
 
         if not await is_command_enabled(event.chat_id, "id_enabled"): 
             return await event.reply("🚫 | **أمر الايدي واكف هسه بأمر من الادمنية.**")
@@ -238,6 +233,19 @@ async def id_logic(event, command_text):
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
+        # --- (تم التعديل) إضافة منطق عرض الألقاب والزخرفة ---
+        special_title = None
+        vip_item = inventory.get("لقب vip")
+        if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
+            special_title = "من كبار الشخصيات-VIP"
+            
+        user_name = target_user.first_name
+        decoration_item = inventory.get("زخرفة اسم")
+        if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
+            decoration = decoration_item.get("decoration_style", "")
+            user_name = f"{decoration}{user_name}{decoration}"
+        # --- نهاية التعديل ---
+
         rank_int = await get_user_rank(target_user.id, event.chat_id)
         rank_map = {
             Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻", Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️", Ranks.OWNER: "مالك الكروب 👑",
@@ -245,6 +253,9 @@ async def id_logic(event, command_text):
             Ranks.VIP: "عضو مميز ✨", Ranks.MEMBER: "عضو عادي 👤"
         }
         rank = rank_map.get(rank_int, "عضو 👤")
+        if special_title:
+            rank = f"{rank} | {special_title}" # إضافة اللقب الخاص بجانب الرتبة
+
         badges_str = "".join(ACHIEVEMENTS[key]["icon"] for key in user_achievements_keys if key in ACHIEVEMENTS)
         
         header = random.choice(RANDOM_HEADERS)
@@ -254,7 +265,7 @@ async def id_logic(event, command_text):
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
-        caption += f"**- اسمك:** [{target_user.first_name}](tg://user?id={target_user.id})\n"
+        caption += f"**- اسمك:** [{user_name}](tg://user?id={target_user.id})\n" # استخدام الاسم المزخرف
         caption += f"**- رتبتك:** {rank}\n"
         caption += f"**- نبذتك:** {custom_bio}\n"
         caption += f"**- تفاعلك:** {tafa3ul}\n"
