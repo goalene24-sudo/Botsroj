@@ -233,7 +233,6 @@ async def id_logic(event, command_text):
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
-        # --- (تم التعديل) إضافة منطق عرض الألقاب والزخرفة ---
         special_title = None
         vip_item = inventory.get("لقب vip")
         if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
@@ -241,8 +240,9 @@ async def id_logic(event, command_text):
             
         user_name = target_user.first_name
         decoration_item = inventory.get("زخرفة اسم")
+        # --- (تم التعديل) إصلاح منطق الزخرفة ---
         if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
-            decoration = decoration_item.get("decoration_style", "")
+            decoration = "✨"
             user_name = f"{decoration}{user_name}{decoration}"
         # --- نهاية التعديل ---
 
@@ -259,7 +259,6 @@ async def id_logic(event, command_text):
         header = random.choice(RANDOM_HEADERS)
         tafa3ul = random.choice(RANDOM_TAFA3UL)
         
-        # --- (تم التعديل) بناء الكابشن بالترتيب الجديد ---
         caption = f"**{header}**\n"
         if special_title:
             caption += f"**{special_title}**\n\n"
@@ -279,7 +278,6 @@ async def id_logic(event, command_text):
         if badges_str: 
             caption += f"**- أوسمتك:** {badges_str}\n"
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**"
-        # --- نهاية التعديل ---
         
         pfp = None
         if id_photo_enabled: 
