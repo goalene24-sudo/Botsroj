@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import random
 import time
 import re
-from telethon import events
+from telethon import events, Button
 from telethon.tl.types import MessageEntityUrl, MessageEntityMention, ChannelParticipantsAdmins, ChatBannedRights
 from sqlalchemy.future import select
 from sqlalchemy import delete, func
@@ -11,10 +11,10 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 import config
-# --- استيراد كل المكونات اللازمة للحذف الكامل ---
+# --- استيراد المكونات وقواعد البيانات ---
 from database import AsyncDBSession
 from models import Alias, User, Chat, BotAdmin, Creator, Vip, SecondaryDev
-# --- استيراد الأدوات المحدثة وقائمة الحظر ---
+# --- استيراد الأدوات المحدثة وكل ما يلزم ---
 from .utils import (
     check_activation,
     KICKED_CHATS,
@@ -22,25 +22,15 @@ from .utils import (
     get_global_setting
 )
 from .default_replies import DEFAULT_REPLIES
-from .dhikr_data import DHIKR_LIST
-from .aliases import FIXED_ALIASES
-# --- استيراد كل الدوال المنطقية من جميع الملفات ---
+# --- استيراد الدوال المنطقية المتبقية ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
     get_rules_logic, tag_all_logic,
     list_admins_logic, secondary_dev_logic
 )
-from .protection_logic import (
-    lock_unlock_logic, kick_logic, unmute_logic,
-    set_warns_limit_logic, set_mute_duration_logic,
-    ban_logic, unban_logic, mute_logic, warn_logic, clear_warns_logic, timed_mute_logic,
-    add_filter_logic, remove_filter_logic, list_filters_logic,
-    toggle_id_photo_logic
-)
-# --- (تم التعديل) استيراد دالة التفعيل الجديدة ---
 from .settings_logic import (
-    activation_logic,
+    activation_logic, deactivation_logic,
     set_rules_logic, clear_rules_logic,
     set_welcome_logic, clear_welcome_logic,
     pin_logic, unpin_logic,
@@ -53,136 +43,107 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- دالة منع التكرار ---
-async def handle_flood_lock(event):
-    async with AsyncDBSession() as session:
-        chat = await get_or_create_chat(session, event.chat_id)
-        locks = chat.lock_settings or {}
-        if not locks.get("flood", False):
-            return False
 
-    sender_rank = await get_user_rank(event.sender_id, event.chat_id)
-    if sender_rank >= Ranks.MOD:
-        return False
+# --- (موحد) معالج أحداث المجموعة (إضافة/مغادرة/انضمام) ---
+@client.on(events.ChatAction)
+async def handle_chat_action(event):
+    me = await client.get_me()
 
-    user_id = event.sender_id
-    chat_id = event.chat_id
-    now = time.time()
-    
-    if chat_id not in FLOOD_TRACKER:
-        FLOOD_TRACKER[chat_id] = {}
-    if user_id not in FLOOD_TRACKER[chat_id]:
-        FLOOD_TRACKER[chat_id][user_id] = []
+    # --- 1. عند إضافة البوت إلى مجموعة جديدة ---
+    if event.user_added and event.user_id == me.id:
+        chat_id = event.chat_id
+        logger.info(f"Bot added to new group: {chat_id}")
 
-    FLOOD_TRACKER[chat_id][user_id].append((now, event.text))
-    FLOOD_TRACKER[chat_id][user_id] = FLOOD_TRACKER[chat_id][user_id][-5:]
-    
-    if len(FLOOD_TRACKER[chat_id][user_id]) == 5:
-        first_time = FLOOD_TRACKER[chat_id][user_id][0][0]
-        if (now - first_time) < 5:
-            messages = [msg for _, msg in FLOOD_TRACKER[chat_id][user_id]]
-            if len(set(messages)) == 1:
-                try:
-                    await event.delete()
-                    mute_until = datetime.now() + timedelta(minutes=5)
-                    await client.edit_permissions(event.chat_id, event.sender_id, until_date=mute_until, send_messages=False)
-                    sender = await event.get_sender()
-                    await event.respond(f"**🤫 | [{sender.first_name}](tg://user?id={sender.id}) لزكت بالرسالة، اكلت كتم 5 دقايق.**")
-                    FLOOD_TRACKER[chat_id][user_id] = []
-                    return True
-                except Exception as e:
-                    logger.warning(f"Failed to handle flood for user {user_id}: {e}")
-    return False
-
-# --- دالة الحماية والتحذيرات والكتم ---
-async def handle_message_locks(event):
-    if event.sender_id in config.SUDO_USERS:
-        return False
-
-    async with AsyncDBSession() as session:
-        chat = await get_or_create_chat(session, event.chat_id)
-        user = await get_or_create_user(session, event.chat_id, event.sender_id)
-
-        if user.mute_end_time and user.mute_end_time > datetime.now():
-            try:
-                await event.delete()
-            except Exception:
-                pass
-            return True
-
-        sender_rank = await get_user_rank(event.sender_id, event.chat_id)
-        if sender_rank >= Ranks.MOD:
-            return False
-
-        locks = chat.lock_settings or {}
-        settings = chat.settings or {}
-        max_warns = settings.get("max_warns", 3)
-        mute_hours = settings.get("mute_duration_hours", 6)
-        long_text_size = settings.get("long_text_size", 200)
-
-        violation_type = None
-        
-        if locks.get("photo") and event.photo: violation_type = "الصور"
-        elif locks.get("video") and event.video: violation_type = "الفيديو"
-        elif locks.get("sticker") and event.sticker: violation_type = "الملصقات"
-        elif locks.get("gif") and event.gif: violation_type = "المتحركات"
-        elif locks.get("url") and any(isinstance(e, MessageEntityUrl) for e in (event.entities or [])): violation_type = "الروابط"
-        elif locks.get("forward") and event.fwd_from: violation_type = "التوجيه"
-        elif locks.get("long_text") and event.text and len(event.text) > long_text_size: violation_type = "الكلايش الطويلة"
-
-        if violation_type:
-            try:
-                await event.delete()
-            except Exception as e:
-                logger.warning(f"Failed to delete locked message: {e}")
-
-            user.warns = (user.warns or 0) + 1
-            sender = await event.get_sender()
-            
-            if user.warns >= max_warns:
-                mute_until = datetime.now() + timedelta(hours=mute_hours)
-                user.warns = 0
-                user.mute_end_time = mute_until
-
-                try:
-                    await client.edit_permissions(event.chat_id, sender.id, until_date=mute_until, send_messages=False)
-                    mute_msg = (f"**🚫 | العضو [{sender.first_name}](tg://user?id={sender.id}) وصل للحد الأقصى من التحذيرات (`{max_warns}`).**\n"
-                                f"**- تم كتمه تلقائيًا لمدة {mute_hours} ساعات.**")
-                    await event.respond(mute_msg)
-                except Exception as e:
-                    logger.error(f"Failed to mute user {sender.id}: {e}")
-                    await event.respond(f"**حاولت اكتم [{sender.first_name}](tg://user?id={sender.id}) بس ماكدرت، يمكن صلاحياتي ناقصة.**")
-            else:
-                warn_msg = (f"**عزيزي [{sender.first_name}](tg://user?id={sender.id})،**\n"
-                            f"**{violation_type} ممنوعة هنا بأمر من الإدارة.**\n\n"
-                            f"**لقد حصلت على تحذير! ({user.warns}/{max_warns})**")
-                await event.respond(warn_msg)
-
+        async with AsyncDBSession() as session:
+            chat_db = await get_or_create_chat(session, chat_id)
+            chat_db.is_active = False
             await session.commit()
-            return True
-    return False
+        
+        KICKED_CHATS.discard(chat_id)
+
+        try:
+            chat_info = await event.get_chat()
+            member_count = (await client.get_participants(chat_id, limit=0)).total
+            admin_list = await client.get_participants(chat_id, filter=ChannelParticipantsAdmins)
+            admin_count = len(admin_list)
+            
+            welcome_text = (
+                f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
+                f"**📊 اسم المجموعة: {chat_info.title}**\n"
+                f"**👥 عددكم: {member_count} نفر**\n"
+                f"**🛡️ المشرفين: {admin_count} مدير**\n"
+                f"**💻 المطور مالتي: @tit_50**\n\n"
+                "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
+            )
+            
+            activate_button = Button.inline("✅ تفعيل البوت ✅", data="activate")
+            await client.send_message(chat_id, welcome_text, buttons=activate_button)
+        except Exception as e:
+            logger.error(f"Failed to send welcome message to {chat_id}: {e}")
+        return
+
+    # --- 2. عند طرد البوت من المجموعة ---
+    if (event.user_left or event.user_kicked) and event.user_id == me.id:
+        chat_id = event.chat_id
+        KICKED_CHATS.add(chat_id)
+        logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
+        try:
+            async with AsyncDBSession() as session:
+                await session.execute(delete(User).where(User.chat_id == chat_id))
+                await session.execute(delete(Alias).where(Alias.chat_id == chat_id))
+                await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
+                await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
+                await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
+                await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
+                await session.execute(delete(Chat).where(Chat.id == chat_id))
+                await session.commit()
+                logger.info(f"Successfully deleted all data for chat {chat_id}.")
+        except Exception as e:
+            logger.error(f"Failed to delete data for chat {chat_id}: {e}", exc_info=True)
+        return
+
+    # --- 3. عند انضمام عضو جديد (وليس البوت) ---
+    if event.user_joined and event.user_id != me.id:
+        if not await check_activation(event.chat_id): return
+        async with AsyncDBSession() as session:
+            try:
+                user = await get_or_create_user(session, event.chat_id, event.user_id)
+                user.join_date = datetime.now().strftime("%Y-%m-%d")
+                chat = await get_or_create_chat(session, event.chat_id)
+                welcome_message = (chat.settings or {}).get("welcome_message")
+                if welcome_message:
+                    user_entity = await event.get_user()
+                    chat_entity = await event.get_chat()
+                    formatted_message = welcome_message.format(user=f"[{user_entity.first_name}](tg://user?id={user_entity.id})", group=chat_entity.title)
+                    await client.send_message(event.chat_id, formatted_message)
+                await session.commit()
+            except Exception as e:
+                logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
+                await session.rollback()
+
+# --- معالج زر التفعيل ---
+@client.on(events.CallbackQuery(pattern=b"activate"))
+async def handle_activation_button(event):
+    await event.answer("جاري محاولة التفعيل...", alert=False)
+    await activation_logic(event)
 
 
+# --- معالج الرسائل والأوامر الرئيسي ---
 @client.on(events.NewMessage(func=lambda e: not e.is_private and e.chat and e.sender))
 async def general_message_handler(event):
-    # --- (تم التعديل) منطق تجاوز التحقق من التفعيل لأمر "تفعيل" ---
     is_activation_cmd = False
     if event.text:
         clean_text = re.sub(r"^[!/]", "", event.text.strip())
         if clean_text in ["تفعيل", "activate"]:
             is_activation_cmd = True
-
+    
     if not is_activation_cmd:
         if not await check_activation(event.chat_id):
             return
-    # --- نهاية التعديل ---
-
+    
     try:
-        if await handle_flood_lock(event):
-            return
-            
-        if await handle_message_locks(event):
-            return
+        if await handle_flood_lock(event): return
+        if await handle_message_locks(event): return
 
         if event.text:
             command_to_process = None
@@ -208,41 +169,13 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
-            # --- الموزع المحدث والكامل ---
-            
-            # --- (تم التعديل) إضافة أمر تفعيل ---
+            # --- الموزع الموحد والمنظم ---
             if base_cmd in ["تفعيل", "activate"]:
                 await activation_logic(event, command_to_process)
+            elif base_cmd == "ايقاف":
+                await deactivation_logic(event, command_to_process)
             elif base_cmd in ["ايدي", "id"]:
                 await id_logic(event, command_to_process)
-            elif command_to_process.startswith("قفل ") or command_to_process.startswith("فتح "):
-                await lock_unlock_logic(event, command_to_process)
-            elif command_to_process == "طرد":
-                await kick_logic(event, command_to_process)
-            elif command_to_process == "الغاء الكتم":
-                await unmute_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع عدد التحذيرات"):
-                await set_warns_limit_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع وقت الكتم"):
-                await set_mute_duration_logic(event, command_to_process)
-            elif command_to_process == "حظر":
-                await ban_logic(event, command_to_process)
-            elif command_to_process == "الغاء الحظر":
-                await unban_logic(event, command_to_process)
-            elif command_to_process == "كتم":
-                await mute_logic(event, command_to_process)
-            elif re.match(r"^كتم \d+ [ديس]$", command_to_process):
-                await timed_mute_logic(event, command_to_process)
-            elif command_to_process == "تحذير":
-                await warn_logic(event, command_to_process)
-            elif command_to_process == "حذف التحذيرات":
-                await clear_warns_logic(event, command_to_process)
-            elif command_to_process.startswith("اضف كلمة ممنوعة"):
-                await add_filter_logic(event, command_to_process)
-            elif command_to_process.startswith("حذف كلمة ممنوعة"):
-                await remove_filter_logic(event, command_to_process)
-            elif command_to_process == "الكلمات الممنوعة":
-                await list_filters_logic(event, command_to_process)
             elif command_to_process.startswith("ضع قوانين"):
                 await set_rules_logic(event, command_to_process)
             elif command_to_process == "مسح القوانين":
@@ -271,8 +204,6 @@ async def general_message_handler(event):
                 await promote_demote_logic(event, command_to_process)
             elif command_to_process.startswith("ضع حجم الكلايش"):
                 await set_long_text_size_logic(event, command_to_process)
-            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
-                await toggle_id_photo_logic(event, command_to_process)
             elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
                 await set_rank_logic(event, command_to_process)
             elif command_to_process in ["رفع مطور ثانوي", "تنزيل مطور ثانوي", "المطورين الثانويين", "مسح المطورين الثانويين"]:
@@ -287,8 +218,6 @@ async def general_message_handler(event):
                 await get_rules_logic(event, command_to_process)
             elif base_cmd == "نداء":
                 await tag_all_logic(event, command_to_process)
-            
-            # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, event.chat_id)
@@ -298,23 +227,9 @@ async def general_message_handler(event):
                     
                     if event.text and (chat.settings or {}).get("public_replies_enabled", True):
                         trigger = event.text.lower()
-                        
-                        BOT_TRIGGERS = ["سروج", "بوت"]
-                        if any(b in trigger for b in BOT_TRIGGERS):
-                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
-                            chat_settings = chat.settings or {}
-                            if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
-                                await event.reply(chat_settings["dev_reply"])
-                                await session.commit()
-                                return
-                            if chat_settings.get("call_reply"):
-                                await event.reply(chat_settings["call_reply"])
-                                await session.commit()
-                                return
-                        
                         all_replies = DEFAULT_REPLIES.copy()
-                        custom_replies = chat.custom_replies or {}
-                        all_replies.update({k.lower(): v for k, v in custom_replies.items()})
+                        custom_replies = (chat.custom_replies or {})
+                        all_replies.update({k.lower(): v for k,v in custom_replies.items()})
                         reply_data = all_replies.get(trigger)
                         if reply_data:
                             reply_template = None
@@ -339,51 +254,3 @@ async def general_message_handler(event):
                     await session.commit()
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
-
-
-# --- دالة شاملة للتعامل مع انضمام ومغادرة الأعضاء والبوت ---
-@client.on(events.ChatAction)
-async def handle_chat_action(event):
-    # --- الجزء الخاص بمغادرة أو طرد البوت ---
-    if event.user_left or event.user_kicked:
-        me = await client.get_me()
-        if event.user_id == me.id:
-            chat_id = event.chat_id
-            
-            # --- إضافة المجموعة إلى قائمة الحظر المؤقتة ---
-            KICKED_CHATS.add(chat_id)
-            
-            logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
-            try:
-                async with AsyncDBSession() as session:
-                    # حذف كل البيانات المرتبطة بالمجموعة
-                    await session.execute(delete(User).where(User.chat_id == chat_id))
-                    await session.execute(delete(Alias).where(Alias.chat_id == chat_id))
-                    await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
-                    await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
-                    await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
-                    await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
-                    await session.execute(delete(Chat).where(Chat.id == chat_id))
-                    await session.commit()
-                    logger.info(f"Successfully deleted all data for chat {chat_id}.")
-            except Exception as e:
-                logger.error(f"Failed to delete data for chat {chat_id}: {e}", exc_info=True)
-            return
-
-    # --- الجزء الخاص بانضمام الأعضاء الجدد ---
-    if event.user_joined or event.user_added:
-        async with AsyncDBSession() as session:
-            try:
-                user = await get_or_create_user(session, event.chat_id, event.user_id)
-                user.join_date = datetime.now().strftime("%Y-%m-%d")
-                chat = await get_or_create_chat(session, event.chat_id)
-                welcome_message = (chat.settings or {}).get("welcome_message")
-                if welcome_message:
-                    user_entity = await event.get_user()
-                    chat_entity = await event.get_chat()
-                    formatted_message = welcome_message.format(user=f"[{user_entity.first_name}](tg://user?id={user_entity.id})", group=chat_entity.title)
-                    await client.send_message(event.chat_id, formatted_message)
-                await session.commit()
-            except Exception as e:
-                logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
-                await session.rollback()
