@@ -1,0 +1,14 @@
+telethon==1.34.0
+gTTS
+googletrans==4.0.0-rc1
+wikipedia
+pytz
+httpx
+beautifulsoup4
+duckduckgo-search
+Flask
+google-generativeai
+yt-dlp
+aiohttp
+SQLAlchemy
+aiosqlite
