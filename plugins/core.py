@@ -1,4 +1,7 @@
 import asyncio
+import os
+import sys
+import config
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
@@ -6,15 +9,14 @@ from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import AsyncDBSession  # تم التعديل هنا
+from database import AsyncDBSession
 from models import Chat, Vip, BotAdmin, Creator, SecondaryDev
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
-    MAIN_MENU_MESSAGE, is_admin
+    MAIN_MENU_MESSAGE, is_admin, get_or_create_chat, get_chat_setting
 )
-from .admin import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
 
 WELCOMED_RECENTLY = set()
 
@@ -95,7 +97,7 @@ async def chat_action_handler(event):
             # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
             await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
             await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
-            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
+            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, User.user_id == user_id_to_clear))
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
             print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
@@ -145,3 +147,31 @@ async def main_menu_handler(event):
         return
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
+
+# --- (جديد ومؤقت) أمر سري لحذف قاعدة البيانات ---
+@client.on(events.NewMessage(pattern=r"^/resetdatabase_confirm_123$", from_users=config.SUDO_USERS))
+async def db_reset_handler(event):
+    await event.reply("**⚠️ | تلقيت أمر إعادة تعيين قاعدة البيانات. جاري المحاولة...**")
+    
+    # أشهر اسمين لملف قاعدة البيانات
+    db_files_to_try = ["bot.db", "database.db"]
+    deleted = False
+    
+    for db_file in db_files_to_try:
+        if os.path.exists(db_file):
+            try:
+                os.remove(db_file)
+                await event.reply(f"**✅ | تم بنجاح حذف ملف قاعدة البيانات: `{db_file}`**")
+                deleted = True
+                break # اخرج من الحلقة بمجرد حذف ملف
+            except Exception as e:
+                await event.reply(f"**❌ | حدث خطأ أثناء محاولة حذف `{db_file}`:**\n`{e}`")
+                return # توقف إذا حدث خطأ
+    
+    if not deleted:
+        await event.reply("**🤔 | لم أتمكن من العثور على ملف قاعدة بيانات بالأسماء الشائعة (`bot.db`, `database.db`).**")
+        return
+
+    await event.reply("**🔄 | تم حذف قاعدة البيانات. سيقوم البوت الآن بإعادة التشغيل...**")
+    # إيقاف البوت للسماح لـ Railway بإعادة تشغيله
+    sys.exit(0)
