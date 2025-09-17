@@ -6,7 +6,7 @@ from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 
-# --- استيراد مكونات قاعدة البيانات ---
+# --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
 from database import AsyncDBSession
@@ -146,7 +146,7 @@ async def main_menu_handler(event):
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
 
-# --- أمر سري لحذف قاعدة البيانات بطريقة آمنة ---
+# --- (تم التعديل) أمر سري لحذف قاعدة البيانات بالاسم الصحيح ---
 @client.on(events.NewMessage(pattern=r"^/resetdatabase_confirm_123$"))
 async def db_reset_handler(event):
     if event.sender_id not in config.SUDO_USERS:
@@ -154,22 +154,18 @@ async def db_reset_handler(event):
 
     await event.reply("**⚠️ | تلقيت أمر إعادة تعيين قاعدة البيانات. جاري المحاولة...**")
     
-    db_files_to_try = ["bot.db", "database.db"]
-    deleted = False
+    # استخدام الاسم الصحيح من ملف database.py
+    db_file_to_delete = "surooj.db"
     
-    for db_file in db_files_to_try:
-        if os.path.exists(db_file):
-            try:
-                os.remove(db_file)
-                await event.reply(f"**✅ | تم بنجاح حذف ملف قاعدة البيانات: `{db_file}`**")
-                deleted = True
-                break
-            except Exception as e:
-                await event.reply(f"**❌ | حدث خطأ أثناء محاولة حذف `{db_file}`:**\n`{e}`")
-                return
-    
-    if not deleted:
-        await event.reply("**🤔 | لم أتمكن من العثور على ملف قاعدة بيانات بالأسماء الشائعة (`bot.db`, `database.db`).**")
+    if os.path.exists(db_file_to_delete):
+        try:
+            os.remove(db_file_to_delete)
+            await event.reply(f"**✅ | تم بنجاح حذف ملف قاعدة البيانات: `{db_file_to_delete}`**")
+        except Exception as e:
+            await event.reply(f"**❌ | حدث خطأ أثناء محاولة حذف `{db_file_to_delete}`:**\n`{e}`")
+            return
+    else:
+        await event.reply(f"**🤔 | لم أتمكن من العثور على ملف قاعدة البيانات بالاسم: `{db_file_to_delete}`.**")
         return
 
     await event.reply("**🔄 | تم حذف قاعدة البيانات. سيقوم البوت الآن بإعادة التشغيل...**")
