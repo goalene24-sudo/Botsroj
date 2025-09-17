@@ -70,7 +70,6 @@ async def chat_action_handler(event):
         if not await check_activation(event.chat_id): 
             return
         
-        # التحقق إذا كان الترحيب مفعلاً
         if not await is_command_enabled(event.chat_id, "welcome_enabled"):
             return
 
@@ -94,7 +93,6 @@ async def chat_action_handler(event):
     elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
         user_id_to_clear = event.user_id
         async with AsyncDBSession() as session:
-            # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
             await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
             await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
             await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, User.user_id == user_id_to_clear))
@@ -148,12 +146,15 @@ async def main_menu_handler(event):
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
 
-# --- (جديد ومؤقت) أمر سري لحذف قاعدة البيانات ---
-@client.on(events.NewMessage(pattern=r"^/resetdatabase_confirm_123$", from_users=config.SUDO_USERS))
+# --- (تم التعديل) أمر سري لحذف قاعدة البيانات بطريقة آمنة ---
+@client.on(events.NewMessage(pattern=r"^/resetdatabase_confirm_123$"))
 async def db_reset_handler(event):
+    # التحقق من الصلاحيات داخل الدالة لتجنب أخطاء بدء التشغيل
+    if event.sender_id not in config.SUDO_USERS:
+        return
+
     await event.reply("**⚠️ | تلقيت أمر إعادة تعيين قاعدة البيانات. جاري المحاولة...**")
     
-    # أشهر اسمين لملف قاعدة البيانات
     db_files_to_try = ["bot.db", "database.db"]
     deleted = False
     
@@ -163,15 +164,14 @@ async def db_reset_handler(event):
                 os.remove(db_file)
                 await event.reply(f"**✅ | تم بنجاح حذف ملف قاعدة البيانات: `{db_file}`**")
                 deleted = True
-                break # اخرج من الحلقة بمجرد حذف ملف
+                break
             except Exception as e:
                 await event.reply(f"**❌ | حدث خطأ أثناء محاولة حذف `{db_file}`:**\n`{e}`")
-                return # توقف إذا حدث خطأ
+                return
     
     if not deleted:
         await event.reply("**🤔 | لم أتمكن من العثور على ملف قاعدة بيانات بالأسماء الشائعة (`bot.db`, `database.db`).**")
         return
 
     await event.reply("**🔄 | تم حذف قاعدة البيانات. سيقوم البوت الآن بإعادة التشغيل...**")
-    # إيقاف البوت للسماح لـ Railway بإعادة تشغيله
     sys.exit(0)
