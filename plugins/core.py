@@ -1,7 +1,4 @@
 import asyncio
-import os
-import sys
-import config
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
@@ -9,15 +6,15 @@ from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import AsyncDBSession
-from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
+from database import AsyncDBSession  # تم التعديل هنا
+from models import Chat, Vip, BotAdmin, Creator, SecondaryDev
 
-# --- (تم التصحيح) استيراد الدوال من أماكنها الصحيحة ---
+# --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
     MAIN_MENU_MESSAGE, is_admin
 )
-from .admin import get_or_create_chat, get_chat_setting
+from .admin import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
 
 WELCOMED_RECENTLY = set()
 
@@ -33,6 +30,7 @@ async def chat_action_handler(event):
         WELCOMED_RECENTLY.add(chat_id)
         
         async with AsyncDBSession() as session:
+            # التأكد من وجود سجل للمجموعة في قاعدة البيانات
             await get_or_create_chat(session, chat_id)
 
         try:
@@ -70,6 +68,7 @@ async def chat_action_handler(event):
         if not await check_activation(event.chat_id): 
             return
         
+        # التحقق إذا كان الترحيب مفعلاً
         if not await is_command_enabled(event.chat_id, "welcome_enabled"):
             return
 
@@ -93,9 +92,10 @@ async def chat_action_handler(event):
     elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
         user_id_to_clear = event.user_id
         async with AsyncDBSession() as session:
+            # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
             await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
             await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
-            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, User.user_id == user_id_to_clear))
+            await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
             print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
@@ -145,28 +145,3 @@ async def main_menu_handler(event):
         return
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
-
-# --- (تم التعديل) أمر سري لحذف قاعدة البيانات بالاسم الصحيح ---
-@client.on(events.NewMessage(pattern=r"^/resetdatabase_confirm_123$"))
-async def db_reset_handler(event):
-    if event.sender_id not in config.SUDO_USERS:
-        return
-
-    await event.reply("**⚠️ | تلقيت أمر إعادة تعيين قاعدة البيانات. جاري المحاولة...**")
-    
-    # استخدام الاسم الصحيح من ملف database.py
-    db_file_to_delete = "surooj.db"
-    
-    if os.path.exists(db_file_to_delete):
-        try:
-            os.remove(db_file_to_delete)
-            await event.reply(f"**✅ | تم بنجاح حذف ملف قاعدة البيانات: `{db_file_to_delete}`**")
-        except Exception as e:
-            await event.reply(f"**❌ | حدث خطأ أثناء محاولة حذف `{db_file_to_delete}`:**\n`{e}`")
-            return
-    else:
-        await event.reply(f"**🤔 | لم أتمكن من العثور على ملف قاعدة البيانات بالاسم: `{db_file_to_delete}`.**")
-        return
-
-    await event.reply("**🔄 | تم حذف قاعدة البيانات. سيقوم البوت الآن بإعادة التشغيل...**")
-    sys.exit(0)
