@@ -1,4 +1,5 @@
 import json
+import logging # تمت الإضافة
 from telethon import Button
 import config
 from datetime import datetime
@@ -6,6 +7,7 @@ from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.exc import IntegrityError # تمت الإضافة
 
 # --- استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
@@ -17,6 +19,7 @@ from models import (
 # --- (تمت الإضافة) استيراد البيانات الجديدة من الملف المنفصل ---
 from .fun_data import JOKES, RIDDLES
 
+logger = logging.getLogger(__name__) # تمت الإضافة
 
 # --- (جديد) دوال الإعدادات العامة - تم نقلها هنا لتكون مركزية ---
 async def get_global_setting(key, default=None):
@@ -66,19 +69,31 @@ async def get_or_create_chat(session, chat_id):
         await session.refresh(chat)
     return chat
 
+# --- (تم التعديل) دالة آمنة ضد التكرار ---
 async def get_or_create_user(session, chat_id, user_id):
-    """الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا."""
+    """الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا (بطريقة آمنة)."""
     result = await session.execute(
         select(User).where(User.chat_id == chat_id, User.user_id == user_id)
     )
     user = result.scalar_one_or_none()
 
-    if not user:
-        user = User(chat_id=chat_id, user_id=user_id)
-        session.add(user)
-        await session.flush()
-        await session.refresh(user)
-    return user
+    if user:
+        return user
+    else:
+        try:
+            user = User(chat_id=chat_id, user_id=user_id)
+            session.add(user)
+            await session.flush()
+            await session.refresh(user)
+            return user
+        except IntegrityError:
+            # هذا يعني أن المستخدم تم إنشاؤه في عملية أخرى متزامنة
+            logger.warning(f"Race condition detected for user {user_id} in chat {chat_id}. Rolling back and fetching existing.")
+            await session.rollback()
+            result = await session.execute(
+                select(User).where(User.chat_id == chat_id, User.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
 
 # --- تعريف مستويات الرتب ---
 class Ranks:
@@ -105,6 +120,7 @@ RPS_GAMES = {}
 XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
+KICKED_CHATS = set() # تمت الإضافة لضمان وجودها
 
 # --- (تم الحذف) تم نقل القوائم الكبيرة إلى ملف fun_data.py ---
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
@@ -229,7 +245,8 @@ async def check_activation(chat_id):
     async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
-        return group.is_active if group else True
+        # تعديل مهم: إذا لم تكن المجموعة موجودة، فهي غير مفعلة
+        return group.is_active if group else False
 
 async def add_points(chat_id, user_id, points_to_add):
     async with AsyncDBSession() as session:
