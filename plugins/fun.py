@@ -79,9 +79,7 @@ PERSONALITY_ANALYSIS = [
     "طموح وتحب توصل لأهدافك، خصوصاً اذا الهدف هو الثلاجة بالليل.",
 ]
 
-# --- دالة مساعدة للتحقق من الأوامر المعطلة عالميًا ---
 async def is_globally_disabled(command_name):
-    """التحقق إذا كان الأمر معطلاً على مستوى البوت."""
     async with AsyncDBSession() as session:
         result = await session.execute(
             select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
@@ -95,7 +93,6 @@ async def is_globally_disabled(command_name):
                 return False
         return False
 
-# --- معالجات الأوامر الترفيهية ---
 @client.on(events.NewMessage(pattern="^لو خيروك$"))
 async def wyr_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -258,7 +255,8 @@ async def quote_handler(event):
     quote = random.choice(QUOTES)
     await event.reply(f"**حكمة اليوم من سُـرُوچ تقول:**\n\n**📜 {quote}**\n\n**شلونها هاي؟ 😉**")
 
-@client.on(events.NewMessage(pattern=r"^همس(?: (.*))?$"))
+# --- تم تعديل هذه الدالة بالكامل ---
+@client.on(events.NewMessage(pattern=r"^همس(?: |$)(.*)"))
 async def whisper_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("همس"):
@@ -268,10 +266,18 @@ async def whisper_handler(event):
         
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**لازم ترد على رسالة الشخص اللي تريد تهمسله.**")
-    sender, receiver = await event.get_sender(), await reply.get_sender()
+    
+    sender = await event.get_sender()
+    receiver = await reply.get_sender()
+
     if sender.id == receiver.id: return await event.reply("**تهمس لنفسك؟ شدعوة! 😂**")
-    whisper_text = event.pattern_match.group(1)
-    if not whisper_text: return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**")
+    
+    # طريقة جديدة وموثوقة لاستخلاص النص
+    whisper_text = event.pattern_match.group(1).strip()
+
+    if not whisper_text: 
+        return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
+    
     await event.delete()
     message_text = (
         f"**🤫 | همسة جديدة!**\n\n"
@@ -369,7 +375,7 @@ async def who_is_handler(event):
         return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
     if not await is_command_enabled(event.chat_id, "games_enabled"): 
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
-    
+        
     loading_msg = await event.reply("**دا أفكر وأختار... 🤔**")
     
     try:
