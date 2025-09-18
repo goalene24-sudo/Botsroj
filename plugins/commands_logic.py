@@ -39,7 +39,7 @@ async def set_chat_setting(chat_id, key, value):
 
 async def set_rank_logic(event, command_text):
     try:
-        client = event.client # نحصل على client
+        client = event.client
         rank_map = {
             "رفع ادمن": (Ranks.CREATOR, BotAdmin, "ادمن بالبوت"), "تنزيل ادمن": (Ranks.CREATOR, BotAdmin, "ادمن بالبوت"),
             "رفع منشئ": (Ranks.OWNER, Creator, "منشئ"), "تنزيل منشئ": (Ranks.OWNER, Creator, "منشئ"),
@@ -49,7 +49,6 @@ async def set_rank_logic(event, command_text):
         required_rank, db_model, rank_name = rank_map[command_text]
         
         actor = await event.get_sender()
-        # --- تم التعديل هنا ---
         actor_rank = await get_user_rank(client, actor.id, event.chat_id)
         if actor_rank < required_rank: 
             return await event.reply("**على كيفك حبيبي، رتبتك متسمحلك تسوي هيج 🤫**")
@@ -62,7 +61,6 @@ async def set_rank_logic(event, command_text):
         if user_to_manage.bot: 
             return await event.reply("**البوتات خارج الخدمة، منكدر نغير رتبتهم 🤖**")
 
-        # --- تم التعديل هنا ---
         target_rank = await get_user_rank(client, user_to_manage.id, event.chat_id)
         if target_rank >= actor_rank: 
             return await event.reply("**عيب والله، تريد تغير رتبة واحد اعلى منك لو بكدك 😒**")
@@ -132,8 +130,7 @@ async def my_stats_logic(event, command_text):
 
 async def my_rank_logic(event, command_text):
     try:
-        client = event.client # نحصل على client
-        # --- تم التعديل هنا ---
+        client = event.client
         rank_level = await get_user_rank(client, event.sender_id, event.chat_id)
         rank_name = get_rank_name(rank_level)
         rank_emoji_map = {
@@ -152,7 +149,7 @@ RANDOM_TAFA3UL = ["سايق مخده 🛌", "ياكل تبن 🐐", "نايم ب
 
 async def id_logic(event, command_text):
     try:
-        client = event.client # نحصل على client
+        client = event.client
         if not await is_command_enabled(event.chat_id, "id_enabled"): 
             return await event.reply("🚫 | **أمر الايدي واكف هسه بأمر من الادمنية.**")
             
@@ -180,11 +177,22 @@ async def id_logic(event, command_text):
             msg_count = user_obj.msg_count or 0
             points = user_obj.points or 0
             sahaqat = user_obj.sahaqat or 0
-            custom_bio = user_obj.bio or "ماكو نبذة، ضيف وحده من الاعدادات 😉"
+            custom_bio = user_obj.bio or "لم يتم تعيين نبذة بعد."
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
-        # --- تم التعديل هنا ---
+        # --- بداية الكود الجديد ---
+        title_line = ""
+        vip_item = inventory.get("لقب vip")
+        if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
+            title_line = "**✨ | من كبار الشخصيات - VIP**"
+
+        name_decoration = ""
+        decoration_item = inventory.get("زخرفة اسم") # افتراض اسم العنصر
+        if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
+            name_decoration = "✨"
+        # --- نهاية الكود الجديد ---
+
         rank_int = await get_user_rank(client, target_user.id, event.chat_id)
         rank_map = {
             Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻", Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️", Ranks.OWNER: "مالك الكروب 👑",
@@ -198,15 +206,18 @@ async def id_logic(event, command_text):
         tafa3ul = random.choice(RANDOM_TAFA3UL)
         
         caption = f"**{header}**\n\n"
+        if title_line:
+            caption += f"{title_line}\n"
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
-        caption += f"**- اسمك:** [{target_user.first_name}](tg://user?id={target_user.id})\n"
+        # --- تم التعديل هنا لعرض الزخرفة ---
+        caption += f"**- اسمك:** {name_decoration}[{target_user.first_name}](tg://user?id={target_user.id}){name_decoration}\n"
         caption += f"**- رتبتك:** {rank}\n"
         caption += f"**- نبذتك:** {custom_bio}\n"
         caption += f"**- تفاعلك:** {tafa3ul}\n"
         caption += f"**- رسائلك:** `{msg_count}`\n"
-        caption += f"**- سحكاتك:** `{sahaqat}`\n"
+        caption += f"**- سحكاته:** `{sahaqat}`\n"
         caption += f"**- نقاطك:** `{points}`\n"
         if badges_str: 
             caption += f"**- أوسمتك:** {badges_str}\n"
@@ -243,8 +254,7 @@ async def get_rules_logic(event, command_text):
 
 async def tag_all_logic(event, command_text):
     try:
-        client = event.client # نحصل على client
-        # --- تم التعديل هنا ---
+        client = event.client
         if not await has_bot_permission(client, event): 
             return await event.reply("**بس المشرفين يكدرون يصيحون الكل 📣**")
             
@@ -273,7 +283,7 @@ async def tag_all_logic(event, command_text):
 
 async def list_admins_logic(event, command_text):
     try:
-        client = event.client # نحصل على client
+        client = event.client
         msg = await event.reply("جاي احسب الكادر... 📊")
 
         owner_text, dev_text, tg_admins_text, bot_admins_text, vips_text = "", "", "", "", ""
