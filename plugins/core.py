@@ -1,4 +1,6 @@
 import asyncio
+import os
+import config
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
@@ -7,7 +9,7 @@ from bot import client
 from sqlalchemy.future import select
 from sqlalchemy import delete
 from database import AsyncDBSession
-from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User # تمت إضافة User
+from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
@@ -68,7 +70,6 @@ async def chat_action_handler(event):
         if not await check_activation(event.chat_id): 
             return
         
-        # التحقق إذا كان الترحيب مفعلاً
         if not await is_command_enabled(event.chat_id, "welcome_enabled"):
             return
 
@@ -92,7 +93,6 @@ async def chat_action_handler(event):
     elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
         user_id_to_clear = event.user_id
         async with AsyncDBSession() as session:
-            # حذف رتب المستخدم من قاعدة البيانات لهذه المجموعة
             await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
             await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
             await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
@@ -100,13 +100,12 @@ async def chat_action_handler(event):
             await session.commit()
             print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
 
-    # --- (تم التعديل) عند طرد البوت من المجموعة ---
+    # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
         chat_id = event.chat_id
         print(f"Bot was removed from chat {chat_id}. Deleting all related data.")
         try:
             async with AsyncDBSession() as session:
-                # حذف كل البيانات المرتبطة بالمجموعة لضمان بداية نظيفة
                 await session.execute(delete(User).where(User.chat_id == chat_id))
                 await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
                 await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
@@ -117,7 +116,6 @@ async def chat_action_handler(event):
                 print(f"Successfully deleted all data for chat {chat_id}.")
         except Exception as e:
             print(f"Error during data deletion for chat {chat_id}: {e}")
-
 
 # أمر تفعيل/ايقاف البوت
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
@@ -156,3 +154,13 @@ async def main_menu_handler(event):
         return
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
+
+# --- (جديد ومؤقت) أمر لاختبار وجود قاعدة البيانات ---
+@client.on(events.NewMessage(pattern=r"^/verifymy_db$"))
+async def db_verify_handler(event):
+    # هذا الأمر متاح للجميع مؤقتًا للاختبار
+    db_file = "surooj.db"
+    if os.path.exists(db_file):
+        await event.reply(f"**🔴 نتيجة التحقق:** ملف قاعدة البيانات `{db_file}` **لا يزال موجودًا**. هذا هو سبب استمرار المشكلة.")
+    else:
+        await event.reply(f"**✅ نتيجة التحقق:** ملف قاعدة البيانات `{db_file}` **غير موجود**. هذا هو الوضع الصحيح بعد الطرد.")
