@@ -181,15 +181,17 @@ async def id_logic(event, command_text):
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
+        # --- بداية الكود المعدل ---
         title_line = ""
         vip_item = inventory.get("لقب vip")
         if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-            title_line = "**✨ | من كبار الشخصيات - VIP**"
+            title_line = "**🎖️ | من كبار الشخصيات - VIP**" # تم تغيير الإيموجي هنا
 
-        name_decoration_emoji = "" # تم تغيير المتغير ليكون أكثر وضوحًا
-        decoration_item = inventory.get("زخرفة اسم") # افتراض اسم العنصر
+        name_decoration_emoji = ""
+        decoration_item = inventory.get("زخرفة اسم")
         if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
-            name_decoration_emoji = "✨" # استخدام الإيموجي مباشرة هنا
+            name_decoration_emoji = "✨"
+        # --- نهاية الكود المعدل ---
 
         rank_int = await get_user_rank(client, target_user.id, event.chat_id)
         rank_map = {
@@ -204,13 +206,11 @@ async def id_logic(event, command_text):
         tafa3ul = random.choice(RANDOM_TAFA3UL)
         
         caption = f"**{header}**\n\n"
-        # تم نقل title_line هنا
         if title_line:
             caption += f"{title_line}\n"
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
-        # --- تم التعديل هنا لعرض الزخرفة أمام الاسم ---
         caption += f"**- اسمك:** {name_decoration_emoji}[{target_user.first_name}](tg://user?id={target_user.id}){name_decoration_emoji}\n"
         caption += f"**- رتبتك:** {rank}\n"
         caption += f"**- نبذتك:** {custom_bio}\n"
