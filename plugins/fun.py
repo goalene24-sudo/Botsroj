@@ -256,11 +256,12 @@ async def whisper_handler(event):
 
     if sender.id == receiver.id: return await event.reply("**تهمس لنفسك؟ شدعوة! 😂**")
     
-    # طريقة جديدة وموثوقة لاستخلاص النص
-    command_parts = event.raw_text.split(maxsplit=1)
-    whisper_text = ""
-    if len(command_parts) > 1:
-        whisper_text = command_parts[1].strip()
+    # --- الطريقة الجديدة والأكثر ضماناً لاستخلاص النص ---
+    text = event.raw_text
+    if text.lower().startswith("همس "):
+        whisper_text = text[len("همس "):].strip()
+    else:
+        whisper_text = "" # في حال كتب المستخدم "همس" فقط
 
     if not whisper_text: 
         return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
@@ -342,12 +343,7 @@ async def propose_marriage_handler(event):
         f"العضو [{proposer.first_name}](tg://user?id={proposer.id}) دتقدملك/چ. توافق/ين؟**"
     )
     
-    buttons = [
-        [
-            Button.inline("💍 أوافق", data=f"proposal:accept:{proposer.id}:{proposed.id}"),
-            Button.inline("💔 أرفض", data=f"proposal:reject:{proposer.id}:{proposed.id}")
-        ]
-    ]
+    buttons = [[Button.inline("💍 أوافق", data=f"proposal:accept:{proposer.id}:{proposed.id}"), Button.inline("💔 أرفض", data=f"proposal:reject:{proposer.id}:{proposed.id}")]]
     
     proposal_msg = await event.reply(proposal_text, buttons=buttons)
     PROPOSALS[proposal_msg.id] = {
