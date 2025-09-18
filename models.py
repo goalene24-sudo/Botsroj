@@ -25,7 +25,6 @@ class Chat(Base):
     __tablename__ = "chats"
     
     id = Column(BigInteger, primary_key=True, index=True)
-    # --- (تم التعديل النهائي) تغيير القيمة الافتراضية إلى False ---
     is_active = Column(Boolean, default=False, nullable=False)
     total_msgs = Column(Integer, default=0)
     
@@ -148,6 +147,16 @@ class RPSGame(Base):
     player2_name = Column(String, nullable=False)
     player1_choice = Column(String, nullable=True)
     player2_choice = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# --- (جديد) جدول الهمسات ---
+class Whisper(Base):
+    __tablename__ = "whispers"
+    
+    message_id = Column(BigInteger, primary_key=True)
+    chat_id = Column(BigInteger, nullable=False)
+    to_id = Column(BigInteger, nullable=False, index=True)
+    text = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 print(">> تم تحميل نماذج البيانات (الجداول) النهائية والشاملة بنجاح. <<")
