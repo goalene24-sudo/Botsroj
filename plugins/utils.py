@@ -71,7 +71,6 @@ async def get_or_create_user(session, chat_id, user_id):
         select(User).where(User.chat_id == chat_id, User.user_id == user_id)
     )
     user = result.scalar_one_or_none()
-
     if user:
         return user
     else:
@@ -82,7 +81,7 @@ async def get_or_create_user(session, chat_id, user_id):
             await session.refresh(user)
             return user
         except IntegrityError:
-            logger.warning(f"Race condition detected for user {user_id} in chat {chat_id}. Rolling back and fetching existing.")
+            logger.warning(f"Race condition detected for user {user_id} in chat {chat_id}. Rolling back.")
             await session.rollback()
             result = await session.execute(
                 select(User).where(User.chat_id == chat_id, User.user_id == user_id)
@@ -116,54 +115,71 @@ FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
 KICKED_CHATS = set()
 
-# --- (تم الحذف) تم نقل القوائم الكبيرة إلى ملف fun_data.py ---
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
-
 def get_rank_name(rank_level):
-    if rank_level == Ranks.MAIN_DEV: return "المطور الرئيسي"
-    elif rank_level == Ranks.SECONDARY_DEV: return "مطور ثانوي"
-    elif rank_level == Ranks.OWNER: return "مالك المجموعة"
-    elif rank_level == Ranks.CREATOR: return "منشئ"
-    elif rank_level == Ranks.ADMIN: return "ادمن"
-    elif rank_level == Ranks.MOD: return "مشرف"
-    elif rank_level == Ranks.VIP: return "عضو مميز"
-    else: return "عضو"
+    ranks_map = {
+        Ranks.MAIN_DEV: "المطور الرئيسي",
+        Ranks.SECONDARY_DEV: "مطور ثانوي",
+        Ranks.OWNER: "مالك المجموعة",
+        Ranks.CREATOR: "منشئ",
+        Ranks.ADMIN: "ادمن",
+        Ranks.MOD: "مشرف",
+        Ranks.VIP: "عضو مميز"
+    }
+    return ranks_map.get(rank_level, "عضو")
 
-async def get_user_rank(user_id, chat_id):
-    from bot import client
+# --- تم تعديل الدالة لتقبل client كمعامل ---
+async def get_user_rank(client, user_id, chat_id):
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
 
     async with AsyncDBSession() as session:
-        if (await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))).scalar_one_or_none():
+        is_secondary_dev = await session.execute(
+            select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id)
+        )
+        if is_secondary_dev.scalar_one_or_none():
             return Ranks.SECONDARY_DEV
 
     try:
         participant = await client.get_participant(chat_id, user_id)
         if isinstance(participant, ChannelParticipantCreator):
             return Ranks.OWNER
-    except UserNotParticipantError: pass
-    except Exception: pass
+    except Exception:
+        pass
 
     async with AsyncDBSession() as session:
-        if (await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))).scalar_one_or_none():
+        is_creator = await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))
+        if is_creator.scalar_one_or_none():
             return Ranks.CREATOR
         
-        if (await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id))).scalar_one_or_none():
+        is_admin_db = await session.execute(select(BotAdmin).where(BotAdmin.chat_id == chat_id, BotAdmin.user_id == user_id))
+        if is_admin_db.scalar_one_or_none():
             return Ranks.ADMIN
 
-    try:
-        # نستعمل الدالة الجديدة والموثوقة
-        if await is_admin(chat_id, user_id):
-            return Ranks.MOD
-    except Exception: pass
+    if await is_admin(client, chat_id, user_id):
+        return Ranks.MOD
     
     async with AsyncDBSession() as session:
-        if (await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))).scalar_one_or_none():
+        is_vip = await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))
+        if is_vip.scalar_one_or_none():
             return Ranks.VIP
 
     return Ranks.MEMBER
+
+# --- تم تعديل الدالة لتقبل client كمعامل ---
+async def is_admin(client, chat_id, user_id):
+    if not isinstance(chat_id, int) or chat_id > 0:
+        return False
+    try:
+        participant = await client.get_participant(chat_id, user_id)
+        return isinstance(participant, (ChannelParticipantCreator, ChannelParticipantAdmin)) or \
+               (hasattr(participant, 'admin_rights') and participant.admin_rights)
+    except (UserNotParticipantError, ChatAdminRequiredError, ValueError):
+        return False
+    except Exception as e:
+        logger.error(f"Error in is_admin for user {user_id} in chat {chat_id}: {e}")
+        return False
 
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
@@ -220,42 +236,15 @@ async def is_command_enabled(chat_id, command_key):
         chat = await get_or_create_chat(session, chat_id)
         return (chat.settings or {}).get(command_key, True)
 
-# --- (تمت إعادة كتابة الدالة بالكامل) ---
-async def is_admin(chat_id, user_id):
-    from bot import client
-    # لا يمكن أن يكون هناك مشرف في المحادثات الخاصة
-    if chat_id > 0:
-        return False
-        
-    try:
-        # client.get_participant هي الطريقة الأكثر دقة
-        participant = await client.get_participant(chat_id, user_id)
-        # المنشئ والمشرف كلاهما يعتبران "admin"
-        if isinstance(participant, (ChannelParticipantCreator, ChannelParticipantAdmin)):
-            return True
-        # بعض المشرفين المقيدين قد لا يظهرون في النوع أعلاه
-        # لذا نضيف تحققًا إضافيًا على وجود صلاحيات
-        if hasattr(participant, 'admin_rights') and participant.admin_rights:
-            return True
-    except UserNotParticipantError:
-        # المستخدم ليس في المجموعة أصلاً
-        return False
-    except Exception:
-        # أي خطأ آخر (مثل عدم امتلاك البوت لصلاحية رؤية المشرفين)
-        return False
-        
-    return False
-
-async def has_bot_permission(event):
-    rank = await get_user_rank(event.sender_id, event.chat_id)
+# --- تم تعديل الدالة لتقبل client كمعامل ---
+async def has_bot_permission(client, event):
+    rank = await get_user_rank(client, event.sender_id, event.chat_id)
     return rank >= Ranks.MOD
 
-# --- (تم التعديل النهائي) ---
 async def check_activation(chat_id):
     async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
-        # إذا لم تكن المجموعة موجودة، أو كانت حالتها غير مفعلة، أرجع False
         return group.is_active if group else False
 
 async def add_points(chat_id, user_id, points_to_add):
