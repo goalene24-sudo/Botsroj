@@ -6,53 +6,38 @@ from telethon import events, Button
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 
 from bot import client
-import config
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from database import AsyncDBSession
-from models import User, GlobalSetting
+from models import User, GlobalSetting, Whisper # <-- تم استيراد جدول الهمسات الجديد
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import check_activation, add_points, PERCENT_COMMANDS, JOKES, RIDDLES, QUOTES, is_command_enabled
 from .utils import get_or_create_user
 
-# --- بيانات الألعاب والهمس (لا تحتاج قاعدة بيانات) ---
-WHISPERS = {}
+# --- بيانات الألعاب (تم حذف WHISPERS من هنا) ---
 PROPOSALS = {}
 DICE_GAMES = {}
 BLESS_COUNTERS = {}
 WYR_GAMES = {}
 
 INTERACTIVE_ACTIONS = {
-    "صفعة": "👋 | {user1} قام بصفع {user2}!",
-    "بوسة": "😘 | {user1} أرسل قبلة إلى {user2}!",
-    "عناق": "🤗 | {user1} قام بمعانقة {user2}!",
-    "غمزة": "😉 | {user1} غمز لـ {user2}!",
-    "قتل": "🔪 | {user1} قام بقتل {user2} بدم بارد!",
-    "رزالة": "😡 | {user1} أنطى رزالة محترمة لـ {user2}!",
+    "صفعة": "👋 | {user1} قام بصفع {user2}!", "بوسة": "😘 | {user1} أرسل قبلة إلى {user2}!",
+    "عناق": "🤗 | {user1} قام بمعانقة {user2}!", "غمزة": "😉 | {user1} غمز لـ {user2}!",
+    "قتل": "🔪 | {user1} قام بقتل {user2} بدم بارد!", "رزالة": "😡 | {user1} أنطى رزالة محترمة لـ {user2}!",
 }
 KAT_QUESTIONS = [
-    "ما هي طريقتك في الحصول على الراحة النفسية؟",
-    "كم ساعة تنام في اليوم؟",
-    "ما هو رأيك بصداقة البنت والولد إلكترونياً؟",
-    "هل تمحي العشرة الطيبة عشان موقف ماعجبك أو سوء فهم؟",
-    "لو خيروك بين المال الوفير والحب الحقيقي، ماذا تختار؟",
-    "ما هو أكثر شيء تفتخر به في حياتك؟",
-    "ما هي أجمل ذكرى عالقة في ذهنك من الطفولة؟",
-    "ما هي العادة التي تتمنى أن تتخلص منها؟",
-    "ما هو الفيلم أو المسلسل الذي تستطيع مشاهدته مراراً وتكراراً؟",
-    "لو كان بإمكانك السفر إلى أي مكان في العالم الآن، أين ستذهب؟",
-    "ما هو الشيء الذي لا يمكن أن تسامح فيه أبداً؟",
-    "ما هي أهم صفة تبحث عنها في الصديق؟",
-    "ما هو أكبر حلم تتمنى تحقيقه؟",
-    "أفضل وجبة أكلتها في حياتك؟",
-    "هل تعتقد أن وسائل التواصل الاجتماعي قربت الناس أم أبعدتهم؟",
-    "ما هو الدرس الذي تعلمته بالطريقة الصعبة؟",
-    "لو امتلكت قوة خارقة ليوم واحد، ماذا ستكون وماذا ستفعل بها؟",
-    "ما هو الكتاب الذي أثر فيك كثيراً؟",
-    "هل تفضل أن تعرف المستقبل أم أن تغير الماضي؟",
-    "ما هو الشيء الذي يجعلك تبتسم دائماً؟"
+    "ما هي طريقتك في الحصول على الراحة النفسية؟", "كم ساعة تنام في اليوم؟",
+    "ما هو رأيك بصداقة البنت والولد إلكترونياً؟", "هل تمحي العشرة الطيبة عشان موقف ماعجبك أو سوء فهم؟",
+    "لو خيروك بين المال الوفير والحب الحقيقي، ماذا تختار؟", "ما هو أكثر شيء تفتخر به في حياتك؟",
+    "ما هي أجمل ذكرى عالقة في ذهنك من الطفولة؟", "ما هي العادة التي تتمنى أن تتخلص منها؟",
+    "ما هو الفيلم أو المسلسل الذي تستطيع مشاهدته مراراً وتكراراً؟", "لو كان بإمكانك السفر إلى أي مكان في العالم الآن، أين ستذهب؟",
+    "ما هو الشيء الذي لا يمكن أن تسامح فيه أبداً؟", "ما هي أهم صفة تبحث عنها في الصديق؟",
+    "ما هو أكبر حلم تتمنى تحقيقه؟", "أفضل وجبة أكلتها في حياتك؟",
+    "هل تعتقد أن وسائل التواصل الاجتماعي قربت الناس أم أبعدتهم؟", "ما هو الدرس الذي تعلمته بالطريقة الصعبة؟",
+    "لو امتلكت قوة خارقة ليوم واحد، ماذا ستكون وماذا ستفعل بها؟", "ما هو الكتاب الذي أثر فيك كثيراً؟",
+    "هل تفضل أن تعرف المستقبل أم أن تغير الماضي؟", "ما هو الشيء الذي يجعلك تبتسم دائماً؟"
 ]
 WHO_IS_QUESTIONS = [
     "من هو أذكى شخص بالمجموعة؟ 🤓", "من هو أكثر واحد ينام؟ 😴",
@@ -104,6 +89,54 @@ async def wyr_handler(event):
     buttons = [[Button.inline(f"{o1} (0)", data=f"wyr:1")], [Button.inline(f"{o2} (0)", data=f"wyr:2")]]
     game_msg = await event.reply(message_text, buttons=buttons)
     WYR_GAMES[game_msg.id] = {"q": q, "o1": o1, "o2": o2, "v1": 0, "v2": 0, "users": set()}
+
+@client.on(events.NewMessage(pattern=r"^همس"))
+async def whisper_handler(event):
+    if event.is_private or not await check_activation(event.chat_id): return
+    if await is_globally_disabled("همس"):
+        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
+    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
+        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
+        
+    reply = await event.get_reply_message()
+    if not reply: return await event.reply("**لازم ترد على رسالة الشخص اللي تريد تهمسله.**")
+    
+    sender = await event.get_sender()
+    receiver = await reply.get_sender()
+
+    if sender.id == receiver.id: return await event.reply("**تهمس لنفسك؟ شدعوة! 😂**")
+    
+    text = event.raw_text
+    whisper_text = ""
+    if text.lower().startswith("همس "):
+        whisper_text = text[len("همس "):].strip()
+
+    if not whisper_text: 
+        return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
+    
+    await event.delete()
+    message_text = (
+        f"**🤫 | همسة جديدة!**\n\n"
+        f"**▫️ من:** [{sender.first_name}](tg://user?id={sender.id})\n"
+        f"**▫️ إلى:** [{receiver.first_name}](tg://user?id={receiver.id})\n\n"
+        f"**الرسالة مقفولة، بس المستلم يگدر يشوفها.**"
+    )
+    whisper_msg = await client.send_message(
+        event.chat_id, message_text, buttons=Button.inline("🔒 إقرأ الهمسة", data="whisper:read")
+    )
+    
+    # --- تم تغيير التخزين إلى قاعدة البيانات ---
+    async with AsyncDBSession() as session:
+        new_whisper = Whisper(
+            message_id=whisper_msg.id,
+            chat_id=event.chat_id,
+            to_id=receiver.id,
+            text=whisper_text
+        )
+        session.add(new_whisper)
+        await session.commit()
+
+# ... بقية الدوال تبقى كما هي ...
 
 @client.on(events.NewMessage(pattern=r"^حللني$"))
 async def analyze_me_handler(event):
@@ -229,37 +262,6 @@ async def quote_handler(event):
         return await event.reply("🚫 | **عذراً، الألعاب معطلة في هذه المجموعة حالياً.**")
     quote = random.choice(QUOTES)
     await event.reply(f"**حكمة اليوم من سُـرُوچ تقول:**\n\n**📜 {quote}**\n\n**شلونها هاي؟ 😉**")
-
-@client.on(events.NewMessage(pattern=r"^همس"))
-async def whisper_handler(event):
-    if event.is_private or not await check_activation(event.chat_id): return
-    if await is_globally_disabled("همس"):
-        return await event.reply("**(هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا ارد شيئا @tit_50)**")
-    if not await is_command_enabled(event.chat_id, "social_commands_enabled"): 
-        return await event.reply("🚫 | **عذراً، الأوامر الاجتماعية معطلة في هذه المجموعة حالياً.**")
-    reply = await event.get_reply_message()
-    if not reply: return await event.reply("**لازم ترد على رسالة الشخص اللي تريد تهمسله.**")
-    sender = await event.get_sender()
-    receiver = await reply.get_sender()
-    if sender.id == receiver.id: return await event.reply("**تهمس لنفسك؟ شدعوة! 😂**")
-    text = event.raw_text
-    whisper_text = ""
-    if text.lower().startswith("همس "):
-        whisper_text = text[len("همس "):].strip()
-    if not whisper_text: 
-        return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
-    if sender.id in config.SUDO_USERS:
-        try:
-            await client.send_message(sender.id, f"**DEBUG: النص الذي سيتم تخزينه للهمسة هو:**\n`{whisper_text}`")
-        except Exception as e:
-            print(f"DEBUGGING FAILED: {e}")
-    await event.delete()
-    message_text = (f"**🤫 | همسة جديدة!**\n\n"
-                    f"**▫️ من:** [{sender.first_name}](tg://user?id={sender.id})\n"
-                    f"**▫️ إلى:** [{receiver.first_name}](tg://user?id={receiver.id})\n\n"
-                    f"**الرسالة مقفولة، بس المستلم يگدر يشوفها.**")
-    whisper_msg = await client.send_message(event.chat_id, message_text, buttons=Button.inline("🔒 إقرأ الهمسة", data="whisper:read"))
-    WHISPERS[whisper_msg.id] = {"to_id": receiver.id, "text": whisper_text}
 
 @client.on(events.NewMessage(pattern=f"^(?:{'|'.join(INTERACTIVE_ACTIONS.keys())})$"))
 async def interactive_action_handler(event):
