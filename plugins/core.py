@@ -1,9 +1,8 @@
 import asyncio
-import os
-import config
 from telethon import events, Button
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
+import logging
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
@@ -14,10 +13,10 @@ from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
-    MAIN_MENU_MESSAGE, is_admin
+    MAIN_MENU_MESSAGE, is_admin, get_or_create_chat, get_chat_setting
 )
-from .admin import get_or_create_chat, get_chat_setting
 
+logger = logging.getLogger(__name__)
 WELCOMED_RECENTLY = set()
 
 @client.on(events.ChatAction)
@@ -25,64 +24,77 @@ async def chat_action_handler(event):
     me = await client.get_me()
     chat_id = event.chat_id
 
-    # عند إضافة البوت إلى مجموعة جديدة
+    # --- (تم التعديل) عند إضافة البوت لمجموعة جديدة ---
     if event.user_added and event.user_id == me.id:
         if chat_id in WELCOMED_RECENTLY: 
             return
         WELCOMED_RECENTLY.add(chat_id)
         
+        # خطوة حاسمة: إنشاء المجموعة وتعيينها كغير مفعلة بشكل صريح
         async with AsyncDBSession() as session:
-            # التأكد من وجود سجل للمجموعة في قاعدة البيانات
-            await get_or_create_chat(session, chat_id)
+            chat_db = await get_or_create_chat(session, chat_id)
+            if chat_db:
+                chat_db.is_active = False
+                await session.commit()
+                logger.info(f"Chat {chat_id} created and explicitly set to inactive.")
 
         try:
             chat = await event.get_chat()
             member_count = (await client.get_participants(chat_id, limit=0)).total
             admin_list = await client.get_participants(chat_id, filter=ChannelParticipantsAdmins)
             admin_count = len(admin_list)
-            bot_pfp = await client.get_profile_photos('me', limit=1)
-        except Exception as e:
-            print(f"لا يمكن جلب معلومات المجموعة {chat_id}: {e}")
-            return
             
-        welcome_text = (
-            f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
-            f"**📊 اسم المجموعة: {chat.title}**\n"
-            f"**👥 عددكم: {member_count} نفر**\n"
-            f"**🛡️ المشرفين: {admin_count} مدير**\n"
-            f"**💻 المطور مالتي: @tit_50**\n\n"
-            "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
-        )
-        
-        activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
-        
-        if bot_pfp:
-            await client.send_file(chat_id, bot_pfp[0], caption=welcome_text, buttons=activate_button)
-        else:
+            welcome_text = (
+                f"**🚨 هلا والله! آني {me.first_name} وصلت حتى احمي المجموعة.**\n\n"
+                f"**📊 اسم المجموعة: {chat.title}**\n"
+                f"**👥 عددكم: {member_count} نفر**\n"
+                f"**🛡️ المشرفين: {admin_count} مدير**\n"
+                f"**💻 المطور مالتي: @tit_50**\n\n"
+                "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
+            )
+            
+            activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
             await client.send_message(chat_id, welcome_text, buttons=activate_button)
+            
+        except Exception as e:
+            logger.error(f"Failed to send welcome message to {chat_id}: {e}")
         
         await asyncio.sleep(10)
         if chat_id in WELCOMED_RECENTLY:
             WELCOMED_RECENTLY.remove(chat_id)
+        return
     
+    # --- (تم التعديل) عند طرد البوت من المجموعة ---
+    elif (event.user_kicked or event.user_left) and event.user_id == me.id:
+        chat_id = event.chat_id
+        logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
+        try:
+            async with AsyncDBSession() as session:
+                # الحذف الكامل هو الطريقة الأضمن
+                await session.execute(delete(User).where(User.chat_id == chat_id))
+                await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
+                await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
+                await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
+                await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
+                # وأخيرًا حذف المجموعة نفسها
+                await session.execute(delete(Chat).where(Chat.id == chat_id))
+                await session.commit()
+                logger.info(f"Successfully deleted all data for chat {chat_id}.")
+        except Exception as e:
+            logger.error(f"Error during data deletion for chat {chat_id}: {e}")
+        return
+
     # عند انضمام عضو جديد
     elif event.user_joined and event.user_id != me.id:
-        if not await check_activation(event.chat_id): 
-            return
-        
-        if not await is_command_enabled(event.chat_id, "welcome_enabled"):
-            return
+        if not await check_activation(event.chat_id): return
+        if not await is_command_enabled(event.chat_id, "welcome_enabled"): return
 
         chat = await event.get_chat()
         new_user = await event.get_user()
-        
         custom_welcome = await get_chat_setting(event.chat_id, "welcome_message")
         
         if custom_welcome:
-            welcome_text = custom_welcome.format(
-                user=f"[{new_user.first_name}](tg://user?id={new_user.id})",
-                group=chat.title
-            )
+            welcome_text = custom_welcome.format(user=f"[{new_user.first_name}](tg://user?id={new_user.id})", group=chat.title)
         else:
             welcome_text = f"**هلا بالضلع الجديد [{new_user.first_name}](tg://user?id={new_user.id}) نورت الكروب يا غالي 🥳**"
         
@@ -98,24 +110,6 @@ async def chat_action_handler(event):
             await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
-            print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
-
-    # عند طرد البوت من المجموعة
-    elif (event.user_kicked or event.user_left) and event.user_id == me.id:
-        chat_id = event.chat_id
-        print(f"Bot was removed from chat {chat_id}. Deleting all related data.")
-        try:
-            async with AsyncDBSession() as session:
-                await session.execute(delete(User).where(User.chat_id == chat_id))
-                await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
-                await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
-                await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
-                await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
-                await session.execute(delete(Chat).where(Chat.id == chat_id))
-                await session.commit()
-                print(f"Successfully deleted all data for chat {chat_id}.")
-        except Exception as e:
-            print(f"Error during data deletion for chat {chat_id}: {e}")
 
 # أمر تفعيل/ايقاف البوت
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
@@ -154,13 +148,3 @@ async def main_menu_handler(event):
         return
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
-
-# --- (جديد ومؤقت) أمر لاختبار وجود قاعدة البيانات ---
-@client.on(events.NewMessage(pattern=r"^/verifymy_db$"))
-async def db_verify_handler(event):
-    # هذا الأمر متاح للجميع مؤقتًا للاختبار
-    db_file = "surooj.db"
-    if os.path.exists(db_file):
-        await event.reply(f"**🔴 نتيجة التحقق:** ملف قاعدة البيانات `{db_file}` **لا يزال موجودًا**. هذا هو سبب استمرار المشكلة.")
-    else:
-        await event.reply(f"**✅ نتيجة التحقق:** ملف قاعدة البيانات `{db_file}` **غير موجود**. هذا هو الوضع الصحيح بعد الطرد.")
