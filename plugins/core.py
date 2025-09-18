@@ -53,7 +53,6 @@ async def chat_action_handler(event):
                 "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
             )
             
-            # --- تم إرجاع زر التفعيل ---
             activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
             await client.send_message(chat_id, welcome_text, buttons=activate_button)
             
@@ -65,11 +64,11 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
 
-    # --- تم إصلاح هذا السطر ---
     # عند تغيير صلاحيات البوت (ترقيته لمشرف)
     elif event.user_id == me.id:
         try:
-            is_bot_now_admin = await is_admin(chat_id, me.id)
+            # --- تم التعديل هنا: إضافة client ---
+            is_bot_now_admin = await is_admin(client, chat_id, me.id)
             if is_bot_now_admin:
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, chat_id)
@@ -81,7 +80,6 @@ async def chat_action_handler(event):
         except Exception as e:
             logger.error(f"Error during auto-activation check in {chat_id}: {e}")
         return
-    # --- نهاية الجزء الذي تم إصلاحه ---
     
     # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
@@ -132,7 +130,8 @@ async def chat_action_handler(event):
 async def toggle_bot_status(event):
     if event.is_private: 
         return
-    if not await is_admin(event.chat_id, event.sender_id):
+    # --- تم التعديل هنا: إضافة client ---
+    if not await is_admin(client, event.chat_id, event.sender_id):
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
         
     action = event.raw_text
@@ -151,7 +150,8 @@ async def toggle_bot_status(event):
             if chat.is_active:
                 return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
             
-            if not await is_admin(event.chat_id, me.id): 
+            # --- تم التعديل هنا: إضافة client ---
+            if not await is_admin(client, event.chat_id, me.id): 
                 return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
                 
             chat.is_active = True
