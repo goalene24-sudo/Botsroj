@@ -1,6 +1,6 @@
 # Rebuild
 # 1. نبدأ من صورة بايثون 3.11 الرسمية
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # 2. نحدد مجلد العمل داخل البيئة
 WORKDIR /app
