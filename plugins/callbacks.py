@@ -13,9 +13,10 @@ from models import Chat, User, GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
-    is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,    
+    is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,   
     build_main_menu_buttons, build_protection_menu, get_uptime_string,
-    get_or_create_user, add_points, get_global_setting  # <-- (تمت إضافة get_global_setting)
+    get_or_create_user, add_points, get_global_setting,
+    get_user_rank, Ranks  # <-- تم إضافة الدوال الجديدة
 )
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
@@ -29,7 +30,11 @@ from .games import CURRENT_QUIZZES
 
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
+    # --- نحصل على client من الـ event مباشرة ---
+    client = event.client
     query_data = event.data.decode('utf-8')
+    chat_id = event.chat_id
+    user_id = event.sender_id
     
     main_menus = [
         "fun_menu", "profile_menu", "shop_menu", "tools_menu",
@@ -37,7 +42,6 @@ async def callback_handler(event):
         "protection_menu", "seerah_main", "hisn_main", "social_menu"
     ]
 
-    # --- (جديد) قسم معالجة الأزرار المخصصة ---
     if query_data.startswith("custom_cmd:"):
         command_name = query_data.split(':')[1]
         
@@ -78,38 +82,39 @@ async def callback_handler(event):
                     except MessageNotModifiedError:
                         pass
                 else: # popup mode
-                    # إزالة تنسيق الماركداون من الردود المنبثقة لتجنب المشاكل
                     popup_reply = final_reply.replace(f"[{sender.first_name}](tg://user?id={sender.id})", sender.first_name)
                     await event.answer(popup_reply, alert=True)
 
             except Exception as e:
                 print(f"Error in custom command formatting: {e}")
                 await event.answer(f"⚠️ | خطأ في عرض الرد.", alert=True)
-        return # ننهي التنفيذ هنا
+        return
 
+    # --- تم استبدال منطق التفعيل بالكامل بالمنطق الصحيح ---
     if query_data.startswith("activate_"):
-        chat_id = int(query_data.split('_')[1])
-        if not await is_admin(chat_id, event.sender_id):
-            return await event.answer("🚫 | هذا الزر مخصص للمشرفين فقط.", alert=True)
+        user_rank = await get_user_rank(client, user_id, chat_id)
+        if user_rank < Ranks.MOD:
+            return await event.answer("🚫 | هذا الزر مخصص للمشرفين وطاقم الإدارة فقط!", alert=True)
+
+        me = await client.get_me()
+        
+        if not await is_admin(client, chat_id, me.id):
+            return await event.answer("🤷‍♂️ | يرجى ترقيتي لمشرف أولاً حتى أتمكن من العمل!", alert=True)
+
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, chat_id)
             if chat.is_active:
+                await event.answer("✅ | البوت مُفعّل أصلاً!", alert=True)
                 try:
-                    buttons = await build_main_menu_buttons()
-                    await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
-                    return await event.answer("✅ | البوت مفعل بالفعل.", alert=False)
-                except MessageNotModifiedError:
-                    return
-            try:
-                me = await client.get_me()
-                #if not await is_admin(chat_id, me.id):
-                #    return await event.answer("⚠️ | يرجى رفعي كمشرف أولاً.", alert=True)
-                chat.is_active = True
-                await session.commit()
-                buttons = await build_main_menu_buttons()
-                await event.edit(MAIN_MENU_MESSAGE, buttons=buttons)
-                await event.answer("✅ | تم تفعيل البوت بنجاح!", alert=True)
-            except MessageNotModifiedError: pass
+                    await event.delete()
+                except:
+                    pass
+                return
+
+            chat.is_active = True
+            await session.commit()
+            await event.edit("**✅ | تم تفعيل البوت بنجاح!**\n**أنا جاهز لتنفيذ الأوامر.**", buttons=None)
+            await event.answer("💚 | تم التفعيل!")
         return
 
     if query_data in main_menus:
@@ -137,7 +142,8 @@ async def callback_handler(event):
             except MessageNotModifiedError: pass
             return
         elif query_data == "protection_menu":
-            if not await has_bot_permission(event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
+            # --- تم التعديل هنا: إضافة client ---
+            if not await has_bot_permission(client, event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
             menu_text, menu_buttons = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**", await build_protection_menu(event.chat_id)
             try:
                 protection_msg = await event.edit(menu_text, buttons=menu_buttons)
@@ -163,7 +169,6 @@ async def callback_handler(event):
 
     elif query_data.startswith("quiz:"):
         result = query_data.split(":")[1]
-        user_id = event.sender_id
         msg_id = event.message_id
 
         if msg_id not in CURRENT_QUIZZES:
@@ -194,11 +199,11 @@ async def callback_handler(event):
             del CURRENT_QUIZZES[msg_id]
         else:
             await event.answer(f"للاسف إجابتك خاطئة يا {user_entity.first_name}! 😥", alert=True)
-            # We don't edit the message on wrong answer to allow others to try
         return
         
     elif query_data.startswith("toggle_lock:"):
-        if not await has_bot_permission(event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
+        # --- تم التعديل هنا: إضافة client ---
+        if not await has_bot_permission(client, event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
         lock_key = query_data.split(":")[1]
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, event.chat_id)
@@ -214,5 +219,3 @@ async def callback_handler(event):
 
     elif not query_data.startswith("admin_hub:") and not query_data.startswith("settings:"):
         await handle_interactive_callback(event)
-
-# --- (تم الحذف) تم حذف الدالة القديمة والخاطئة من هنا ---
