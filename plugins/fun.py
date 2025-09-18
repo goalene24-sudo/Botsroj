@@ -32,26 +32,16 @@ INTERACTIVE_ACTIONS = {
     "رزالة": "😡 | {user1} أنطى رزالة محترمة لـ {user2}!",
 }
 KAT_QUESTIONS = [
-    "ما هي طريقتك في الحصول على الراحة النفسية؟",
-    "كم ساعة تنام في اليوم؟",
-    "ما هو رأيك بصداقة البنت والولد إلكترونياً؟",
-    "هل تمحي العشرة الطيبة عشان موقف ماعجبك أو سوء فهم؟",
-    "لو خيروك بين المال الوفير والحب الحقيقي، ماذا تختار؟",
-    "ما هو أكثر شيء تفتخر به في حياتك؟",
-    "ما هي أجمل ذكرى عالقة في ذهنك من الطفولة؟",
-    "ما هي العادة التي تتمنى أن تتخلص منها؟",
-    "ما هو الفيلم أو المسلسل الذي تستطيع مشاهدته مراراً وتكراراً؟",
-    "لو كان بإمكانك السفر إلى أي مكان في العالم الآن، أين ستذهب؟",
-    "ما هو الشيء الذي لا يمكن أن تسامح فيه أبداً؟",
-    "ما هي أهم صفة تبحث عنها في الصديق؟",
-    "ما هو أكبر حلم تتمنى تحقيقه؟",
-    "أفضل وجبة أكلتها في حياتك؟",
-    "هل تعتقد أن وسائل التواصل الاجتماعي قربت الناس أم أبعدتهم؟",
-    "ما هو الدرس الذي تعلمته بالطريقة الصعبة؟",
-    "لو امتلكت قوة خارقة ليوم واحد، ماذا ستكون وماذا ستفعل بها؟",
-    "ما هو الكتاب الذي أثر فيك كثيراً؟",
-    "هل تفضل أن تعرف المستقبل أم أن تغير الماضي؟",
-    "ما هو الشيء الذي يجعلك تبتسم دائماً؟"
+    "ما هي طريقتك في الحصول على الراحة النفسية؟", "كم ساعة تنام في اليوم؟",
+    "ما هو رأيك بصداقة البنت والولد إلكترونياً؟", "هل تمحي العشرة الطيبة عشان موقف ماعجبك أو سوء فهم؟",
+    "لو خيروك بين المال الوفير والحب الحقيقي، ماذا تختار؟", "ما هو أكثر شيء تفتخر به في حياتك؟",
+    "ما هي أجمل ذكرى عالقة في ذهنك من الطفولة؟", "ما هي العادة التي تتمنى أن تتخلص منها؟",
+    "ما هو الفيلم أو المسلسل الذي تستطيع مشاهدته مراراً وتكراراً؟", "لو كان بإمكانك السفر إلى أي مكان في العالم الآن، أين ستذهب؟",
+    "ما هو الشيء الذي لا يمكن أن تسامح فيه أبداً؟", "ما هي أهم صفة تبحث عنها في الصديق؟",
+    "ما هو أكبر حلم تتمنى تحقيقه؟", "أفضل وجبة أكلتها في حياتك؟",
+    "هل تعتقد أن وسائل التواصل الاجتماعي قربت الناس أم أبعدتهم؟", "ما هو الدرس الذي تعلمته بالطريقة الصعبة؟",
+    "لو امتلكت قوة خارقة ليوم واحد، ماذا ستكون وماذا ستفعل بها؟", "ما هو الكتاب الذي أثر فيك كثيراً؟",
+    "هل تفضل أن تعرف المستقبل أم أن تغير الماضي؟", "ما هو الشيء الذي يجعلك تبتسم دائماً؟"
 ]
 WHO_IS_QUESTIONS = [
     "من هو أذكى شخص بالمجموعة؟ 🤓", "من هو أكثر واحد ينام؟ 😴",
@@ -81,16 +71,13 @@ PERSONALITY_ANALYSIS = [
 
 async def is_globally_disabled(command_name):
     async with AsyncDBSession() as session:
-        result = await session.execute(
-            select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds")
-        )
+        result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == "disabled_cmds"))
         setting = result.scalar_one_or_none()
         if setting and setting.value:
             try:
                 disabled_list = json.loads(setting.value)
                 return command_name in disabled_list
-            except (json.JSONDecodeError, TypeError):
-                return False
+            except (json.JSONDecodeError, TypeError): return False
         return False
 
 @client.on(events.NewMessage(pattern="^لو خيروك$"))
@@ -105,10 +92,7 @@ async def wyr_handler(event):
     q, o1, o2 = question_data["q"], question_data["o1"], question_data["o2"]
     
     message_text = f"🤔 **لعبة لو خيروك** 🤔\n\n**{q}**"
-    buttons = [
-        [Button.inline(f"{o1} (0)", data=f"wyr:1")],
-        [Button.inline(f"{o2} (0)", data=f"wyr:2")]
-    ]
+    buttons = [[Button.inline(f"{o1} (0)", data=f"wyr:1")], [Button.inline(f"{o2} (0)", data=f"wyr:2")]]
     
     game_msg = await event.reply(message_text, buttons=buttons)
     WYR_GAMES[game_msg.id] = {"q": q, "o1": o1, "o2": o2, "v1": 0, "v2": 0, "users": set()}
@@ -256,7 +240,7 @@ async def quote_handler(event):
     await event.reply(f"**حكمة اليوم من سُـرُوچ تقول:**\n\n**📜 {quote}**\n\n**شلونها هاي؟ 😉**")
 
 # --- تم تعديل هذه الدالة بالكامل ---
-@client.on(events.NewMessage(pattern=r"^همس(?: |$)(.*)"))
+@client.on(events.NewMessage(pattern=r"^همس"))
 async def whisper_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
     if await is_globally_disabled("همس"):
@@ -273,7 +257,10 @@ async def whisper_handler(event):
     if sender.id == receiver.id: return await event.reply("**تهمس لنفسك؟ شدعوة! 😂**")
     
     # طريقة جديدة وموثوقة لاستخلاص النص
-    whisper_text = event.pattern_match.group(1).strip()
+    command_parts = event.raw_text.split(maxsplit=1)
+    whisper_text = ""
+    if len(command_parts) > 1:
+        whisper_text = command_parts[1].strip()
 
     if not whisper_text: 
         return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
