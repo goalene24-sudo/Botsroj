@@ -53,9 +53,10 @@ async def handle_flood_lock(event):
         if not locks.get("flood", False):
             return False
 
-    sender_rank = await get_user_rank(event.sender_id, event.chat_id)
-    if sender_rank >= Ranks.MOD:
-        return False
+        # --- تم التعديل هنا: إضافة client ---
+        sender_rank = await get_user_rank(client, event.sender_id, event.chat_id)
+        if sender_rank >= Ranks.MOD:
+            return False
 
     user_id = event.sender_id
     chat_id = event.chat_id
@@ -103,7 +104,8 @@ async def handle_message_locks(event):
                 pass
             return True
 
-        sender_rank = await get_user_rank(event.sender_id, event.chat_id)
+        # --- تم التعديل هنا: إضافة client ---
+        sender_rank = await get_user_rank(client, event.sender_id, event.chat_id)
         if sender_rank >= Ranks.MOD:
             return False
 
@@ -192,71 +194,39 @@ async def general_message_handler(event):
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
             
-            # --- (تم التحديث) الموزع الجديد والمنظم ---
-            
-            # --- أوامر الحماية (من protection_logic.py) ---
-            if command_to_process.startswith(("قفل", "فتح")):
-                await lock_unlock_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع قوانين"):
-                await set_rules_logic(event, command_to_process)
-            elif command_to_process == "مسح القوانين":
-                await clear_rules_logic(event, command_to_process)
-            elif command_to_process == "الادمنيه":
-                await list_bot_admins_logic(event, command_to_process)
-            elif command_to_process == "مسح كل الادمنيه":
-                await clear_all_bot_admins_logic(event, command_to_process)
-            elif command_to_process == "المميزين":
-                await list_vips_logic(event, command_to_process)
-            elif command_to_process == "مسح المميزين":
-                await clear_all_vips_logic(event, command_to_process)
-            elif command_to_process == "المنشئين":
-                await list_creators_logic(event, command_to_process)
-            elif command_to_process == "مسح المنشئين":
-                await clear_all_creators_logic(event, command_to_process)
-            elif command_to_process == "طرد":
-                await kick_logic(event, command_to_process)
-            elif command_to_process == "الغاء الكتم":
-                await unmute_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع عدد التحذيرات"):
-                await set_warns_limit_logic(event, command_to_process)
-            elif command_to_process.startswith("ضع وقت الكتم"):
-                await set_mute_duration_logic(event, command_to_process)
-            elif command_to_process == "حظر":
-                await ban_logic(event, command_to_process)
-            elif command_to_process == "الغاء الحظر":
-                await unban_logic(event, command_to_process)
-            elif command_to_process == "كتم" and len(cmd_parts) == 1:
-                await mute_logic(event, command_to_process)
-            elif command_to_process.startswith("كتم"):
-                await timed_mute_logic(event, command_to_process)
-            elif command_to_process == "تحذير":
-                await warn_logic(event, command_to_process)
-            elif command_to_process == "حذف التحذيرات":
-                await clear_warns_logic(event, command_to_process)
-            elif command_to_process.startswith("اضف كلمة ممنوعة"):
-                await add_filter_logic(event, command_to_process)
-            elif command_to_process.startswith("حذف كلمة ممنوعة"):
-                await remove_filter_logic(event, command_to_process)
-            elif command_to_process == "الكلمات الممنوعة":
-                await list_filters_logic(event, command_to_process)
-            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]:
-                await toggle_id_photo_logic(event, command_to_process)
+            # --- أوامر الحماية ---
+            if command_to_process.startswith(("قفل", "فتح")): await lock_unlock_logic(event, command_to_process)
+            elif command_to_process.startswith("ضع قوانين"): await set_rules_logic(event, command_to_process)
+            elif command_to_process == "مسح القوانين": await clear_rules_logic(event, command_to_process)
+            elif command_to_process == "الادمنيه": await list_bot_admins_logic(event, command_to_process)
+            elif command_to_process == "مسح كل الادمنيه": await clear_all_bot_admins_logic(event, command_to_process)
+            elif command_to_process == "المميزين": await list_vips_logic(event, command_to_process)
+            elif command_to_process == "مسح المميزين": await clear_all_vips_logic(event, command_to_process)
+            elif command_to_process == "المنشئين": await list_creators_logic(event, command_to_process)
+            elif command_to_process == "مسح المنشئين": await clear_all_creators_logic(event, command_to_process)
+            elif command_to_process == "طرد": await kick_logic(event, command_to_process)
+            elif command_to_process == "الغاء الكتم": await unmute_logic(event, command_to_process)
+            elif command_to_process.startswith("ضع عدد التحذيرات"): await set_warns_limit_logic(event, command_to_process)
+            elif command_to_process.startswith("ضع وقت الكتم"): await set_mute_duration_logic(event, command_to_process)
+            elif command_to_process == "حظر": await ban_logic(event, command_to_process)
+            elif command_to_process == "الغاء الحظر": await unban_logic(event, command_to_process)
+            elif command_to_process == "كتم" and len(cmd_parts) == 1: await mute_logic(event, command_to_process)
+            elif command_to_process.startswith("كتم"): await timed_mute_logic(event, command_to_process)
+            elif command_to_process == "تحذير": await warn_logic(event, command_to_process)
+            elif command_to_process == "حذف التحذيرات": await clear_warns_logic(event, command_to_process)
+            elif command_to_process.startswith("اضف كلمة ممنوعة"): await add_filter_logic(event, command_to_process)
+            elif command_to_process.startswith("حذف كلمة ممنوعة"): await remove_filter_logic(event, command_to_process)
+            elif command_to_process == "الكلمات الممنوعة": await list_filters_logic(event, command_to_process)
+            elif command_to_process in ["تشغيل صورة ايدي", "تعطيل صورة ايدي"]: await toggle_id_photo_logic(event, command_to_process)
 
-            # --- أوامر الرتب والملف الشخصي (من commands_logic.py) ---
-            elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]:
-                await set_rank_logic(event, command_to_process)
-            elif command_to_process == "المدراء":
-                await list_admins_logic(event, command_to_process)
-            elif command_to_process == "سجلي":
-                await my_stats_logic(event, command_to_process)
-            elif command_to_process == "رتبتي":
-                await my_rank_logic(event, command_to_process)
-            elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"):
-                await id_logic(event, command_to_process)
-            elif command_to_process == "القوانين":
-                await get_rules_logic(event, command_to_process)
-            elif command_to_process.startswith("نداء"):
-                await tag_all_logic(event, command_to_process)
+            # --- أوامر الرتب والملف الشخصي ---
+            elif command_to_process in ["رفع ادمن", "تنزيل ادمن", "رفع منشئ", "تنزيل منشئ", "رفع مميز", "تنزيل مميز"]: await set_rank_logic(event, command_to_process)
+            elif command_to_process == "المدراء": await list_admins_logic(event, command_to_process)
+            elif command_to_process == "سجلي": await my_stats_logic(event, command_to_process)
+            elif command_to_process == "رتبتي": await my_rank_logic(event, command_to_process)
+            elif command_to_process.startswith("ايدي") or command_to_process.startswith("id"): await id_logic(event, command_to_process)
+            elif command_to_process == "القوانين": await get_rules_logic(event, command_to_process)
+            elif command_to_process.startswith("نداء"): await tag_all_logic(event, command_to_process)
             
             # --- منطق الرسائل العادية (غير الأوامر) ---
             else:
@@ -271,7 +241,8 @@ async def general_message_handler(event):
                         
                         BOT_TRIGGERS = ["سروج", "بوت"]
                         if any(b in trigger for b in BOT_TRIGGERS):
-                            current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                            # --- تم التعديل هنا: إضافة client ---
+                            current_rank = await get_user_rank(client, event.sender_id, event.chat_id)
                             chat_settings = chat.settings or {}
                             if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
                                 await event.reply(chat_settings["dev_reply"])
@@ -291,7 +262,8 @@ async def general_message_handler(event):
                             if isinstance(reply_data, str):
                                 reply_template = reply_data
                             elif isinstance(reply_data, dict):
-                                current_rank = await get_user_rank(event.sender_id, event.chat_id)
+                                # --- تم التعديل هنا: إضافة client ---
+                                current_rank = await get_user_rank(client, event.sender_id, event.chat_id)
                                 if current_rank >= Ranks.MAIN_DEV and "developer" in reply_data: reply_list = reply_data["developer"]
                                 elif current_rank >= Ranks.ADMIN and "bot_admin" in reply_data: reply_list = reply_data["bot_admin"]
                                 elif current_rank >= Ranks.MOD and "group_admin" in reply_data: reply_list = reply_data["group_admin"]
