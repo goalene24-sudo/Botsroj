@@ -1,5 +1,5 @@
 import json
-import logging # تمت الإضافة
+import logging
 from telethon import Button
 import config
 from datetime import datetime
@@ -7,7 +7,7 @@ from telethon.tl.types import ChannelParticipantCreator
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 from sqlalchemy.orm.attributes import flag_modified
-from sqlalchemy.exc import IntegrityError # تمت الإضافة
+from sqlalchemy.exc import IntegrityError
 
 # --- استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
@@ -19,11 +19,10 @@ from models import (
 # --- (تمت الإضافة) استيراد البيانات الجديدة من الملف المنفصل ---
 from .fun_data import JOKES, RIDDLES
 
-logger = logging.getLogger(__name__) # تمت الإضافة
+logger = logging.getLogger(__name__)
 
-# --- (جديد) دوال الإعدادات العامة - تم نقلها هنا لتكون مركزية ---
+# --- دوال الإعدادات العامة ---
 async def get_global_setting(key, default=None):
-    """جلب قيمة إعداد عام من قاعدة البيانات."""
     async with AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
@@ -35,7 +34,6 @@ async def get_global_setting(key, default=None):
         return default
 
 async def set_global_setting(key, value):
-    """حفظ أو تحديث قيمة إعداد عام في قاعدة البيانات."""
     async with AsyncDBSession() as session:
         if isinstance(value, (dict, list)):
             value_to_store = json.dumps(value, ensure_ascii=False)
@@ -53,7 +51,6 @@ async def set_global_setting(key, value):
 
 # --- دوال مساعدة مركزية ---
 async def get_or_create_chat(session, chat_id):
-    """الحصول على مجموعة من قاعدة البيانات أو إنشائها مع تهيئة الحقول."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat = result.scalar_one_or_none()
     if not chat:
@@ -69,9 +66,7 @@ async def get_or_create_chat(session, chat_id):
         await session.refresh(chat)
     return chat
 
-# --- (تم التعديل) دالة آمنة ضد التكرار ---
 async def get_or_create_user(session, chat_id, user_id):
-    """الحصول على مستخدم من قاعدة البيانات أو إنشائه إذا لم يكن موجودًا (بطريقة آمنة)."""
     result = await session.execute(
         select(User).where(User.chat_id == chat_id, User.user_id == user_id)
     )
@@ -87,7 +82,6 @@ async def get_or_create_user(session, chat_id, user_id):
             await session.refresh(user)
             return user
         except IntegrityError:
-            # هذا يعني أن المستخدم تم إنشاؤه في عملية أخرى متزامنة
             logger.warning(f"Race condition detected for user {user_id} in chat {chat_id}. Rolling back and fetching existing.")
             await session.rollback()
             result = await session.execute(
@@ -120,7 +114,7 @@ RPS_GAMES = {}
 XO_GAMES = {}
 FLOOD_TRACKER = {}
 BLESS_COUNTERS = {}
-KICKED_CHATS = set() # تمت الإضافة لضمان وجودها
+KICKED_CHATS = set()
 
 # --- (تم الحذف) تم نقل القوائم الكبيرة إلى ملف fun_data.py ---
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
@@ -137,7 +131,7 @@ def get_rank_name(rank_level):
     else: return "عضو"
 
 async def get_user_rank(user_id, chat_id):
-    from bot import client # <-- تم نقل الاستيراد إلى هنا
+    from bot import client
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
 
@@ -228,7 +222,7 @@ async def is_command_enabled(chat_id, command_key):
         return (chat.settings or {}).get(command_key, True)
 
 async def is_admin(chat_id, user_id):
-    from bot import client # <-- تم نقل الاستيراد إلى هنا
+    from bot import client
     if chat_id < 0:
         try:
             p = await client.get_permissions(chat_id, user_id)
@@ -241,11 +235,12 @@ async def has_bot_permission(event):
     rank = await get_user_rank(event.sender_id, event.chat_id)
     return rank >= Ranks.MOD
 
+# --- (تم التعديل النهائي) ---
 async def check_activation(chat_id):
     async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
-        # تعديل مهم: إذا لم تكن المجموعة موجودة، فهي غير مفعلة
+        # إذا لم تكن المجموعة موجودة، أو كانت حالتها غير مفعلة، أرجع False
         return group.is_active if group else False
 
 async def add_points(chat_id, user_id, points_to_add):
