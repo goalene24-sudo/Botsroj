@@ -2,6 +2,8 @@ import asyncio
 from telethon import events
 from bot import client
 import json
+import logging
+from sqlalchemy.exc import IntegrityError
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
@@ -11,28 +13,37 @@ from models import Chat, BotAdmin, Creator, SecondaryDev, Vip, User
 
 # --- استيراد الدوال والرتب المحدثة ---
 from .utils import check_activation, has_bot_permission, get_user_rank, Ranks, build_protection_menu
-import logging
 
 logger = logging.getLogger(__name__)
 
-# --- (تمت الإعادة) دوال مساعدة لإدارة إعدادات المجموعة ---
+# --- (تم التعديل النهائي) دوال مساعدة آمنة لإدارة إعدادات المجموعة ---
 async def get_or_create_chat(session, chat_id):
-    """الحصول على مجموعة من قاعدة البيانات أو إنشائها إذا لم تكن موجودة."""
+    """الحصول على مجموعة من قاعدة البيانات أو إنشائها (بطريقة آمنة ضد التكرار)."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat = result.scalar_one_or_none()
-    if not chat:
-        chat = Chat(id=chat_id, settings={}, lock_settings={})
-        session.add(chat)
-        await session.commit()
-    return chat
+    
+    if chat:
+        return chat
+    else:
+        try:
+            chat = Chat(id=chat_id, settings={}, lock_settings={})
+            session.add(chat)
+            await session.flush()
+            await session.refresh(chat)
+            return chat
+        except IntegrityError:
+            await session.rollback()
+            logger.warning(f"Race condition detected for chat {chat_id}. Fetching existing.")
+            result = await session.execute(select(Chat).where(Chat.id == chat_id))
+            return result.scalar_one_or_none()
 
 async def get_chat_setting(chat_id, key, default=None):
     """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
-        if chat.settings is None:
-            chat.settings = {}
-        return chat.settings.get(key, default)
+        if chat and chat.settings:
+            return chat.settings.get(key, default)
+        return default
 
 async def set_chat_setting(chat_id, key, value):
     """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
