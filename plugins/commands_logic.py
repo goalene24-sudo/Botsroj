@@ -6,7 +6,6 @@ import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
-# --- (تم التعديل) ---
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
 
 from bot import client
@@ -40,6 +39,7 @@ async def set_chat_setting(chat_id, key, value):
 
 async def set_rank_logic(event, command_text):
     try:
+        client = event.client # نحصل على client
         rank_map = {
             "رفع ادمن": (Ranks.CREATOR, BotAdmin, "ادمن بالبوت"), "تنزيل ادمن": (Ranks.CREATOR, BotAdmin, "ادمن بالبوت"),
             "رفع منشئ": (Ranks.OWNER, Creator, "منشئ"), "تنزيل منشئ": (Ranks.OWNER, Creator, "منشئ"),
@@ -49,7 +49,8 @@ async def set_rank_logic(event, command_text):
         required_rank, db_model, rank_name = rank_map[command_text]
         
         actor = await event.get_sender()
-        actor_rank = await get_user_rank(actor.id, event.chat_id)
+        # --- تم التعديل هنا ---
+        actor_rank = await get_user_rank(client, actor.id, event.chat_id)
         if actor_rank < required_rank: 
             return await event.reply("**على كيفك حبيبي، رتبتك متسمحلك تسوي هيج 🤫**")
 
@@ -61,7 +62,8 @@ async def set_rank_logic(event, command_text):
         if user_to_manage.bot: 
             return await event.reply("**البوتات خارج الخدمة، منكدر نغير رتبتهم 🤖**")
 
-        target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+        # --- تم التعديل هنا ---
+        target_rank = await get_user_rank(client, user_to_manage.id, event.chat_id)
         if target_rank >= actor_rank: 
             return await event.reply("**عيب والله، تريد تغير رتبة واحد اعلى منك لو بكدك 😒**")
 
@@ -130,7 +132,9 @@ async def my_stats_logic(event, command_text):
 
 async def my_rank_logic(event, command_text):
     try:
-        rank_level = await get_user_rank(event.sender_id, event.chat_id)
+        client = event.client # نحصل على client
+        # --- تم التعديل هنا ---
+        rank_level = await get_user_rank(client, event.sender_id, event.chat_id)
         rank_name = get_rank_name(rank_level)
         rank_emoji_map = {
             Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻", Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️", Ranks.OWNER: "المالك 👑",
@@ -148,6 +152,7 @@ RANDOM_TAFA3UL = ["سايق مخده 🛌", "ياكل تبن 🐐", "نايم ب
 
 async def id_logic(event, command_text):
     try:
+        client = event.client # نحصل على client
         if not await is_command_enabled(event.chat_id, "id_enabled"): 
             return await event.reply("🚫 | **أمر الايدي واكف هسه بأمر من الادمنية.**")
             
@@ -179,7 +184,8 @@ async def id_logic(event, command_text):
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
-        rank_int = await get_user_rank(target_user.id, event.chat_id)
+        # --- تم التعديل هنا ---
+        rank_int = await get_user_rank(client, target_user.id, event.chat_id)
         rank_map = {
             Ranks.MAIN_DEV: "المطور الرئيسي 👨‍💻", Ranks.SECONDARY_DEV: "مطور ثانوي 🛠️", Ranks.OWNER: "مالك الكروب 👑",
             Ranks.CREATOR: "المنشئ ⚜️", Ranks.ADMIN: "ادمن بالبوت 🤖", Ranks.MOD: "مشرف بالكروب 🛡️",
@@ -237,7 +243,9 @@ async def get_rules_logic(event, command_text):
 
 async def tag_all_logic(event, command_text):
     try:
-        if not await has_bot_permission(event): 
+        client = event.client # نحصل على client
+        # --- تم التعديل هنا ---
+        if not await has_bot_permission(client, event): 
             return await event.reply("**بس المشرفين يكدرون يصيحون الكل 📣**")
             
         msg = await event.reply("**📣 | دا احضر النداء، لحظة...**")
@@ -263,16 +271,12 @@ async def tag_all_logic(event, command_text):
         await msg.edit(f"**ماكدرت اسوي نداء، صارت مشكلة 😢:**\n`{e}`**")
         logger.error(f"استثناء في tag_all_logic: {e}", exc_info=True)
 
-# --- دالة جديدة لعرض قائمة المدراء ---
 async def list_admins_logic(event, command_text):
     try:
+        client = event.client # نحصل على client
         msg = await event.reply("جاي احسب الكادر... 📊")
 
-        owner_text = ""
-        dev_text = ""
-        tg_admins_text = ""
-        bot_admins_text = ""
-        vips_text = ""
+        owner_text, dev_text, tg_admins_text, bot_admins_text, vips_text = "", "", "", "", ""
 
         main_dev_ids = config.SUDO_USERS
         
@@ -306,7 +310,6 @@ async def list_admins_logic(event, command_text):
                 except:
                     vips_text += f"• `{vip.user_id}`\n"
 
-        # --- (تم التصحيح) ---
         tg_participants = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
         for p in tg_participants:
             mention = f"• [{p.first_name}](tg://user?id={p.id})\n"
@@ -327,7 +330,7 @@ async def list_admins_logic(event, command_text):
         if vips_text:
             final_text += f"**✨ المميزين:**\n{vips_text}\n"
         
-        if not owner_text and not dev_text and not tg_admins_text and not bot_admins_text and not vips_text:
+        if not any([owner_text, dev_text, tg_admins_text, bot_admins_text, vips_text]):
             final_text += "ماكو أي أحد بالكادر حالياً."
 
         await msg.edit(final_text)
