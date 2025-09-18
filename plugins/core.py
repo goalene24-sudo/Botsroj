@@ -53,8 +53,9 @@ async def chat_action_handler(event):
                 "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
             )
             
-            # تم حذف زر التفعيل لأنه سيتم تلقائياً
-            await client.send_message(chat_id, welcome_text)
+            # --- تم إرجاع زر التفعيل ---
+            activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
+            await client.send_message(chat_id, welcome_text, buttons=activate_button)
             
         except Exception as e:
             logger.error(f"Failed to send welcome message to {chat_id}: {e}")
@@ -64,9 +65,9 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
 
-    # --- الكود المضاف ---
+    # --- تم إصلاح هذا السطر ---
     # عند تغيير صلاحيات البوت (ترقيته لمشرف)
-    elif event.user_id == me.id and event.participant:
+    elif event.user_id == me.id:
         try:
             is_bot_now_admin = await is_admin(chat_id, me.id)
             if is_bot_now_admin:
@@ -80,7 +81,7 @@ async def chat_action_handler(event):
         except Exception as e:
             logger.error(f"Error during auto-activation check in {chat_id}: {e}")
         return
-    # --- نهاية الكود المضاف ---
+    # --- نهاية الجزء الذي تم إصلاحه ---
     
     # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
