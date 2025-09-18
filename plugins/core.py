@@ -53,8 +53,8 @@ async def chat_action_handler(event):
                 "**ارفعني مشرف وانطيني الصلاحيات كاملة، ودوس الدگمة الجوه حتى تشوف العجب! 😉**"
             )
             
-            activate_button = Button.inline("✅ تفعيل البوت ✅", data=f"activate_{chat_id}")
-            await client.send_message(chat_id, welcome_text, buttons=activate_button)
+            # تم حذف زر التفعيل لأنه سيتم تلقائياً
+            await client.send_message(chat_id, welcome_text)
             
         except Exception as e:
             logger.error(f"Failed to send welcome message to {chat_id}: {e}")
@@ -63,6 +63,24 @@ async def chat_action_handler(event):
         if chat_id in WELCOMED_RECENTLY:
             WELCOMED_RECENTLY.remove(chat_id)
         return
+
+    # --- الكود المضاف ---
+    # عند تغيير صلاحيات البوت (ترقيته لمشرف)
+    elif event.user_id == me.id and event.participant:
+        try:
+            is_bot_now_admin = await is_admin(chat_id, me.id)
+            if is_bot_now_admin:
+                async with AsyncDBSession() as session:
+                    chat = await get_or_create_chat(session, chat_id)
+                    if not chat.is_active:
+                        chat.is_active = True
+                        await session.commit()
+                        logger.info(f"Bot was promoted in {chat_id}. Auto-activating.")
+                        await client.send_message(chat_id, "**شكراً لترقيتي! ✅ تم تفعيل البوت تلقائياً وجاهز للعمل.**")
+        except Exception as e:
+            logger.error(f"Error during auto-activation check in {chat_id}: {e}")
+        return
+    # --- نهاية الكود المضاف ---
     
     # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
