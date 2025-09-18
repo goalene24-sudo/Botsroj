@@ -109,12 +109,7 @@ except (ImportError, AttributeError):
     GEMINI_ENABLED = False
 
 # --- متغيرات وقت التشغيل (لا تحتاج قاعدة بيانات) ---
-RPS_GAMES = {}
-XO_GAMES = {}
-FLOOD_TRACKER = {}
-BLESS_COUNTERS = {}
-KICKED_CHATS = set()
-
+RPS_GAMES, XO_GAMES, FLOOD_TRACKER, BLESS_COUNTERS, KICKED_CHATS = {}, {}, {}, {}, set()
 QUOTES = [ "اي والله صدك.", "هذا الحچي المعدل.", "مافتهمت بس مبين قافل." ]
 
 def get_rank_name(rank_level):
@@ -142,9 +137,12 @@ async def get_user_rank(client, user_id, chat_id):
             return Ranks.SECONDARY_DEV
 
     try:
-        participant = await client.get_participant(chat_id, user_id)
-        if isinstance(participant, ChannelParticipantCreator):
-            return Ranks.OWNER
+        # --- تم تصحيح اسم الدالة هنا ---
+        participants = await client.get_participants(chat_id, ids=user_id)
+        if participants:
+            participant = participants[0]
+            if isinstance(participant, ChannelParticipantCreator):
+                return Ranks.OWNER
     except Exception:
         pass
 
@@ -172,7 +170,12 @@ async def is_admin(client, chat_id, user_id):
     if not isinstance(chat_id, int) or chat_id > 0:
         return False
     try:
-        participant = await client.get_participant(chat_id, user_id)
+        # --- تم تصحيح اسم الدالة هنا ---
+        participants = await client.get_participants(chat_id, ids=user_id)
+        if not participants:
+            return False
+        participant = participants[0]
+        
         return isinstance(participant, (ChannelParticipantCreator, ChannelParticipantAdmin)) or \
                (hasattr(participant, 'admin_rights') and participant.admin_rights)
     except (UserNotParticipantError, ChatAdminRequiredError, ValueError):
