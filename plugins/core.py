@@ -6,15 +6,15 @@ from bot import client
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import delete
-from database import AsyncDBSession  # تم التعديل هنا
-from models import Chat, Vip, BotAdmin, Creator, SecondaryDev
+from database import AsyncDBSession
+from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User # تمت إضافة User
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
     MAIN_MENU_MESSAGE, is_admin
 )
-from .admin import get_or_create_chat, get_chat_setting # استيراد دوال إدارة المجموعة
+from .admin import get_or_create_chat, get_chat_setting
 
 WELCOMED_RECENTLY = set()
 
@@ -100,13 +100,24 @@ async def chat_action_handler(event):
             await session.commit()
             print(f"User {user_id_to_clear} ranks cleared from chat {event.chat_id} due to leaving/being kicked.")
 
-    # عند طرد البوت من المجموعة
+    # --- (تم التعديل) عند طرد البوت من المجموعة ---
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
-        async with AsyncDBSession() as session:
-            chat = await get_or_create_chat(session, event.chat_id)
-            chat.is_active = False # تعطيل المجموعة
-            await session.commit()
-        print(f"تمت إزالة البوت من المجموعة {event.chat_id} وتم إيقافه فيها تلقائياً.")
+        chat_id = event.chat_id
+        print(f"Bot was removed from chat {chat_id}. Deleting all related data.")
+        try:
+            async with AsyncDBSession() as session:
+                # حذف كل البيانات المرتبطة بالمجموعة لضمان بداية نظيفة
+                await session.execute(delete(User).where(User.chat_id == chat_id))
+                await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
+                await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
+                await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
+                await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
+                await session.execute(delete(Chat).where(Chat.id == chat_id))
+                await session.commit()
+                print(f"Successfully deleted all data for chat {chat_id}.")
+        except Exception as e:
+            print(f"Error during data deletion for chat {chat_id}: {e}")
+
 
 # أمر تفعيل/ايقاف البوت
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
