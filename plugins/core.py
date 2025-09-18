@@ -10,11 +10,12 @@ from sqlalchemy import delete
 from database import AsyncDBSession
 from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
 
-# --- استيراد الدوال المساعدة المحدثة ---
+# --- (تم التصحيح) استيراد الدوال من أماكنها الصحيحة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
-    MAIN_MENU_MESSAGE, is_admin, get_or_create_chat, get_chat_setting
+    MAIN_MENU_MESSAGE, is_admin
 )
+from .admin import get_or_create_chat, get_chat_setting
 
 logger = logging.getLogger(__name__)
 WELCOMED_RECENTLY = set()
@@ -24,13 +25,12 @@ async def chat_action_handler(event):
     me = await client.get_me()
     chat_id = event.chat_id
 
-    # --- (تم التعديل) عند إضافة البوت لمجموعة جديدة ---
+    # عند إضافة البوت إلى مجموعة جديدة
     if event.user_added and event.user_id == me.id:
         if chat_id in WELCOMED_RECENTLY: 
             return
         WELCOMED_RECENTLY.add(chat_id)
         
-        # خطوة حاسمة: إنشاء المجموعة وتعيينها كغير مفعلة بشكل صريح
         async with AsyncDBSession() as session:
             chat_db = await get_or_create_chat(session, chat_id)
             if chat_db:
@@ -64,19 +64,17 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
     
-    # --- (تم التعديل) عند طرد البوت من المجموعة ---
+    # عند طرد البوت من المجموعة
     elif (event.user_kicked or event.user_left) and event.user_id == me.id:
         chat_id = event.chat_id
         logger.info(f"Bot was removed from chat {chat_id}. Deleting all related data.")
         try:
             async with AsyncDBSession() as session:
-                # الحذف الكامل هو الطريقة الأضمن
                 await session.execute(delete(User).where(User.chat_id == chat_id))
                 await session.execute(delete(Vip).where(Vip.chat_id == chat_id))
                 await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == chat_id))
                 await session.execute(delete(Creator).where(Creator.chat_id == chat_id))
                 await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == chat_id))
-                # وأخيرًا حذف المجموعة نفسها
                 await session.execute(delete(Chat).where(Chat.id == chat_id))
                 await session.commit()
                 logger.info(f"Successfully deleted all data for chat {chat_id}.")
@@ -111,7 +109,6 @@ async def chat_action_handler(event):
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
 
-# أمر تفعيل/ايقاف البوت
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
 async def toggle_bot_status(event):
     if event.is_private: 
