@@ -38,7 +38,6 @@ BOT_ADMIN_COMMANDS_TEXT = """**🤖 أوامر الأدمن**
 **- تفعيل وتعطيل الأوامر:** للتحكم بالأوامر المسموحة في المجموعة.
 """
 
-# --- (تم التعديل) إضافة شرح أمر "منشن" ---
 GROUP_ADMIN_COMMANDS_TEXT = """**🛡️ أوامر المدير (المشرف)**
 **- طرد:** (بالرد) لطرد عضو من المجموعة.
 **- حظر:** (بالرد) لحظر عضو من المجموعة.
@@ -90,7 +89,8 @@ CLEANING_COMMANDS_TEXT = """**🧹 | أوامر المسح والتنظيف**
 async def admin_hub_handler(event):
     if not await check_activation(event.chat_id): return
     
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا: إضافة event.client ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD:
         return await event.answer("🚫 | هذا القسم مخصص للمشرفين فما فوق.", alert=True)
 
