@@ -9,7 +9,7 @@ from sqlalchemy import delete
 from bot import client
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
-from models import RPSGame, Whisper # <-- تم استيراد جدول الهمسات الجديد
+from models import RPSGame, Whisper
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
@@ -19,7 +19,7 @@ from .utils import (
     get_user_rank, Ranks
 )
 from .utils import get_or_create_chat, get_or_create_user
-from .fun import WYR_GAMES, PROPOSALS, DICE_GAMES # <-- تم حذف WHISPERS من هنا
+from .fun import WYR_GAMES, PROPOSALS, DICE_GAMES
 from .games import MAHIBES_GAMES
 from .services import SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
@@ -274,7 +274,6 @@ async def handle_interactive_callback(event):
         if msg_id in PROPOSALS: del PROPOSALS[msg_id]
         return
 
-    # --- تم تعديل هذا الجزء بالكامل لاستخدام قاعدة البيانات ---
     if action == "whisper":
         sub_action = data_parts[1]
         msg_id = event.message_id
@@ -291,7 +290,6 @@ async def handle_interactive_callback(event):
                     await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
                     await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
                     
-                    # حذف الهمسة من قاعدة البيانات بعد قراءتها
                     await session.delete(whisper_data)
                     await session.commit()
                 else:
