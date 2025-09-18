@@ -63,7 +63,8 @@ async def activity_report_handler(event):
     for chat in active_chats:
         chat_id = chat.id
         try:
-            if not await is_admin(chat_id, 'me'):
+            # --- تم التعديل هنا: إضافة client ---
+            if not await is_admin(client, chat_id, 'me'):
                 continue
 
             chat_entity = await client.get_entity(chat_id)
@@ -152,6 +153,6 @@ async def send_to_group_handler(event):
     except (ValueError, TypeError):
         await event.reply("❌ **خطأ في الصيغة.**\n\n**الاستخدام الصحيح:**\n`ارسل [معرف المجموعة] [الرسالة]`\n\n**مثال:**\n`ارسل -100123456789 مرحبا`")
     except ChatWriteForbiddenError:
-        await event.reply(f"❌ **فشل الإرسال.**\n\nلا أملك صلاحية الكتابة في المجموعة `{chat_id_to_send}`. تأكد من أنني مشرف هناك.")
+        await event.reply(f"❌ **فشل الإرسال.**\n\نلا أملك صلاحية الكتابة في المجموعة `{chat_id_to_send}`. تأكد من أنني مشرف هناك.")
     except Exception as e:
         await event.reply(f"❌ **حدث خطأ غير متوقع:**\n\n`{e}`")
