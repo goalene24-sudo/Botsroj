@@ -185,10 +185,11 @@ async def id_logic(event, command_text):
         title_line = ""
         vip_item = inventory.get("لقب vip")
         if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
-            title_line = "**🎖️ | من كبار الشخصيات - VIP**" # تم تغيير الإيموجي هنا
+            title_line = "**🎖️ | من كبار الشخصيات - VIP**"
 
         name_decoration_emoji = ""
-        decoration_item = inventory.get("زخرفة اسم")
+        # تم تصحيح اسم العنصر هنا
+        decoration_item = inventory.get("زخرفة") 
         if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
             name_decoration_emoji = "✨"
         # --- نهاية الكود المعدل ---
@@ -211,7 +212,8 @@ async def id_logic(event, command_text):
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
-        caption += f"**- اسمك:** {name_decoration_emoji}[{target_user.first_name}](tg://user?id={target_user.id}){name_decoration_emoji}\n"
+        # --- تم التعديل هنا لوضع الزخرفة بعد الاسم ---
+        caption += f"**- اسمك:** [{target_user.first_name}](tg://user?id={target_user.id}){name_decoration_emoji}\n"
         caption += f"**- رتبتك:** {rank}\n"
         caption += f"**- نبذتك:** {custom_bio}\n"
         caption += f"**- تفاعلك:** {tafa3ul}\n"
