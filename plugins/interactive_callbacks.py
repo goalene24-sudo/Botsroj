@@ -6,8 +6,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.future import select
 from sqlalchemy import delete
 
-# --- لا نقوم باستيراد client من bot مباشرة لتجنب المشاكل ---
-
+from bot import client
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
 from models import RPSGame
@@ -17,7 +16,7 @@ from .utils import (
     build_protection_menu, build_xo_keyboard,
     check_xo_winner, add_points, has_bot_permission,
     RIDDLES, BLESS_COUNTERS, is_admin,
-    get_user_rank, Ranks  # <-- تم التأكد من وجود الدوال الجديدة
+    get_user_rank, Ranks
 )
 from .utils import get_or_create_chat, get_or_create_user
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
@@ -29,22 +28,18 @@ TASBEEH_COOLDOWN = {}
 TASBEEH_CLICK_COOLDOWN = 1
 
 async def handle_interactive_callback(event):
-    # --- نحصل على client من الـ event مباشرة لكسر حلقة الاستيراد ---
     client = event.client
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
     data_parts = query_data.split(':')
     action = data_parts[0]
 
-    # --- تم تعديل منطق زر التفعيل بالكامل ليتوافق مع utils.py الجديد ---
     if query_data.startswith("activate_"):
-        # التحقق الأول: هل رتبة المستخدم تسمح له بالضغط على الزر؟
         user_rank = await get_user_rank(client, user_id, chat_id)
-        if user_rank < Ranks.MOD: # Ranks.MOD هي رتبة "مشرف" أو أعلى
+        if user_rank < Ranks.MOD:
             return await event.answer("🚫 | هذا الزر مخصص للمشرفين وطاقم الإدارة فقط!", alert=True)
 
         me = await client.get_me()
         
-        # التحقق الثاني: هل البوت نفسه مشرف؟
         if not await is_admin(client, chat_id, me.id):
             return await event.answer("🤷‍♂️ | يرجى ترقيتي لمشرف أولاً حتى أتمكن من العمل!", alert=True)
 
@@ -63,10 +58,8 @@ async def handle_interactive_callback(event):
             await event.edit("**✅ | تم تفعيل البوت بنجاح!**\n**أنا جاهز لتنفيذ الأوامر.**", buttons=None)
             await event.answer("💚 | تم التفعيل!")
         return
-    # --- نهاية الجزء المعدل ---
 
     if query_data.startswith("toggle_lock_"):
-        # --- تم تعديل استدعاء الدالة لتمرير client ---
         if not await has_bot_permission(client, event):
             return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
         
@@ -112,7 +105,7 @@ async def handle_interactive_callback(event):
                 if game.player1_choice:
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
                 game.player1_choice = player_choice
-            else:
+            else: # user_id == p2_id
                 if game.player2_choice:
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
                 game.player2_choice = player_choice
@@ -178,7 +171,7 @@ async def handle_interactive_callback(event):
             await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
             if msg_id in XO_GAMES: del XO_GAMES[msg_id]
         
-        else:
+        else: # Game continues
             game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
             game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
             turn_name = game['p2_name'] if game['turn'] == game['player_o'] else game['p1_name']
@@ -244,7 +237,7 @@ async def handle_interactive_callback(event):
         else:
             await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
         return
-    
+
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
         msg_id = event.message_id
@@ -264,19 +257,14 @@ async def handle_interactive_callback(event):
             async with AsyncDBSession() as session:
                 proposer_obj = await get_or_create_user(session, chat_id, proposer_id)
                 proposed_obj = await get_or_create_user(session, chat_id, proposed_id)
-
                 proposer_inventory = proposer_obj.inventory or {}
                 proposed_inventory = proposed_obj.inventory or {}
-
                 proposer_inventory["married_to"] = {"id": proposed_id, "name": proposed_name}
                 proposed_inventory["married_to"] = {"id": proposer_id, "name": proposer_name}
-
                 proposer_obj.inventory = proposer_inventory
                 proposed_obj.inventory = proposed_inventory
-                
                 flag_modified(proposer_obj, "inventory")
                 flag_modified(proposed_obj, "inventory")
-                
                 await session.commit()
 
         elif sub_action == "reject":
@@ -286,6 +274,7 @@ async def handle_interactive_callback(event):
         if msg_id in PROPOSALS: del PROPOSALS[msg_id]
         return
 
+    # --- تم تعديل هذا الجزء بالكامل ---
     if action == "whisper":
         sub_action = data_parts[1]
         msg_id = event.message_id
@@ -293,14 +282,24 @@ async def handle_interactive_callback(event):
             whisper_data = WHISPERS.get(msg_id)
             if not whisper_data:
                 return await event.answer("**عذراً، هذه الهمسة قديمة جداً أو تم حذفها.**", alert=True)
-            recipient_id = whisper_data["to_id"]
+            
+            recipient_id = whisper_data.get("to_id")
             if user_id == recipient_id:
-                whisper_text = whisper_data["text"]
+                # استخدام .get() مع strip() للأمان
+                whisper_text = whisper_data.get("text", "").strip()
+                
+                # تحقق إضافي للتأكد من أن النص ليس فارغاً
+                if not whisper_text:
+                    await event.answer("⚠️ | عذراً، محتوى هذه الهمسة فارغ لسبب غير معروف.", alert=True)
+                    return
+
                 await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
                 await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
-                del WHISPERS[msg_id]
+                if msg_id in WHISPERS:
+                    del WHISPERS[msg_id]
             else:
                 await event.answer("🚫 | **هذه الهمسة ليست لك!**", alert=True)
+        
         elif sub_action == "done":
             await event.answer("**تمت قراءة هذه الهمسة بالفعل.**", alert=True)
         return
