@@ -3,7 +3,7 @@ import logging
 from telethon import Button
 import config
 from datetime import datetime
-from telethon.tl.types import ChannelParticipantCreator
+from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
 from telethon.errors.rpcerrorlist import UserNotParticipantError
 from sqlalchemy.orm.attributes import flag_modified
@@ -154,10 +154,9 @@ async def get_user_rank(user_id, chat_id):
             return Ranks.ADMIN
 
     try:
-        perms = await client.get_permissions(chat_id, user_id)
-        if perms.is_admin:
+        # نستعمل الدالة الجديدة والموثوقة
+        if await is_admin(chat_id, user_id):
             return Ranks.MOD
-    except (UserNotParticipantError, ChatAdminRequiredError): pass
     except Exception: pass
     
     async with AsyncDBSession() as session:
@@ -221,14 +220,30 @@ async def is_command_enabled(chat_id, command_key):
         chat = await get_or_create_chat(session, chat_id)
         return (chat.settings or {}).get(command_key, True)
 
+# --- (تمت إعادة كتابة الدالة بالكامل) ---
 async def is_admin(chat_id, user_id):
     from bot import client
-    if chat_id < 0:
-        try:
-            p = await client.get_permissions(chat_id, user_id)
-            return p.is_admin or p.is_creator
-        except (UserNotParticipantError, ChatAdminRequiredError): return False
-        except Exception: return False
+    # لا يمكن أن يكون هناك مشرف في المحادثات الخاصة
+    if chat_id > 0:
+        return False
+        
+    try:
+        # client.get_participant هي الطريقة الأكثر دقة
+        participant = await client.get_participant(chat_id, user_id)
+        # المنشئ والمشرف كلاهما يعتبران "admin"
+        if isinstance(participant, (ChannelParticipantCreator, ChannelParticipantAdmin)):
+            return True
+        # بعض المشرفين المقيدين قد لا يظهرون في النوع أعلاه
+        # لذا نضيف تحققًا إضافيًا على وجود صلاحيات
+        if hasattr(participant, 'admin_rights') and participant.admin_rights:
+            return True
+    except UserNotParticipantError:
+        # المستخدم ليس في المجموعة أصلاً
+        return False
+    except Exception:
+        # أي خطأ آخر (مثل عدم امتلاك البوت لصلاحية رؤية المشرفين)
+        return False
+        
     return False
 
 async def has_bot_permission(event):
