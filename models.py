@@ -149,7 +149,6 @@ class RPSGame(Base):
     player2_choice = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-# --- (جديد) جدول الهمسات ---
 class Whisper(Base):
     __tablename__ = "whispers"
     
