@@ -15,7 +15,7 @@ from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
     build_protection_menu, build_xo_keyboard,
     check_xo_winner, add_points, has_bot_permission,
-    RIDDLES, BLESS_COUNTERS
+    RIDDLES, BLESS_COUNTERS, is_admin  # <-- تم إضافة is_admin
 )
 from .utils import get_or_create_chat, get_or_create_user
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
@@ -30,6 +30,36 @@ async def handle_interactive_callback(event):
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
     data_parts = query_data.split(':')
     action = data_parts[0]
+
+    # --- الكود المضاف لمعالجة زر التفعيل ---
+    if query_data.startswith("activate_"):
+        # 1. التحقق إذا كان المستخدم الذي ضغط الزر هو مشرف
+        if not await is_admin(chat_id, user_id):
+            return await event.answer("🚫 | هذا الزر للمشرفين فقط!", alert=True)
+
+        me = await client.get_me()
+        
+        # 2. التحقق إذا كان البوت نفسه مشرفًا
+        if not await is_admin(chat_id, me.id):
+            return await event.answer("🤷‍♂️ | يرجى ترقيتي لمشرف أولاً حتى أتمكن من العمل!", alert=True)
+
+        async with AsyncDBSession() as session:
+            chat = await get_or_create_chat(session, chat_id)
+            if chat.is_active:
+                await event.answer("✅ | البوت مُفعّل أصلاً!", alert=True)
+                # نحاول حذف الرسالة القديمة إذا أمكن
+                try:
+                    await event.delete()
+                except:
+                    pass
+                return
+
+            chat.is_active = True
+            await session.commit()
+            await event.edit("**✅ | تم تفعيل البوت بنجاح!**\n**أنا جاهز لتنفيذ الأوامر.**", buttons=None)
+            await event.answer("💚 | تم التفعيل!")
+        return
+    # --- نهاية الكود المضاف ---
 
     if query_data.startswith("toggle_lock_"):
         if not await has_bot_permission(event):
@@ -176,7 +206,7 @@ async def handle_interactive_callback(event):
             new_data = f"tasbeeh:click:{zikr}:{goal}:{current}"
             reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
             new_buttons = [[Button.inline(f"{zikr} [{current}]", data=new_data), 
-                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
+                             Button.inline("🔄 إعادة التصفير", data=reset_data)]]
             try:
                 await event.edit(buttons=new_buttons)
             except MessageNotModifiedError:
@@ -190,7 +220,7 @@ async def handle_interactive_callback(event):
             new_data = f"tasbeeh:click:{zikr}:{goal}:0"
             reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
             new_buttons = [[Button.inline(f"{zikr} [0]", data=new_data), 
-                            Button.inline("🔄 إعادة التصفير", data=reset_data)]]
+                             Button.inline("🔄 إعادة التصفير", data=reset_data)]]
             await event.edit(buttons=new_buttons)
             await event.answer("تم تصفير العداد.")
         return
