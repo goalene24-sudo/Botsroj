@@ -25,7 +25,8 @@ class Chat(Base):
     __tablename__ = "chats"
     
     id = Column(BigInteger, primary_key=True, index=True)
-    is_active = Column(Boolean, default=True)
+    # --- (تم التعديل النهائي) تغيير القيمة الافتراضية إلى False ---
+    is_active = Column(Boolean, default=False, nullable=False)
     total_msgs = Column(Integer, default=0)
     
     settings = Column(JSON, default={})
@@ -56,7 +57,6 @@ class User(Base):
     custom_title = Column(String, nullable=True)
     rank = Column(Integer, default=0)
     
-    # --- (تمت الإضافة) حقل جديد لتخزين وقت انتهاء الكتم ---
     mute_end_time = Column(DateTime, nullable=True)
     
     achievements = Column(JSON, default=[]) 
@@ -66,7 +66,7 @@ class User(Base):
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
 
-# --- (بقية الكود يبقى كما هو) ---
+# --- بقية النماذج تبقى كما هي ---
 
 class Alias(Base):
     __tablename__ = "aliases"
