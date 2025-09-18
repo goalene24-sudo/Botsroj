@@ -90,14 +90,7 @@ async def get_or_create_user(session, chat_id, user_id):
 
 # --- تعريف مستويات الرتب ---
 class Ranks:
-    MEMBER = 0
-    VIP = 1
-    MOD = 2
-    ADMIN = 3
-    CREATOR = 4
-    OWNER = 5
-    SECONDARY_DEV = 6
-    MAIN_DEV = 7
+    MEMBER, VIP, MOD, ADMIN, CREATOR, OWNER, SECONDARY_DEV, MAIN_DEV = range(8)
 
 try:
     import google.generativeai as genai
@@ -124,25 +117,33 @@ def get_rank_name(rank_level):
     }
     return ranks_map.get(rank_level, "عضو")
 
-# --- تم تعديل الدالة لتقبل client كمعامل ---
+async def is_admin(client, chat_id, user_id):
+    if not isinstance(chat_id, int) or chat_id > 0:
+        return False
+    try:
+        perms = await client.get_permissions(chat_id, user_id)
+        if perms.is_creator or perms.is_admin or perms.ban_users or perms.add_admins:
+            return True
+    except (UserNotParticipantError, ChatAdminRequiredError, ValueError):
+        return False
+    except Exception as e:
+        logger.error(f"Error in is_admin for user {user_id} in chat {chat_id}: {e}")
+        return False
+    return False
+
 async def get_user_rank(client, user_id, chat_id):
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
 
     async with AsyncDBSession() as session:
-        is_secondary_dev = await session.execute(
-            select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id)
-        )
+        is_secondary_dev = await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))
         if is_secondary_dev.scalar_one_or_none():
             return Ranks.SECONDARY_DEV
 
     try:
-        # --- تم تصحيح اسم الدالة هنا ---
-        participants = await client.get_participants(chat_id, ids=user_id)
-        if participants:
-            participant = participants[0]
-            if isinstance(participant, ChannelParticipantCreator):
-                return Ranks.OWNER
+        perms = await client.get_permissions(chat_id, user_id)
+        if perms.is_creator:
+            return Ranks.OWNER
     except Exception:
         pass
 
@@ -164,25 +165,6 @@ async def get_user_rank(client, user_id, chat_id):
             return Ranks.VIP
 
     return Ranks.MEMBER
-
-# --- تم تعديل الدالة لتقبل client كمعامل ---
-async def is_admin(client, chat_id, user_id):
-    if not isinstance(chat_id, int) or chat_id > 0:
-        return False
-    try:
-        # --- تم تصحيح اسم الدالة هنا ---
-        participants = await client.get_participants(chat_id, ids=user_id)
-        if not participants:
-            return False
-        participant = participants[0]
-        
-        return isinstance(participant, (ChannelParticipantCreator, ChannelParticipantAdmin)) or \
-               (hasattr(participant, 'admin_rights') and participant.admin_rights)
-    except (UserNotParticipantError, ChatAdminRequiredError, ValueError):
-        return False
-    except Exception as e:
-        logger.error(f"Error in is_admin for user {user_id} in chat {chat_id}: {e}")
-        return False
 
 def get_uptime_string(start_time):
     uptime_delta = datetime.now() - start_time
@@ -239,7 +221,6 @@ async def is_command_enabled(chat_id, command_key):
         chat = await get_or_create_chat(session, chat_id)
         return (chat.settings or {}).get(command_key, True)
 
-# --- تم تعديل الدالة لتقبل client كمعامل ---
 async def has_bot_permission(client, event):
     rank = await get_user_rank(client, event.sender_id, event.chat_id)
     return rank >= Ranks.MOD
