@@ -9,7 +9,7 @@ from sqlalchemy import delete
 from bot import client
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
-from models import RPSGame
+from models import RPSGame, Whisper # <-- تم استيراد جدول الهمسات الجديد
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
@@ -19,7 +19,7 @@ from .utils import (
     get_user_rank, Ranks
 )
 from .utils import get_or_create_chat, get_or_create_user
-from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
+from .fun import WYR_GAMES, PROPOSALS, DICE_GAMES # <-- تم حذف WHISPERS من هنا
 from .games import MAHIBES_GAMES
 from .services import SEERAH_STAGES
 from .hisn_almuslim_data import HISN_ALMUSLIM
@@ -274,31 +274,28 @@ async def handle_interactive_callback(event):
         if msg_id in PROPOSALS: del PROPOSALS[msg_id]
         return
 
-    # --- تم تعديل هذا الجزء بالكامل ---
+    # --- تم تعديل هذا الجزء بالكامل لاستخدام قاعدة البيانات ---
     if action == "whisper":
         sub_action = data_parts[1]
         msg_id = event.message_id
         if sub_action == "read":
-            whisper_data = WHISPERS.get(msg_id)
-            if not whisper_data:
-                return await event.answer("**عذراً، هذه الهمسة قديمة جداً أو تم حذفها.**", alert=True)
-            
-            recipient_id = whisper_data.get("to_id")
-            if user_id == recipient_id:
-                # استخدام .get() مع strip() للأمان
-                whisper_text = whisper_data.get("text", "").strip()
-                
-                # تحقق إضافي للتأكد من أن النص ليس فارغاً
-                if not whisper_text:
-                    await event.answer("⚠️ | عذراً، محتوى هذه الهمسة فارغ لسبب غير معروف.", alert=True)
-                    return
+            async with AsyncDBSession() as session:
+                result = await session.execute(select(Whisper).where(Whisper.message_id == msg_id))
+                whisper_data = result.scalar_one_or_none()
 
-                await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
-                await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
-                if msg_id in WHISPERS:
-                    del WHISPERS[msg_id]
-            else:
-                await event.answer("🚫 | **هذه الهمسة ليست لك!**", alert=True)
+                if not whisper_data:
+                    return await event.answer("**عذراً، هذه الهمسة قديمة جداً أو تم حذفها.**", alert=True)
+                
+                if user_id == whisper_data.to_id:
+                    whisper_text = whisper_data.text
+                    await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
+                    await event.edit(buttons=Button.inline("✅ تم قراءة الهمسة", data="whisper:done"))
+                    
+                    # حذف الهمسة من قاعدة البيانات بعد قراءتها
+                    await session.delete(whisper_data)
+                    await session.commit()
+                else:
+                    await event.answer("🚫 | **هذه الهمسة ليست لك!**", alert=True)
         
         elif sub_action == "done":
             await event.answer("**تمت قراءة هذه الهمسة بالفعل.**", alert=True)
