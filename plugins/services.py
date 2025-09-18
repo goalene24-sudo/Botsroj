@@ -1,8 +1,8 @@
-# plugins/services.py
 import httpx
 import random
 import json
 import re
+import html
 from telethon import events, Button
 from bot import client
 from .utils import check_activation
@@ -58,7 +58,6 @@ SEERAH_STAGES = {
     }
 }
 
-# --- (تم التعديل) قائمة مختصرة تضم 30 اسمًا ---
 NAMES_OF_ALLAH = [
     {"name": "الله", "meaning": "الاسم الأعظم الذي تفرد به الحق سبحانه وخص به نفسه."},
     {"name": "الرحمن", "meaning": "واسع الرحمة الذي وسعت رحمته كل شيء."},
