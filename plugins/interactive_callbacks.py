@@ -15,7 +15,8 @@ from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
     build_protection_menu, build_xo_keyboard,
     check_xo_winner, add_points, has_bot_permission,
-    RIDDLES, BLESS_COUNTERS, is_admin  # <-- تم إضافة is_admin
+    RIDDLES, BLESS_COUNTERS, is_admin,
+    get_user_rank, Ranks  # <-- تم إضافة get_user_rank و Ranks
 )
 from .utils import get_or_create_chat, get_or_create_user
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
@@ -31,15 +32,16 @@ async def handle_interactive_callback(event):
     data_parts = query_data.split(':')
     action = data_parts[0]
 
-    # --- الكود المضاف لمعالجة زر التفعيل ---
+    # --- تم تعديل منطق زر التفعيل بالكامل ---
     if query_data.startswith("activate_"):
-        # 1. التحقق إذا كان المستخدم الذي ضغط الزر هو مشرف
-        if not await is_admin(chat_id, user_id):
-            return await event.answer("🚫 | هذا الزر للمشرفين فقط!", alert=True)
+        # التحقق الأول: هل رتبة المستخدم تسمح له بالضغط على الزر؟
+        user_rank = await get_user_rank(user_id, chat_id)
+        if user_rank < Ranks.MOD: # Ranks.MOD هي رتبة "مشرف"
+            return await event.answer("🚫 | هذا الزر مخصص للمشرفين وطاقم الإدارة فقط!", alert=True)
 
         me = await client.get_me()
         
-        # 2. التحقق إذا كان البوت نفسه مشرفًا
+        # التحقق الثاني: هل البوت نفسه مشرف؟
         if not await is_admin(chat_id, me.id):
             return await event.answer("🤷‍♂️ | يرجى ترقيتي لمشرف أولاً حتى أتمكن من العمل!", alert=True)
 
@@ -47,7 +49,6 @@ async def handle_interactive_callback(event):
             chat = await get_or_create_chat(session, chat_id)
             if chat.is_active:
                 await event.answer("✅ | البوت مُفعّل أصلاً!", alert=True)
-                # نحاول حذف الرسالة القديمة إذا أمكن
                 try:
                     await event.delete()
                 except:
@@ -59,7 +60,7 @@ async def handle_interactive_callback(event):
             await event.edit("**✅ | تم تفعيل البوت بنجاح!**\n**أنا جاهز لتنفيذ الأوامر.**", buttons=None)
             await event.answer("💚 | تم التفعيل!")
         return
-    # --- نهاية الكود المضاف ---
+    # --- نهاية الجزء المعدل ---
 
     if query_data.startswith("toggle_lock_"):
         if not await has_bot_permission(event):
@@ -83,12 +84,10 @@ async def handle_interactive_callback(event):
             await event.edit(buttons=await build_protection_menu(chat_id))
         return
 
-    # --- (تم الإصلاح النهائي بالكامل باستخدام قاعدة البيانات) ---
     if action == "rps":
         msg_id = event.message_id
         
         async with AsyncDBSession() as session:
-            # البحث عن اللعبة في قاعدة البيانات
             result = await session.execute(select(RPSGame).where(RPSGame.message_id == msg_id))
             game = result.scalar_one_or_none()
 
@@ -97,7 +96,6 @@ async def handle_interactive_callback(event):
 
             p1_id, p2_id = game.player1_id, game.player2_id
             
-            # استخراج اللاعبين من بيانات الزر للتحقق الأولي
             p1_id_from_data = int(data_parts[2])
             p2_id_from_data = int(data_parts[3])
 
@@ -106,7 +104,6 @@ async def handle_interactive_callback(event):
             
             player_choice = data_parts[1]
             
-            # تحديد أي لاعب ضغط على الزر وتحديث اختياره
             if user_id == p1_id:
                 if game.player1_choice:
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
@@ -116,7 +113,6 @@ async def handle_interactive_callback(event):
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
                 game.player2_choice = player_choice
             
-            # التحقق إذا كان كلا اللاعبين قد اختارا
             if game.player1_choice and game.player2_choice:
                 p1_name, p2_name = game.player1_name, game.player2_name
                 p1_c, p2_c = game.player1_choice, game.player2_choice
@@ -138,13 +134,11 @@ async def handle_interactive_callback(event):
                 result_text = f"**انتهى التحدي!**\n\n- **{p1_name} اختار:** {p1_e}\n- **{p2_name} اختار:** {p2_e}\n\n**النتيجة:** {winner_text}"
                 await event.edit(result_text, buttons=None)
                 
-                # حذف اللعبة من قاعدة البيانات بعد انتهائها
                 await session.execute(delete(RPSGame).where(RPSGame.message_id == msg_id))
 
             else:
                 await event.answer("✅ | **تم تسجيل اختيارك! ننتظر اللاعب الثاني...**", alert=True)
             
-            # حفظ التغييرات في قاعدة البيانات
             await session.commit()
         return
 
@@ -247,8 +241,6 @@ async def handle_interactive_callback(event):
             await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
         return
     
-    # ... (الكود المتبقي يبقى كما هو)
-
     if action == "proposal":
         sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
         msg_id = event.message_id
