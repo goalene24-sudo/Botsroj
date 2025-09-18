@@ -1,6 +1,14 @@
 import logging
 import importlib
 import sys
+from datetime import datetime
+
+# --- (تمت الإضافة) علامة اختبار حاسمة ---
+print("="*50)
+print(f"--- نسخة الاختبار بتاريخ: {datetime.now()} ---")
+print(">>> يتم الآن محاولة تشغيل ملف main.py المحدث <<<")
+print("="*50)
+
 from bot import client
 from plugins import ALL_MODULES
 import config
