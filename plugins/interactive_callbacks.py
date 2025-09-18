@@ -6,17 +6,18 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.future import select
 from sqlalchemy import delete
 
-from bot import client
+# --- لا نقوم باستيراد client من bot مباشرة لتجنب المشاكل ---
+
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
 from database import AsyncDBSession
-from models import RPSGame # <-- تمت إضافة RPSGame
+from models import RPSGame
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
     check_activation, RPS_GAMES, XO_GAMES,
     build_protection_menu, build_xo_keyboard,
     check_xo_winner, add_points, has_bot_permission,
     RIDDLES, BLESS_COUNTERS, is_admin,
-    get_user_rank, Ranks  # <-- تم إضافة get_user_rank و Ranks
+    get_user_rank, Ranks  # <-- تم التأكد من وجود الدوال الجديدة
 )
 from .utils import get_or_create_chat, get_or_create_user
 from .fun import WYR_GAMES, WHISPERS, PROPOSALS, DICE_GAMES
@@ -28,21 +29,23 @@ TASBEEH_COOLDOWN = {}
 TASBEEH_CLICK_COOLDOWN = 1
 
 async def handle_interactive_callback(event):
+    # --- نحصل على client من الـ event مباشرة لكسر حلقة الاستيراد ---
+    client = event.client
     user_id, chat_id, query_data = event.sender_id, event.chat_id, event.data.decode('utf-8')
     data_parts = query_data.split(':')
     action = data_parts[0]
 
-    # --- تم تعديل منطق زر التفعيل بالكامل ---
+    # --- تم تعديل منطق زر التفعيل بالكامل ليتوافق مع utils.py الجديد ---
     if query_data.startswith("activate_"):
         # التحقق الأول: هل رتبة المستخدم تسمح له بالضغط على الزر؟
-        user_rank = await get_user_rank(user_id, chat_id)
-        if user_rank < Ranks.MOD: # Ranks.MOD هي رتبة "مشرف"
+        user_rank = await get_user_rank(client, user_id, chat_id)
+        if user_rank < Ranks.MOD: # Ranks.MOD هي رتبة "مشرف" أو أعلى
             return await event.answer("🚫 | هذا الزر مخصص للمشرفين وطاقم الإدارة فقط!", alert=True)
 
         me = await client.get_me()
         
         # التحقق الثاني: هل البوت نفسه مشرف؟
-        if not await is_admin(chat_id, me.id):
+        if not await is_admin(client, chat_id, me.id):
             return await event.answer("🤷‍♂️ | يرجى ترقيتي لمشرف أولاً حتى أتمكن من العمل!", alert=True)
 
         async with AsyncDBSession() as session:
@@ -63,7 +66,8 @@ async def handle_interactive_callback(event):
     # --- نهاية الجزء المعدل ---
 
     if query_data.startswith("toggle_lock_"):
-        if not await has_bot_permission(event):
+        # --- تم تعديل استدعاء الدالة لتمرير client ---
+        if not await has_bot_permission(client, event):
             return await event.answer("**قسم الحماية بس للمشرفين والأدمنية.**", alert=True)
         
         async with AsyncDBSession() as session:
@@ -76,7 +80,7 @@ async def handle_interactive_callback(event):
             lock_settings[lock_key] = not current_state
             
             chat.lock_settings = lock_settings
-            flag_modified(chat, "lock_settings") # مهم جداً لحقول JSON
+            flag_modified(chat, "lock_settings")
             await session.commit()
             
             action_text = "قفل" if lock_settings[lock_key] else "فتح"
@@ -108,7 +112,7 @@ async def handle_interactive_callback(event):
                 if game.player1_choice:
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
                 game.player1_choice = player_choice
-            else: # user_id == p2_id
+            else:
                 if game.player2_choice:
                     return await event.answer("✅ | **انتظر خصمك، انت اخترت خلاص.**", alert=True)
                 game.player2_choice = player_choice
@@ -174,7 +178,7 @@ async def handle_interactive_callback(event):
             await event.edit(text, buttons=build_xo_keyboard(game['board'], game_over=True))
             if msg_id in XO_GAMES: del XO_GAMES[msg_id]
         
-        else: # Game continues
+        else:
             game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
             game['symbol'] = 'O' if game['symbol'] == 'X' else 'X'
             turn_name = game['p2_name'] if game['turn'] == game['player_o'] else game['p1_name']
