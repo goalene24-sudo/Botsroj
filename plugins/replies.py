@@ -13,7 +13,8 @@ from .default_replies import DEFAULT_REPLIES
 @client.on(events.NewMessage(pattern="^اضف رد$"))
 async def add_reply_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية يگدرون يضيفون ردود.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية يگدرون يضيفون ردود.**")
     
     try:
         await client.send_message(event.sender_id, "**أهلاً بك! لنقم بإضافة رد جديد من مجموعة...**")
@@ -58,7 +59,8 @@ async def add_reply_handler(event):
 @client.on(events.NewMessage(pattern=r"^حذف رد (.+)"))
 async def delete_reply_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية يگدرون يمسحون ردود.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية يگدرون يمسحون ردود.**")
     
     trigger_to_delete = event.pattern_match.group(1).strip()
     
@@ -79,7 +81,8 @@ async def delete_reply_handler(event):
 @client.on(events.NewMessage(pattern="^الردود$"))
 async def list_replies_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية يگدرون يشوفون الردود.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية يگدرون يشوفون الردود.**")
     
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
@@ -105,7 +108,8 @@ async def list_replies_handler(event):
 @client.on(events.NewMessage(pattern=r"^ضع رد المطور(?: (.*))?$"))
 async def set_dev_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية.**")
     
     reply_text = event.pattern_match.group(1)
     if not reply_text: return await event.reply("**الأمر يحتاج رد. الاستخدام الصحيح:\n`ضع رد المطور [الرد الذي تريده]`**")
@@ -126,7 +130,8 @@ async def set_dev_reply(event):
 @client.on(events.NewMessage(pattern=r"^ضع رد المناداة(?: (.*))?$"))
 async def set_call_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية.**")
     
     reply_text = event.pattern_match.group(1)
     if not reply_text: return await event.reply("**الأمر يحتاج رد. الاستخدام الصحيح:\n`ضع رد المناداة [الرد الذي تريده]`**")
@@ -147,7 +152,8 @@ async def set_call_reply(event):
 @client.on(events.NewMessage(pattern="^مسح رد المطور$"))
 async def delete_dev_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية.**")
     
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
@@ -165,7 +171,8 @@ async def delete_dev_reply(event):
 @client.on(events.NewMessage(pattern="^مسح رد المناداة$"))
 async def delete_call_reply(event):
     if event.is_private or not await check_activation(event.chat_id): return
-    if not await has_bot_permission(event): return await event.reply("**بس المشرفين والأدمنية.**")
+    # --- تم التعديل هنا ---
+    if not await has_bot_permission(event.client, event): return await event.reply("**بس المشرفين والأدمنية.**")
     
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, event.chat_id)
