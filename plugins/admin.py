@@ -16,9 +16,8 @@ from .utils import check_activation, has_bot_permission, get_user_rank, Ranks, b
 
 logger = logging.getLogger(__name__)
 
-# --- (تم التعديل النهائي) دوال مساعدة آمنة لإدارة إعدادات المجموعة ---
+# --- دوال مساعدة آمنة لإدارة إعدادات المجموعة ---
 async def get_or_create_chat(session, chat_id):
-    """الحصول على مجموعة من قاعدة البيانات أو إنشائها (بطريقة آمنة ضد التكرار)."""
     result = await session.execute(select(Chat).where(Chat.id == chat_id))
     chat = result.scalar_one_or_none()
     
@@ -38,7 +37,6 @@ async def get_or_create_chat(session, chat_id):
             return result.scalar_one_or_none()
 
 async def get_chat_setting(chat_id, key, default=None):
-    """جلب قيمة إعداد معين من حقل JSON في جدول المجموعات."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         if chat and chat.settings:
@@ -46,7 +44,6 @@ async def get_chat_setting(chat_id, key, default=None):
         return default
 
 async def set_chat_setting(chat_id, key, value):
-    """حفظ أو تحديث قيمة إعداد معين في حقل JSON."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         if chat.settings is None:
@@ -59,7 +56,6 @@ async def set_chat_setting(chat_id, key, value):
         await session.commit()
 
 async def del_chat_setting(chat_id, key):
-    """حذف إعداد معين من حقل JSON."""
     async with AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         if chat.settings and key in chat.settings:
@@ -74,7 +70,8 @@ async def del_chat_setting(chat_id, key):
 async def set_rules_handler(event):
     try:
         if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
+        # --- تم التعديل هنا ---
+        if not await has_bot_permission(event.client, event):
             return await event.reply("**بس المشرفين والأدمنية يگدرون يغيرون القوانين.**")
         async with client.conversation(event.sender_id, timeout=300) as conv:
             await conv.send_message("**تمام، دزلي هسه قوانين المجموعة الجديدة نصاً كاملاً...**")
@@ -91,7 +88,8 @@ async def set_rules_handler(event):
 async def delete_rules_handler(event):
     try:
         if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
+        # --- تم التعديل هنا ---
+        if not await has_bot_permission(event.client, event):
             return await event.reply("**بس المشرفين والأدمنية يگدرون يحذفون القوانين.**")
         
         if await get_chat_setting(event.chat_id, "rules"):
@@ -107,7 +105,8 @@ async def delete_rules_handler(event):
 async def welcome_handler(event):
     try:
         if event.is_private or not await check_activation(event.chat_id): return
-        if not await has_bot_permission(event):
+        # --- تم التعديل هنا ---
+        if not await has_bot_permission(event.client, event):
             return await event.reply("**بس المشرفين والأدمنية يگدرون يعدلون الترحيب.**")
         
         action = event.raw_text
@@ -116,7 +115,7 @@ async def welcome_handler(event):
                 await del_chat_setting(event.chat_id, "welcome_message")
                 await event.reply("**🗑️ خوش، مسحت الترحيب المخصص.**")
             else:
-                await event.reply("**هو أصلاً ماكو ترحيب مخصص حتى أحذفه.**")
+                await event.reply("**هي أصلاً ماكو ترحيب مخصص حتى أحذفه.**")
         else:
             async with client.conversation(event.sender_id, timeout=180) as conv:
                 await conv.send_message("**تمام، دزلي رسالة الترحيب الجديدة.\n\n💡 ملاحظة:\n`{user}` - لمنشن العضو الجديد.\n`{group}` - لاسم المجموعة.**")
@@ -133,7 +132,9 @@ async def welcome_handler(event):
 async def promote_demote_handler(event):
     try:
         if event.is_private or not await check_activation(event.chat_id): return
-        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+        client = event.client # نحصل على client
+        # --- تم التعديل هنا ---
+        actor_rank = await get_user_rank(client, event.sender_id, event.chat_id)
         if actor_rank < Ranks.ADMIN:
             return await event.reply("**🚫 | هذا الأمر للادمنية فما فوق.**")
 
@@ -155,7 +156,8 @@ async def promote_demote_handler(event):
         except Exception:
             return await event.reply("**⚠️ | لا أستطيع التحقق من صلاحياتي، يرجى التأكد من أنني مشرف.**")
 
-        target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+        # --- تم التعديل هنا ---
+        target_rank = await get_user_rank(client, user_to_manage.id, event.chat_id)
         if target_rank >= actor_rank:
             return await event.reply("**❌ | لا يمكنك إدارة شخص يمتلك رتبة مساوية لك أو أعلى.**")
 
@@ -177,8 +179,10 @@ async def promote_demote_handler(event):
 async def secondary_dev_handler(event):
     try:
         if event.is_private or not await check_activation(event.chat_id): return
+        client = event.client # نحصل على client
         action = event.raw_text
-        actor_rank = await get_user_rank(event.sender_id, event.chat_id)
+        # --- تم التعديل هنا ---
+        actor_rank = await get_user_rank(client, event.sender_id, event.chat_id)
 
         if action in ["رفع مطور ثانوي", "تنزيل مطور ثانوي", "مسح المطورين الثانويين"]:
             if actor_rank not in [Ranks.MAIN_DEV, Ranks.OWNER]:
@@ -195,7 +199,8 @@ async def secondary_dev_handler(event):
                 user_to_manage = await reply.get_sender()
                 if user_to_manage.bot: return await event.reply("**لا يمكنك ترقية البوتات.**")
                 
-                target_rank = await get_user_rank(user_to_manage.id, event.chat_id)
+                # --- تم التعديل هنا ---
+                target_rank = await get_user_rank(client, user_to_manage.id, event.chat_id)
                 if target_rank >= actor_rank:
                     return await event.reply("**لا يمكنك إدارة شخص بنفس رتبتك أو أعلى.**")
 
@@ -235,7 +240,8 @@ async def secondary_dev_handler(event):
 async def set_long_text_size(event):
     try:
         if not await check_activation(event.chat_id): return
-        if await get_user_rank(event.sender_id, event.chat_id) < Ranks.MOD:
+        # --- تم التعديل هنا ---
+        if await get_user_rank(event.client, event.sender_id, event.chat_id) < Ranks.MOD:
             return await event.reply("**هذا الأمر متاح للمشرفين فما فوق.**")
 
         try:
