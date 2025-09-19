@@ -1,24 +1,68 @@
-# plugins/cleaning.py
-
 import asyncio
+import logging
+from datetime import datetime, timedelta
 from telethon import events
+from telethon.tl.types import MessageEntityUrl
+
 from bot import client
-# --- (تم التعديل) استيراد المكونات الجديدة ---
-from plugins.utils import get_user_rank, Ranks
+from .utils import get_user_rank, Ranks, check_activation
 from sqlalchemy.future import select
 from sqlalchemy import delete
 from database import AsyncDBSession
 from models import MessageHistory
 
-# --- دالة مساعدة مركزية لتجنب تكرار الكود ---
+logger = logging.getLogger(__name__)
+
+# --- دالة مساعدة لتحديد نوع الرسالة ---
+def get_message_type(event):
+    """تحدد نوع الرسالة لتحزينها في قاعدة البيانات."""
+    if event.photo: return "photo"
+    if event.video or event.video_note: return "video"
+    if event.sticker: return "sticker"
+    if event.gif: return "gif"
+    if event.fwd_from: return "forward"
+    if event.entities:
+        for entity in event.entities:
+            if isinstance(entity, MessageEntityUrl):
+                return "url"
+    # يمكنك إضافة المزيد من الأنواع هنا مثل audio, voice, document
+    if event.text and len(event.text) > 200: # افتراض أن الكليشة أكثر من 200 حرف
+        return "long_text"
+    if event.text: return "text"
+    return "unknown"
+
+# --- معالج جديد لتسجيل الرسائل في قاعدة البيانات ---
+@client.on(events.NewMessage(func=lambda e: e.is_group and not e.is_private))
+async def message_recorder_handler(event):
+    """يسجل معرف ونوع كل رسالة جديدة في قاعدة البيانات."""
+    if not await check_activation(event.chat_id):
+        return
+    
+    # تجاهل رسائل البوتات
+    if event.sender and event.sender.bot:
+        return
+
+    msg_type = get_message_type(event)
+    if msg_type == "unknown":
+        return
+
+    try:
+        async with AsyncDBSession() as session:
+            new_msg_record = MessageHistory(
+                chat_id=event.chat_id,
+                msg_id=event.id,
+                msg_type=msg_type
+            )
+            session.add(new_msg_record)
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to record message {event.id} in chat {event.chat_id}: {e}")
+
+# --- دالة المسح المركزية والمحسنة ---
 async def purge_messages_by_type(event, target_types, count_to_delete, command_text):
-    """
-    دالة عامة لحذف الرسائل بناءً على نوعها من السجل المحفوظ في قاعدة البيانات.
-    """
     ids_to_delete = []
     try:
         async with AsyncDBSession() as session:
-            # 1. فلترة السجل للعثور على الرسائل من النوع المطلوب
             stmt = (
                 select(MessageHistory.msg_id)
                 .where(MessageHistory.chat_id == event.chat_id, MessageHistory.msg_type.in_(target_types))
@@ -32,42 +76,40 @@ async def purge_messages_by_type(event, target_types, count_to_delete, command_t
                 await event.reply(f"لم أجد أي رسائل من نوع '{command_text}' في ذاكرة البوت.")
                 return
 
-            # 2. إضافة رسالة الأمر نفسها للحذف
             ids_to_delete.append(event.message.id)
-
-            # 3. الحذف من تيليجرام
+            
+            # الحذف من تيليجرام
             await client.delete_messages(event.chat_id, ids_to_delete)
 
-            # 4. تنظيف قاعدة البيانات من الرسائل المحذوفة
+            # تنظيف قاعدة البيانات
             delete_stmt = delete(MessageHistory).where(MessageHistory.msg_id.in_(ids_to_delete))
             await session.execute(delete_stmt)
             await session.commit()
             
-            # رسالة تأكيد مخصصة
             deleted_count = len(ids_to_delete)
-            reply_text = f"✅ **تم حذف {deleted_count - 1} {command_text} بنجاح.**" if count_to_delete < 100 else f"✅ **تم حذف كل الـ {command_text} ({deleted_count - 1}) المحفوظة بنجاح.**"
+            reply_text = f"✅ **تم حذف {deleted_count - 1} {command_text} بنجاح.**"
             confirmation_msg = await event.respond(reply_text)
             await asyncio.sleep(5)
             await confirmation_msg.delete()
 
     except Exception as e:
-        print(f"Error in specialized purge: {e}")
-        # إذا فشل الحذف من تيليجرام، لا تقم بالحذف من قاعدة البيانات
+        logger.error(f"Error in specialized purge for {command_text}: {e}")
         await event.reply("⚠️ حدث خطأ أثناء محاولة الحذف. تأكد من صلاحياتي.")
 
-
-# --- (مُصحَّح) الأوامر المتخصصة مع عدد اختياري ---
+# --- الأوامر المتخصصة ---
 
 @client.on(events.NewMessage(pattern=r"^(مسح الصور|مسح صور)(?: (\d+))?$"))
 async def purge_photos(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     await purge_messages_by_type(event, ["photo"], count, "صورة")
 
 @client.on(events.NewMessage(pattern=r"^(مسح الميديا)(?: (\d+))?$"))
 async def purge_media(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     media_types = ["photo", "video", "sticker", "gif"]
@@ -75,30 +117,34 @@ async def purge_media(event):
 
 @client.on(events.NewMessage(pattern=r"^(مسح الكلايش|مسح كلايش)(?: (\d+))?$"))
 async def purge_long_texts(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     await purge_messages_by_type(event, ["long_text"], count, "كليشة")
 
 @client.on(events.NewMessage(pattern=r"^(مسح الروابط|مسح روابط)(?: (\d+))?$"))
 async def purge_links(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     await purge_messages_by_type(event, ["url"], count, "رابط")
 
 @client.on(events.NewMessage(pattern=r"^(مسح التوجيه|مسح توجيه)(?: (\d+))?$"))
 async def purge_forwards(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
     await purge_messages_by_type(event, ["forward"], count, "رسالة موجهة")
 
-# --- (مُصحَّح) الأوامر الأساسية ---
+# --- الأوامر الأساسية ---
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
 async def delete_messages_by_count(event):
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(1))
     all_types = ["text", "photo", "video", "sticker", "gif", "url", "forward", "long_text"]
@@ -108,21 +154,27 @@ async def delete_messages_by_count(event):
 async def delete_messages_by_reply(event):
     if not event.is_group: return
     if not event.is_reply:
-        await event.reply("⚠️ يرجى الرد على الرسالة التي تريد بدء الحذف منها.")
-        return
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+        return await event.reply("⚠️ يرجى الرد على الرسالة التي تريد بدء الحذف منها.")
+    
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
+
     try:
         start_msg_id = event.message.reply_to_msg_id
         end_msg_id = event.message.id
-        message_ids_to_delete = [i for i in range(start_msg_id, end_msg_id + 1)]
+        message_ids_to_delete = list(range(start_msg_id, end_msg_id + 1))
         count = len(message_ids_to_delete)
         
-        await client.delete_messages(event.chat_id, message_ids_to_delete)
+        # تقسيم الحذف إلى مجموعات صغيرة لتجنب أخطاء تيليجرام
+        for i in range(0, count, 100):
+            chunk = message_ids_to_delete[i:i + 100]
+            await client.delete_messages(event.chat_id, chunk)
+            await asyncio.sleep(1) # استراحة قصيرة بين الطلبات
 
         confirmation_msg = await event.respond(f"✅ **تم حذف {count} رسالة بنجاح.**")
         await asyncio.sleep(5)
         await confirmation_msg.delete()
     except Exception as e:
-        print(f"Error in cleaning module (by_reply): {e}")
+        logger.error(f"Error in cleaning module (by_reply): {e}")
         await event.reply("⚠️ حدث خطأ. تأكد من أنني أمتلك صلاحية حذف الرسائل في هذه المجموعة.")
