@@ -17,9 +17,6 @@ from .utils import (
 from .utils import get_or_create_user
 from .achievements import ACHIEVEMENTS
 
-# --- (تم حذف id_handler والثوابت الخاصة به لأنها الآن في النظام المركزي) ---
-
-
 @client.on(events.NewMessage(pattern="^كشف$"))
 async def kashf_handler(event):
     if event.is_private or not await check_activation(event.chat_id): return
@@ -33,12 +30,12 @@ async def kashf_handler(event):
     async with AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
     
-    rank_int = await get_user_rank(target_user.id, event.chat_id)
-    # ملاحظة: دالة get_rank_name موجودة في utils.py
+    # --- تم التعديل هنا: إضافة event.client ---
+    rank_int = await get_user_rank(event.client, target_user.id, event.chat_id)
+    
     from .utils import get_rank_name
     rank_str = get_rank_name(rank_int)
     
-    # تم نقل RANDOM_TAFA3UL إلى commands_logic.py، لذا سنعرفها هنا مؤقتًا إذا احتجنا إليها
     RANDOM_TAFA3UL_local = [
         "سايق مخده 🛌", "ياكل تبن 🐐", "نايم بالكروب 😴", "متفاعل نار 🔥",
         "أسطورة المجموعة 👑", "مدري شيسوي 🤷‍♂️", "يخابر حبيبتة 👩‍❤️‍💋‍👨", "زعطوط الكروب 👶"
@@ -49,8 +46,8 @@ async def kashf_handler(event):
         f"**◇ : معرفه :** @{target_user.username or 'لا يوجد'}\n"
         f"**◇ : حسابه :** [{target_user.first_name}](tg://user?id={user_obj.user_id})\n"
         f"**◇ : رتبته :** {rank_str}\n"
-        f"**◇ : رسائله :** `{user_obj.msg_count}`\n"
-        f"**◇ : سحكاته :** `{user_obj.sahaqat}`\n"
+        f"**◇ : رسائله :** `{user_obj.msg_count or 0}`\n"
+        f"**◇ : سحكاته :** `{user_obj.sahaqat or 0}`\n"
         f"**◇ : تفاعله :** {random.choice(RANDOM_TAFA3UL_local)}\n"
         f"**◇ : انضمامه :** `{user_obj.join_date or 'غير مسجل'}`"
     )
