@@ -84,7 +84,8 @@ ALL_BOT_COMMANDS = PERCENT_COMMANDS + GAME_COMMANDS + ADMIN_COMMANDS + SERVICE_C
 async def add_alias_handler(event):
     if not await check_activation(event.chat_id): return
 
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
 
@@ -159,7 +160,8 @@ async def add_alias_handler(event):
 @client.on(events.NewMessage(pattern=r"^حذف امر (.+)$"))
 async def delete_alias_handler(event):
     if not await check_activation(event.chat_id): return
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- تم التعديل هنا ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD:
         return await event.reply("**🚫 | هذا الأمر متاح للمشرفين فما فوق.**")
     
