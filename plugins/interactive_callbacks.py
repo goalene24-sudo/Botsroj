@@ -5,6 +5,7 @@ from telethon.errors.rpcerrorlist import MessageNotModifiedError
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.future import select
 from sqlalchemy import delete
+import config # <-- تم إضافة هذا
 
 from bot import client
 # --- استيراد مكونات قاعدة البيانات من المصدر الصحيح ---
@@ -182,109 +183,27 @@ async def handle_interactive_callback(event):
             await event.edit(text, buttons=build_xo_keyboard(game['board']))
         return
 
-    if action == "tasbeeh":
-        sub_action, zikr, goal, current = data_parts[1], data_parts[2], int(data_parts[3]), int(data_parts[4])
-        
-        if sub_action == "click":
-            now = time.time()
-            last_click = TASBEEH_COOLDOWN.get(user_id, 0)
-            if now - last_click < TASBEEH_CLICK_COOLDOWN:
-                return await event.answer("على كيفك، لا تضغط بسرعة!", alert=True)
-            
-            TASBEEH_COOLDOWN[user_id] = now
-            current += 1
-            
-            new_data = f"tasbeeh:click:{zikr}:{goal}:{current}"
-            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
-            new_buttons = [[Button.inline(f"{zikr} [{current}]", data=new_data), 
-                             Button.inline("🔄 إعادة التصفير", data=reset_data)]]
-            try:
-                await event.edit(buttons=new_buttons)
-            except MessageNotModifiedError:
-                pass 
-
-            if current == goal:
-                await event.answer("تقبل الله طاعتك 🤲", alert=True)
-
-        elif sub_action == "reset":
-            current = 0
-            new_data = f"tasbeeh:click:{zikr}:{goal}:0"
-            reset_data = f"tasbeeh:reset:{zikr}:{goal}:0"
-            new_buttons = [[Button.inline(f"{zikr} [0]", data=new_data), 
-                             Button.inline("🔄 إعادة التصفير", data=reset_data)]]
-            await event.edit(buttons=new_buttons)
-            await event.answer("تم تصفير العداد.")
-        return
-
-    if action == "mahbis":
-        game = MAHIBES_GAMES.get(chat_id)
-        if not game:
-            return await event.answer("هاي اللعبة خلصانة.", alert=True)
-        player_id = game["player_id"]
-        if user_id != player_id:
-            return await event.answer("هاي اللعبة مو الك! اذا تريد تلعب، اكتب `محيبس`", alert=True)
-        guess_pos = int(data_parts[2])
-        winner_pos = game["winner_pos"]
-        if guess_pos == winner_pos:
-            winner = await event.get_sender()
-            await add_points(chat_id, winner.id, 50)
-            
-            buttons = [Button.inline("💍" if i == winner_pos else "✊", data="mahbis:done") for i in range(5)]
-            keyboard = [buttons]
-            
-            await event.edit(f"**كفوووو! [{winner.first_name}](tg://user?id={winner.id}) لزمت المحيبس! 💎 ربحت 50 نقطة.**", buttons=keyboard)
-            del MAHIBES_GAMES[chat_id]
-        else:
-            await event.answer("ايدك فارغة! حاول مرة لخ.", alert=True)
-        return
-
-    if action == "proposal":
-        sub_action, proposer_id, proposed_id = data_parts[1], int(data_parts[2]), int(data_parts[3])
-        msg_id = event.message_id
-        if user_id != proposed_id:
-            return await event.answer("**هذا الطلب موجه لشخص آخر.**", alert=True)
-        proposal_data = PROPOSALS.get(msg_id)
-        if not proposal_data:
-            return await event.answer("**هذا الطلب قديم أو انتهت صلاحيته.**", alert=True)
-            
-        proposer_name = proposal_data["proposer_name"]
-        proposed_name = proposal_data["proposed_name"]
-
-        if sub_action == "accept":
-            text = f"**🎉 تمت الموافقة!** 🎉\n\n**مبروك للخطيبين [{proposer_name}](tg://user?id={proposer_id}) و [{proposed_name}](tg://user?id={proposed_id})! عقبال الفرحة الكبرى.**"
-            await event.edit(text, buttons=None)
-            
-            async with AsyncDBSession() as session:
-                proposer_obj = await get_or_create_user(session, chat_id, proposer_id)
-                proposed_obj = await get_or_create_user(session, chat_id, proposed_id)
-                proposer_inventory = proposer_obj.inventory or {}
-                proposed_inventory = proposed_obj.inventory or {}
-                proposer_inventory["married_to"] = {"id": proposed_id, "name": proposed_name}
-                proposed_inventory["married_to"] = {"id": proposer_id, "name": proposer_name}
-                proposer_obj.inventory = proposer_inventory
-                proposed_obj.inventory = proposed_inventory
-                flag_modified(proposer_obj, "inventory")
-                flag_modified(proposed_obj, "inventory")
-                await session.commit()
-
-        elif sub_action == "reject":
-            text = f"**💔 تم الرفض!** 💔\n\n**للأسف، [{proposed_name}](tg://user?id={proposed_id}) قام برفض طلب [{proposer_name}](tg://user?id={proposer_id}). خيرها بغيرها.**"
-            await event.edit(text, buttons=None)
-        
-        if msg_id in PROPOSALS: del PROPOSALS[msg_id]
-        return
-
     if action == "whisper":
         sub_action = data_parts[1]
         msg_id = event.message_id
         if sub_action == "read":
+            # --- سطر تشخيصي مضاف ---
+            if user_id in config.SUDO_USERS:
+                await client.send_message(user_id, "**DEBUG (READ):**\n**تم استدعاء معالج القراءة. جاري البحث في قاعدة البيانات...**")
+
             async with AsyncDBSession() as session:
                 result = await session.execute(select(Whisper).where(Whisper.message_id == msg_id))
                 whisper_data = result.scalar_one_or_none()
 
                 if not whisper_data:
+                    if user_id in config.SUDO_USERS:
+                         await client.send_message(user_id, "**DEBUG (READ):**\n**لم يتم العثور على الهمسة في قاعدة البيانات (whisper_data is None).**")
                     return await event.answer("**عذراً، هذه الهمسة قديمة جداً أو تم حذفها.**", alert=True)
                 
+                # --- سطر تشخيصي مضاف ---
+                if user_id in config.SUDO_USERS:
+                    await client.send_message(user_id, f"**DEBUG (READ):**\n**تم العثور على الهمسة.**\n**النص المسترجع:** `{whisper_data.text}`")
+
                 if user_id == whisper_data.to_id:
                     whisper_text = whisper_data.text
                     await event.answer(f"**🤫 الهمسة تقول:\n\n{whisper_text}**", alert=True)
