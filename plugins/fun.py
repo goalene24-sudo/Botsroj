@@ -128,14 +128,6 @@ async def whisper_handler(event):
     if not whisper_text: 
         return await event.reply("**شنو الهمسة؟ اكتب رسالتك بعد كلمة `همس`.**\n\n**مثال: `همس شلونك`**")
     
-    # --- سطر التشخيص المضاف ---
-    if sender.id in config.SUDO_USERS:
-        try:
-            await client.send_message(sender.id, f"**DEBUG (SAVE):**\n**النص الذي سيتم تخزينه للهمسة هو:**\n`{whisper_text}`")
-        except Exception as e:
-            print(f"DEBUGGING FAILED: {e}")
-    # --- نهاية سطر التشخيص ---
-
     await event.delete()
     message_text = (
         f"**🤫 | همسة جديدة!**\n\n"
@@ -155,13 +147,7 @@ async def whisper_handler(event):
             text=whisper_text
         )
         session.add(new_whisper)
-        try:
-            await session.commit()
-            if sender.id in config.SUDO_USERS:
-                await client.send_message(sender.id, f"**DEBUG (SAVE):**\n**تم حفظ الهمسة في قاعدة البيانات بنجاح.**")
-        except Exception as e:
-            if sender.id in config.SUDO_USERS:
-                await client.send_message(sender.id, f"**DEBUG (SAVE):**\n**فشل حفظ الهمسة في قاعدة البيانات!**\n**الخطأ:** `{e}`")
+        await session.commit()
 
 @client.on(events.NewMessage(pattern=r"^حللني$"))
 async def analyze_me_handler(event):
