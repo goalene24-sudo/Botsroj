@@ -392,12 +392,13 @@ async def ban_logic(event, command_text):
     
     user_to_manage = await reply.get_sender()
     
-    # --- بداية الكود المضاف ---
     me = await event.client.get_me()
     if user_to_manage.id == me.id:
         return await event.reply("تريدني احظر نفسي وين صايره هاي🧐")
-    # --- نهاية الكود المضاف ---
     
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
     actor_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     target_rank = await get_user_rank(event.client, user_to_manage.id, event.chat_id)
     if target_rank >= actor_rank: 
@@ -434,12 +435,13 @@ async def mute_logic(event, command_text):
     
     user_to_manage = await reply.get_sender()
 
-    # --- بداية الكود المضاف ---
     me = await event.client.get_me()
     if user_to_manage.id == me.id:
         return await event.reply("هوه اني شوكت حاجي حتى تكتمني.. دعبل😏")
-    # --- نهاية الكود المضاف ---
 
+    if user_to_manage.id in config.SUDO_USERS:
+        return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
+        
     actor_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     target_rank = await get_user_rank(event.client, user_to_manage.id, event.chat_id)
     if target_rank >= actor_rank: 
@@ -452,13 +454,18 @@ async def mute_logic(event, command_text):
     ]
     await event.reply(f"**🤫 تريد تكتم [{user_to_manage.first_name}](tg://user?id={user_to_manage.id})؟ اختار المدة:**", buttons=buttons)
 
-
 async def warn_logic(event, command_text):
     if not await has_bot_permission(event.client, event): return
     reply = await event.get_reply_message()
     if not reply: return await event.reply("**على منو بالضبط؟ رد على رسالته علمود اعرفه 🧐**")
     
     user_to_manage = await reply.get_sender()
+
+    # --- بداية الكود المضاف ---
+    me = await event.client.get_me()
+    if user_to_manage.id == me.id:
+        return await event.reply("تحذرني الي؟ والله يا الله 😒")
+    # --- نهاية الكود المضاف ---
 
     if user_to_manage.id in config.SUDO_USERS:
         return await event.reply("✦ما أگدر أطبق هذا الأمر على مطوري..دعبل✦")
@@ -546,7 +553,6 @@ async def timed_mute_logic(event, command_text):
     except Exception as e:
         await event.reply(f"**ماكدرت اسويها، اكو مشكلة: `{str(e)}`**")
 
-
 async def add_filter_logic(event, command_text):
     if not await has_bot_permission(event.client, event): return
     word = command_text.replace("اضف كلمة ممنوعة", "").strip()
@@ -604,7 +610,6 @@ async def list_filters_logic(event, command_text):
 
     message = "**🚫 قائمة الكلمات الممنوعة:**\n\n" + "\n".join(f"- `{word}`" for word in words)
     await event.reply(message)
-
 
 @client.on(events.CallbackQuery(pattern=b"^mute_"))
 async def mute_callback_handler(event):
