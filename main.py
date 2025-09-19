@@ -2,8 +2,10 @@ import logging
 import importlib
 import sys
 from datetime import datetime
+import asyncio  # <-- تمت الإضافة
+from plugins.events import start_dhikr_task  # <-- تمت الإضافة
 
-# --- (تمت الإضافة) علامة اختبار حاسمة ---
+# --- علامة اختبار حاسمة ---
 print("="*50)
 print(f"--- نسخة الاختبار بتاريخ: {datetime.now()} ---")
 print(">>> يتم الآن محاولة تشغيل ملف main.py المحدث <<<")
@@ -18,7 +20,7 @@ from database import init_db
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-# --- (تم التعديل) تعديل مستوى تسجيل sqlalchemy بالكامل لتقليل الرسائل ---
+# --- تعديل مستوى تسجيل sqlalchemy لتقليل الرسائل ---
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
@@ -43,6 +45,11 @@ async def main():
         await client.start(bot_token=config.BOT_TOKEN)
         me = await client.get_me()
         LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
+        
+        # --- (جديد) بدء مهمة الأذكار الدورية في الخلفية ---
+        LOGGER.info(">> يتم الآن بدء مهمة الأذكار الدورية... <<")
+        asyncio.create_task(start_dhikr_task())
+        
         LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
         await client.run_until_disconnected()
     except Exception as e:
