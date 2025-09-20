@@ -1,14 +1,15 @@
+requirements.txt
 gTTS
-googletrans==3.1.0a0  # إصدار أكثر استقرارًا
+googletrans==4.0.0-rc1
 wikipedia
 pytz
 httpx
 beautifulsoup4
 duckduckgo-search
-Flask  # إذا لزم الأمر، أو أزل إذا لم تكن تستخدم واجهة ويب
+Flask
 google-generativeai
 yt-dlp
 aiohttp
 SQLAlchemy
 aiosqlite
-telethon==1.34.0  # إصدار مستقر
+telethon
