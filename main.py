@@ -5,9 +5,10 @@ from datetime import datetime
 import asyncio
 from plugins.events import start_dhikr_task
 
-# --- (تمت الإضافة هنا) استيراد الأدوات اللازمة لإنشاء المحرك ---
+# استيراد الأدوات اللازمة لإنشاء المحرك
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import NullPool
+# --- (تم التعديل هنا) سنقوم باستيراد الوحدة كاملة فقط ---
 import database
 
 
@@ -20,8 +21,8 @@ print("="*50)
 from bot import client
 from plugins import ALL_MODULES
 import config
-# --- تم تعديل السطر التالي لاستيراد الدالة فقط ---
-from database import init_db
+# --- تم حذف السطر "from database import init_db" من هنا لأنه لم يعد ضرورياً ---
+
 
 # --- الإعدادات الأساسية ---
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
@@ -44,9 +45,6 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
-        # ===================================================================
-        # | START OF NEW CODE | بداية الكود الجديد                             |
-        # ===================================================================
         # تهيئة محرك قاعدة البيانات هنا لضمان أنه يعمل داخل بيئة asyncio
         DB_NAME = "surooj.db"
         DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
@@ -55,13 +53,11 @@ async def main():
         database.AsyncDBSession = async_sessionmaker(
             bind=database.engine, expire_on_commit=False, class_=AsyncSession
         )
-        # ===================================================================
-        # | END OF NEW CODE | نهاية الكود الجديد                               |
-        # ===================================================================
 
         # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
         LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
-        await init_db()
+        # --- (تم التعديل هنا) استدعاء الدالة من خلال الوحدة مباشرة ---
+        await database.init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
         await client.start(bot_token=config.BOT_TOKEN)
