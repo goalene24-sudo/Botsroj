@@ -32,17 +32,20 @@ from .commands_logic import (
     get_rules_logic, tag_all_logic,
     list_admins_logic
 )
-from .protection_logic import (
-    lock_unlock_logic, kick_logic, unmute_logic,
-    set_warns_limit_logic, set_mute_duration_logic,
-    ban_logic, unban_logic, mute_logic, warn_logic, clear_warns_logic, timed_mute_logic,
-    add_filter_logic, remove_filter_logic, list_filters_logic,
-    toggle_id_photo_logic,
-    set_rules_logic, clear_rules_logic,
-    list_bot_admins_logic, clear_all_bot_admins_logic,
-    list_vips_logic, clear_all_vips_logic,
-    list_creators_logic, clear_all_creators_logic
-)
+
+# ===================================================================
+# | START OF CHANGES | بداية التغييرات                               |
+# ===================================================================
+
+# تم حذف الاستدعاء القديم من protection_logic واستبداله بالأسطر التالية
+from .protection_commands import *
+from .protection_settings import *
+from .protection_lists import *
+
+# ===================================================================
+# | END OF CHANGES | نهاية التغييرات                                 |
+# ===================================================================
+
 import logging
 
 logger = logging.getLogger(__name__)
