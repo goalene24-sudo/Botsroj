@@ -3,14 +3,25 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 
-# سيتم تعريف هذا المتغير لاحقاً من __main__.py
-# يجب أن يبقى هنا حتى لا تتعطل بقية الملفات التي تستورده
-AsyncDBSession = None
+# --- إعدادات قاعدة البيانات ---
+DB_NAME = "surooj.db"
+# استخدام محرك aiosqlite للعمل الغير متزامن
+DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
+
+# --- تهيئة SQLAlchemy (بطريقة غير متزامنة) ---
+# (تم التعديل) تغيير echo إلى False لإيقاف طباعة كل استعلام
+engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
+
+# إنشاء مُصنِّع جلسات غير متزامن
+# expire_on_commit=False مهم للتعامل مع البوتات لتجنب أخطاء الوصول للكائنات بعد إغلاق الجلسة
+AsyncDBSession = async_sessionmaker(
+    bind=engine, expire_on_commit=False, class_=AsyncSession
+)
 
 Base = declarative_base()
 
-# --- (تم التعديل هنا) الدالة الآن تستقبل المحرك كوسيط ---
-async def init_db(engine):
+# دالة لإنشاء الجداول
+async def init_db():
     """
     يقوم بإنشاء جميع الجداول في قاعدة البيانات إذا لم تكن موجودة.
     """
