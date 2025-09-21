@@ -25,30 +25,63 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- (تم التحديث) استيراد كل الدوال المنطقية الجديدة ---
+# --- استيراد كل الدوال المنطقية الجديدة ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
     get_rules_logic, tag_all_logic,
     list_admins_logic
 )
-
-# ===================================================================
-# | START OF CHANGES | بداية التغييرات                               |
-# ===================================================================
-
-# تم حذف الاستدعاء القديم من protection_logic واستبداله بالأسطر التالية
 from .protection_commands import *
 from .protection_settings import *
 from .protection_lists import *
 
-# ===================================================================
-# | END OF CHANGES | نهاية التغييرات                                 |
-# ===================================================================
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ===================================================================
+# | START OF NEW CODE | بداية الكود الجديد                             |
+# ===================================================================
+
+async def handle_filtered_words(event):
+    """
+    تقوم هذه الدالة بالتحقق من الرسائل النصية وحذفها إذا كانت تحتوي على كلمات ممنوعة.
+    """
+    # المشرفون فما فوق لا يتم فلترة رسائلهم
+    sender_rank = await get_user_rank(client, event.sender_id, event.chat_id)
+    if sender_rank >= Ranks.MOD:
+        return False
+
+    if not event.text:
+        return False
+
+    async with AsyncDBSession() as session:
+        chat = await get_or_create_chat(session, event.chat_id)
+        settings = chat.settings or {}
+        filtered_words = settings.get("filtered_words", [])
+
+        if not filtered_words:
+            return False
+
+        message_text_lower = event.text.lower()
+        # المرور على كل كلمة ممنوعة والتحقق من وجودها في الرسالة
+        for word in filtered_words:
+            if word.lower() in message_text_lower:
+                try:
+                    await event.delete()
+                except Exception as e:
+                    logger.warning(f"Failed to delete filtered message: {e}")
+                # نرجع True لإعلام المعالج الرئيسي بأن الرسالة تم التعامل معها (حذفها)
+                return True
+                
+    return False
+
+# ===================================================================
+# | END OF NEW CODE | نهاية الكود الجديد                               |
+# ===================================================================
+
 
 async def handle_flood_lock(event):
     async with AsyncDBSession() as session:
@@ -131,7 +164,10 @@ async def handle_message_locks(event):
 async def general_message_handler(event):
     if not await check_activation(event.chat_id): return
     try:
-        if await handle_flood_lock(event) or await handle_message_locks(event): return
+        # تمت إضافة التحقق من الكلمات الممنوعة هنا
+        if await handle_filtered_words(event) or await handle_flood_lock(event) or await handle_message_locks(event): 
+            return
+            
         if event.text:
             command_to_process = None
             async with AsyncDBSession() as session:
