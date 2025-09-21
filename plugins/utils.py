@@ -5,7 +5,8 @@ import config
 from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
-from telethon.errors.rpcerrorlist import UserNotParticipantError
+# --- (تم التعديل هنا) تمت إضافة الخطأ الجديد الذي نريد تجاهله ---
+from telethon.errors.rpcerrorlist import UserNotParticipantError, ChannelPrivateError
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.exc import IntegrityError
 
@@ -124,7 +125,8 @@ async def is_admin(client, chat_id, user_id):
         perms = await client.get_permissions(chat_id, user_id)
         if perms.is_creator or perms.is_admin or perms.ban_users or perms.add_admins:
             return True
-    except (UserNotParticipantError, ChatAdminRequiredError, ValueError):
+    # --- (تم التعديل هنا) أضفنا ChannelPrivateError إلى قائمة الأخطاء التي يتم تجاهلها ---
+    except (UserNotParticipantError, ChatAdminRequiredError, ValueError, ChannelPrivateError):
         return False
     except Exception as e:
         logger.error(f"Error in is_admin for user {user_id} in chat {chat_id}: {e}")
