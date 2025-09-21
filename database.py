@@ -3,21 +3,19 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 
-# --- تعريف المتغيرات بشكل مبدئي ---
-# سيتم تعيين قيمها الحقيقية لاحقاً من ملف __main__.py
-engine = None
+# سيتم تعريف هذا المتغير لاحقاً من __main__.py
+# يجب أن يبقى هنا حتى لا تتعطل بقية الملفات التي تستورده
 AsyncDBSession = None
 
 Base = declarative_base()
 
-# دالة لإنشاء الجداول
-async def init_db():
+# --- (تم التعديل هنا) الدالة الآن تستقبل المحرك كوسيط ---
+async def init_db(engine):
     """
     يقوم بإنشاء جميع الجداول في قاعدة البيانات إذا لم تكن موجودة.
     """
     # استيراد النماذج هنا لتجنب الاستيراد الدائري
     import models
-    # نستخدم المحرك العالمي الذي تم إنشاؤه في __main__.py
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
