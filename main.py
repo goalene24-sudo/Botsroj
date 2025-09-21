@@ -8,7 +8,7 @@ from plugins.events import start_dhikr_task
 # استيراد الأدوات اللازمة لإنشاء المحرك
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import NullPool
-# --- (تم التعديل هنا) سنقوم باستيراد الوحدة كاملة فقط ---
+# سنقوم باستيراد الوحدة كاملة
 import database
 
 
@@ -21,7 +21,6 @@ print("="*50)
 from bot import client
 from plugins import ALL_MODULES
 import config
-# --- تم حذف السطر "from database import init_db" من هنا لأنه لم يعد ضرورياً ---
 
 
 # --- الإعدادات الأساسية ---
@@ -45,19 +44,27 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
-        # تهيئة محرك قاعدة البيانات هنا لضمان أنه يعمل داخل بيئة asyncio
+        # ===================================================================
+        # | START OF FINAL FIX | بداية الإصلاح النهائي                      |
+        # ===================================================================
+        # 1. إنشاء المحرك وتخزينه في متغير محلي
         DB_NAME = "surooj.db"
         DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
+        local_engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
         
-        database.engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
+        # 2. إنشاء صانع الجلسات باستخدام المحرك المحلي ووضعه في وحدة قاعدة البيانات
+        #    حتى تتمكن الملفات الأخرى من استخدامه.
         database.AsyncDBSession = async_sessionmaker(
-            bind=database.engine, expire_on_commit=False, class_=AsyncSession
+            bind=local_engine, expire_on_commit=False, class_=AsyncSession
         )
+        # ===================================================================
+        # | END OF FINAL FIX | نهاية الإصلاح النهائي                         |
+        # ===================================================================
 
         # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
         LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
-        # --- (تم التعديل هنا) استدعاء الدالة من خلال الوحدة مباشرة ---
-        await database.init_db()
+        # 3. تمرير المحرك مباشرة إلى الدالة لضمان عدم حدوث خطأ
+        await database.init_db(local_engine)
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
         await client.start(bot_token=config.BOT_TOKEN)
