@@ -5,6 +5,12 @@ from datetime import datetime
 import asyncio
 from plugins.events import start_dhikr_task
 
+# --- (تمت الإضافة هنا) استيراد الأدوات اللازمة لإنشاء المحرك ---
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import NullPool
+import database
+
+
 # --- علامة اختبار حاسمة ---
 print("="*50)
 print(f"--- نسخة الاختبار بتاريخ: {datetime.now()} ---")
@@ -14,6 +20,7 @@ print("="*50)
 from bot import client
 from plugins import ALL_MODULES
 import config
+# --- تم تعديل السطر التالي لاستيراد الدالة فقط ---
 from database import init_db
 
 # --- الإعدادات الأساسية ---
@@ -37,6 +44,21 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
+        # ===================================================================
+        # | START OF NEW CODE | بداية الكود الجديد                             |
+        # ===================================================================
+        # تهيئة محرك قاعدة البيانات هنا لضمان أنه يعمل داخل بيئة asyncio
+        DB_NAME = "surooj.db"
+        DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
+        
+        database.engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
+        database.AsyncDBSession = async_sessionmaker(
+            bind=database.engine, expire_on_commit=False, class_=AsyncSession
+        )
+        # ===================================================================
+        # | END OF NEW CODE | نهاية الكود الجديد                               |
+        # ===================================================================
+
         # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
         LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
         await init_db()
@@ -46,7 +68,7 @@ async def main():
         me = await client.get_me()
         LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
         
-        # --- (جديد) بدء مهمة الأذكار الدورية في الخلفية ---
+        # --- بدء مهمة الأذكار الدورية في الخلفية ---
         LOGGER.info(">> يتم الآن بدء مهمة الأذكار الدورية... <<")
         asyncio.create_task(start_dhikr_task())
         
@@ -58,5 +80,4 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    # --- (تم التعديل هنا) تم استبدال الطريقة القديمة بالطريقة الحديثة لتشغيل الكود ---
     asyncio.run(main())
