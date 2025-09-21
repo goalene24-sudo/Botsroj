@@ -42,14 +42,14 @@ logger = logging.getLogger(__name__)
 
 
 # ===================================================================
-# | START OF NEW CODE | بداية الكود الجديد                             |
+# | START OF MODIFIED CODE | بداية الكود المعدل                      |
 # ===================================================================
 
 async def handle_filtered_words(event):
     """
-    تقوم هذه الدالة بالتحقق من الرسائل النصية وحذفها إذا كانت تحتوي على كلمات ممنوعة.
+    تقوم هذه الدالة بالتحقق من الرسائل النصية وحذفها إذا كانت تحتوي على كلمات ممنوعة،
+    ثم ترسل تنبيهاً للمستخدم.
     """
-    # المشرفون فما فوق لا يتم فلترة رسائلهم
     sender_rank = await get_user_rank(client, event.sender_id, event.chat_id)
     if sender_rank >= Ranks.MOD:
         return False
@@ -66,20 +66,24 @@ async def handle_filtered_words(event):
             return False
 
         message_text_lower = event.text.lower()
-        # المرور على كل كلمة ممنوعة والتحقق من وجودها في الرسالة
         for word in filtered_words:
             if word.lower() in message_text_lower:
                 try:
+                    # أولاً، نحذف الرسالة
                     await event.delete()
+                    # ثانياً، نرسل التنبيه
+                    sender = await event.get_sender()
+                    user_mention = f"[{sender.first_name}](tg://user?id={sender.id})"
+                    await event.respond(f"**عزيزي {user_mention}، هذه الكلمة ممنوعة من قبل الإدارة.**")
                 except Exception as e:
-                    logger.warning(f"Failed to delete filtered message: {e}")
-                # نرجع True لإعلام المعالج الرئيسي بأن الرسالة تم التعامل معها (حذفها)
-                return True
+                    logger.warning(f"Failed to handle filtered message for user {event.sender_id}: {e}")
+                
+                return True # نوقف التنفيذ بعد العثور على أول كلمة ممنوعة
                 
     return False
 
 # ===================================================================
-# | END OF NEW CODE | نهاية الكود الجديد                               |
+# | END OF MODIFIED CODE | نهاية الكود المعدل                        |
 # ===================================================================
 
 
@@ -164,7 +168,6 @@ async def handle_message_locks(event):
 async def general_message_handler(event):
     if not await check_activation(event.chat_id): return
     try:
-        # تمت إضافة التحقق من الكلمات الممنوعة هنا
         if await handle_filtered_words(event) or await handle_flood_lock(event) or await handle_message_locks(event): 
             return
             
