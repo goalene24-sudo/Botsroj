@@ -5,26 +5,26 @@ import config
 from datetime import datetime
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors import ChatAdminRequiredError
-# --- (تم التعديل هنا) تمت إضافة الخطأ الجديد الذي نريد تجاهله ---
 from telethon.errors.rpcerrorlist import UserNotParticipantError, ChannelPrivateError
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.exc import IntegrityError
 
 # --- استيراد كل مكونات قاعدة البيانات هنا ---
 from sqlalchemy.future import select
-from database import AsyncDBSession
+# --- (تم التعديل هنا) استيراد الوحدة كاملة بدلاً من متغير واحد ---
+import database
 from models import (
     User, Vip, SecondaryDev, Creator, BotAdmin, Chat,  
     CommandSetting, Lock, CustomCommand, GlobalSetting
 )
-# --- (تمت الإضافة) استيراد البيانات الجديدة من الملف المنفصل ---
+# --- استيراد البيانات الجديدة من الملف المنفصل ---
 from .fun_data import JOKES, RIDDLES
 
 logger = logging.getLogger(__name__)
 
 # --- دوال الإعدادات العامة ---
 async def get_global_setting(key, default=None):
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         result = await session.execute(select(GlobalSetting).where(GlobalSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting and setting.value:
@@ -35,7 +35,7 @@ async def get_global_setting(key, default=None):
         return default
 
 async def set_global_setting(key, value):
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         if isinstance(value, (dict, list)):
             value_to_store = json.dumps(value, ensure_ascii=False)
         else:
@@ -125,7 +125,6 @@ async def is_admin(client, chat_id, user_id):
         perms = await client.get_permissions(chat_id, user_id)
         if perms.is_creator or perms.is_admin or perms.ban_users or perms.add_admins:
             return True
-    # --- (تم التعديل هنا) أضفنا ChannelPrivateError إلى قائمة الأخطاء التي يتم تجاهلها ---
     except (UserNotParticipantError, ChatAdminRequiredError, ValueError, ChannelPrivateError):
         return False
     except Exception as e:
@@ -137,7 +136,7 @@ async def get_user_rank(client, user_id, chat_id):
     if user_id in config.SUDO_USERS:
         return Ranks.MAIN_DEV
 
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         is_secondary_dev = await session.execute(select(SecondaryDev).where(SecondaryDev.chat_id == chat_id, SecondaryDev.user_id == user_id))
         if is_secondary_dev.scalar_one_or_none():
             return Ranks.SECONDARY_DEV
@@ -149,7 +148,7 @@ async def get_user_rank(client, user_id, chat_id):
     except Exception:
         pass
 
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         is_creator = await session.execute(select(Creator).where(Creator.chat_id == chat_id, Creator.user_id == user_id))
         if is_creator.scalar_one_or_none():
             return Ranks.CREATOR
@@ -161,7 +160,7 @@ async def get_user_rank(client, user_id, chat_id):
     if await is_admin(client, chat_id, user_id):
         return Ranks.MOD
     
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         is_vip = await session.execute(select(Vip).where(Vip.chat_id == chat_id, Vip.user_id == user_id))
         if is_vip.scalar_one_or_none():
             return Ranks.VIP
@@ -219,7 +218,7 @@ GAME_COMMANDS = ["نكتة", "حزورة", "كت", "حجره ورقه مقص", "
 ADMIN_COMMANDS = [ "القوانين", "تعديل القوانين", "ضع ترحيب", "حظر", "كتم", "الغاء الحظر", "الغاء الكتم", "رفع مشرف", "تنزيل مشرف", "رفع ادمن", "تنزيل ادمن", "الادمنيه", "تحذير", "حذف التحذيرات" ]
 
 async def is_command_enabled(chat_id, command_key):
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         return (chat.settings or {}).get(command_key, True)
 
@@ -228,20 +227,20 @@ async def has_bot_permission(client, event):
     return rank >= Ranks.MOD
 
 async def check_activation(chat_id):
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         group = result.scalar_one_or_none()
         return group.is_active if group else False
 
 async def add_points(chat_id, user_id, points_to_add):
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         user = await get_or_create_user(session, chat_id, user_id)
         user.points = (user.points or 0) + points_to_add
         await session.commit()
 
 async def build_protection_menu(chat_id):
     buttons, row = [], []
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         chat = await get_or_create_chat(session, chat_id)
         locks = chat.lock_settings or {}
 
