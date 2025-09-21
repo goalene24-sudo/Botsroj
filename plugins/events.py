@@ -40,11 +40,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-# ===================================================================
-# | START OF MODIFIED CODE | بداية الكود المعدل                      |
-# ===================================================================
-
 async def handle_filtered_words(event):
     """
     تقوم هذه الدالة بالتحقق من الرسائل النصية وحذفها إذا كانت تحتوي على كلمات ممنوعة،
@@ -81,11 +76,6 @@ async def handle_filtered_words(event):
                 return True # نوقف التنفيذ بعد العثور على أول كلمة ممنوعة
                 
     return False
-
-# ===================================================================
-# | END OF MODIFIED CODE | نهاية الكود المعدل                        |
-# ===================================================================
-
 
 async def handle_flood_lock(event):
     async with AsyncDBSession() as session:
@@ -194,6 +184,7 @@ async def general_message_handler(event):
             elif command_to_process == "المنشئين": await list_creators_logic(event, command_to_process)
             elif command_to_process == "مسح المنشئين": await clear_all_creators_logic(event, command_to_process)
             elif command_to_process == "طرد": await kick_logic(event, command_to_process)
+            elif command_to_process == "طرد البوتات": await kick_all_bots_logic(event, command_to_process) # <-- تمت إضافة الأمر الجديد هنا
             elif command_to_process == "الغاء الكتم": await unmute_logic(event, command_to_process)
             elif command_to_process.startswith("ضع عدد التحذيرات"): await set_warns_limit_logic(event, command_to_process)
             elif command_to_process.startswith("ضع وقت الكتم"): await set_mute_duration_logic(event, command_to_process)
