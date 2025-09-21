@@ -2,8 +2,8 @@ import logging
 import importlib
 import sys
 from datetime import datetime
-import asyncio  # <-- تمت الإضافة
-from plugins.events import start_dhikr_task  # <-- تمت الإضافة
+import asyncio
+from plugins.events import start_dhikr_task
 
 # --- علامة اختبار حاسمة ---
 print("="*50)
@@ -58,4 +58,5 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    client.loop.run_until_complete(main())
+    # --- (تم التعديل هنا) تم استبدال الطريقة القديمة بالطريقة الحديثة لتشغيل الكود ---
+    asyncio.run(main())
