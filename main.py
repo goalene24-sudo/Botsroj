@@ -1,3 +1,6 @@
+# --- (تمت الإضافة هنا) علامة اختبار لمعرفة ما إذا كان الملف يعمل ---
+print(">>> EXECUTING BOT/__MAIN__.PY <<<")
+
 import logging
 import importlib
 import sys
@@ -44,9 +47,6 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
-        # ===================================================================
-        # | START OF FINAL FIX | بداية الإصلاح النهائي                      |
-        # ===================================================================
         # 1. إنشاء المحرك وتخزينه في متغير محلي
         DB_NAME = "surooj.db"
         DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
@@ -57,9 +57,6 @@ async def main():
         database.AsyncDBSession = async_sessionmaker(
             bind=local_engine, expire_on_commit=False, class_=AsyncSession
         )
-        # ===================================================================
-        # | END OF FINAL FIX | نهاية الإصلاح النهائي                         |
-        # ===================================================================
 
         # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
         LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
