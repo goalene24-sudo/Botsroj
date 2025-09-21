@@ -1,9 +1,51 @@
 from telethon import events, Button
+import asyncio
 
 # --- استدعاء الدوال والمتغيرات المشتركة من الملف المساعد ---
 from .protection_helpers import *
 
 # --- قسم الأوامر (الإجراءات المباشرة) ---
+
+async def kick_all_bots_logic(event, command_text):
+    try:
+        # التحقق من رتبة المستخدم (أدمن فما فوق)
+        if not await has_bot_permission(event.client, event):
+            return await event.reply("**الأدمنية وفوق بس يكدرون يستخدمون هذا الأمر 👑**")
+
+        # التحقق من أن البوت لديه صلاحية الحظر
+        try:
+            me = await event.client.get_me()
+            perms = await event.client.get_permissions(event.chat_id, me.id)
+            if not perms.ban_users:
+                return await event.reply("**ما عندي صلاحية طرد الأعضاء هنا 😕**")
+        except Exception:
+            return await event.reply("**ماكدرت اتأكد من صلاحياتي، تأكد أني مشرف.**")
+
+        processing_message = await event.reply("**جاري البحث عن البوتات وطردهم... 🧐**")
+        
+        kicked_count = 0
+        me = await event.client.get_me()
+
+        # المرور على كل أعضاء المجموعة
+        async for user in event.client.iter_participants(event.chat_id):
+            # التحقق إذا كان المستخدم بوت وليس البوت نفسه
+            if user.bot and user.id != me.id:
+                try:
+                    await event.client.kick_participant(event.chat_id, user.id)
+                    kicked_count += 1
+                    await asyncio.sleep(1) # تأخير بسيط لتجنب تقييد الحساب
+                except Exception as e:
+                    logger.error(f"Failed to kick bot {user.id}: {e}")
+
+        if kicked_count > 0:
+            await processing_message.edit(f"**✅ | خوش، نظفت الكروب. تم طرد {kicked_count} من البوتات بنجاح.**")
+        else:
+            await processing_message.edit("**ما لكيت أي بوتات بالكروب حتى اطردها (غيري طبعاً 😉).**")
+
+    except Exception as e:
+        logger.error(f"Error in kick_all_bots_logic: {e}", exc_info=True)
+        await event.reply("**صارت مشكلة وماكدرت اكمل طرد البوتات 😢**")
+
 
 async def kick_logic(event, command_text):
     try:
