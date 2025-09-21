@@ -1,6 +1,3 @@
-# --- (تمت الإضافة هنا) علامة اختبار لمعرفة ما إذا كان الملف يعمل ---
-print(">>> EXECUTING BOT/__MAIN__.PY <<<")
-
 import logging
 import importlib
 import sys
@@ -34,46 +31,45 @@ LOGGER = logging.getLogger(__name__)
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 
-# --- تحميل كل الإضافات ---
-LOGGER.info(">> يتم الآن تحميل كل الوحدات... <<")
-for module in ALL_MODULES:
-    try:
-        importlib.import_module(module)
-        LOGGER.info(f"  - تم تحميل الوحدة: {module}")
-    except Exception as e:
-        LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
-
-
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
-        # 1. إنشاء المحرك وتخزينه في متغير محلي
+        # --- (الخطوة 1 - تم تعديل الترتيب) تهيئة قاعدة البيانات أولاً ---
+        LOGGER.info(">> [1/4] يتم الآن تهيئة محرك قاعدة البيانات... <<")
         DB_NAME = "surooj.db"
         DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
         local_engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
         
-        # 2. إنشاء صانع الجلسات باستخدام المحرك المحلي ووضعه في وحدة قاعدة البيانات
-        #    حتى تتمكن الملفات الأخرى من استخدامه.
         database.AsyncDBSession = async_sessionmaker(
             bind=local_engine, expire_on_commit=False, class_=AsyncSession
         )
 
-        # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
-        LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
-        # 3. تمرير المحرك مباشرة إلى الدالة لضمان عدم حدوث خطأ
         await database.init_db(local_engine)
-        LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
+        LOGGER.info(">> [1/4] اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
+        # --- (الخطوة 2 - تم تعديل الترتيب) تحميل الإضافات ثانياً ---
+        LOGGER.info(">> [2/4] يتم الآن تحميل كل الوحدات... <<")
+        for module in ALL_MODULES:
+            try:
+                importlib.import_module(module)
+                LOGGER.info(f"  - تم تحميل الوحدة: {module}")
+            except Exception as e:
+                LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
+        LOGGER.info(">> [2/4] اكتمل تحميل جميع الوحدات. <<")
+
+        # --- (الخطوة 3) تسجيل الدخول ---
+        LOGGER.info(">> [3/4] يتم الآن تسجيل الدخول... <<")
         await client.start(bot_token=config.BOT_TOKEN)
         me = await client.get_me()
-        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
+        LOGGER.info(f">> [3/4] تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
         
-        # --- بدء مهمة الأذكار الدورية في الخلفية ---
-        LOGGER.info(">> يتم الآن بدء مهمة الأذكار الدورية... <<")
+        # --- (الخطوة 4) بدء المهام وتشغيل البوت ---
+        LOGGER.info(">> [4/4] يتم الآن بدء المهام الإضافية... <<")
         asyncio.create_task(start_dhikr_task())
         
         LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
         await client.run_until_disconnected()
+
     except Exception as e:
         LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
         sys.exit(1)
