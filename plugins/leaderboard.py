@@ -39,29 +39,26 @@ async def show_leaderboard(event):
 
         leaderboard_text = "**🏆 | ملوك التفاعل في المجموعة:**\n\n"
         
-        # قاموس الرموز التعبيرية للمراكز الأولى
         rank_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
 
         for i, user_record in enumerate(top_users_records, 1):
             
             try:
-                # جلب اسم المستخدم من تيليجرام
                 user_entity = await client.get_entity(user_record.user_id)
                 user_name = user_entity.first_name
             except Exception:
-                # في حال لم يتم العثور على المستخدم (غادر أو حذف حسابه)
                 user_name = "عضو غادر"
 
             # =========================================================
-            # | START OF MODIFIED CODE | بداية الكود المعدل            |
+            # | START OF FINAL FIX | بداية الإصلاح النهائي            |
             # =========================================================
-            # الحصول على الميدالية للمركز الحالي، أو سلسلة فارغة إذا لم يكن من الثلاثة الأوائل
+            # LRM هو محرف خفي يجبر اتجاه النص ليكون من اليسار لليمين
+            lrm = "\u200e"
             emoji = rank_emojis.get(i, "")
             
-            # بناء السطر مع إضافة الميدالية في النهاية إذا كانت موجودة
-            leaderboard_text += f"**{i}.** {user_name} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
+            leaderboard_text += f"{lrm}**{i}.** {user_name} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
             # =========================================================
-            # | END OF MODIFIED CODE | نهاية الكود المعدل              |
+            # | END OF FINAL FIX | نهاية الإصلاح النهائي              |
             # =========================================================
 
         await processing_message.edit(leaderboard_text)
