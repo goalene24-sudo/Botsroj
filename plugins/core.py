@@ -1,6 +1,5 @@
 import asyncio
 from telethon import events, Button
-# --- (تمت الإضافة هنا) استيراد الأنواع اللازمة للحدث الجديد ---
 from telethon.tl import types
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
@@ -18,6 +17,8 @@ from .utils import (
     MAIN_MENU_MESSAGE, is_admin
 )
 from .admin import get_or_create_chat, get_chat_setting
+# --- (تمت الإضافة هنا) استيراد دالة لوحة الصدارة ---
+from .leaderboard import show_leaderboard
 
 logger = logging.getLogger(__name__)
 WELCOMED_RECENTLY = set()
@@ -129,32 +130,25 @@ async def chat_action_handler(event):
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
 
-# ===================================================================
-# | START OF NEW CODE | بداية الكود الجديد لاكتشاف تنزيل الرتبة      |
-# ===================================================================
 @client.on(events.Raw(types.UpdateChannelParticipant))
 async def demotion_handler(update):
     me = await client.get_me()
     
-    # التحقق إذا كان التحديث يخص البوت نفسه
     if update.user_id != me.id:
         return
         
     try:
         chat_id = int(f"-100{update.channel_id}")
         
-        # التحقق إذا كان البوت نشطاً في قاعدة البيانات
         if not await check_activation(chat_id):
             return
 
-        # التحقق من الحالة السابقة والحالية لصلاحيات البوت
         prev_role = update.prev_participant
         new_role = update.new_participant
 
         was_admin = isinstance(prev_role, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
         is_now_admin = isinstance(new_role, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
 
-        # إذا كان مشرفاً والآن لم يعد مشرفاً (تم تنزيله)
         if was_admin and not is_now_admin:
             async with AsyncDBSession() as session:
                 chat = await get_or_create_chat(session, chat_id)
@@ -164,10 +158,6 @@ async def demotion_handler(update):
             await client.send_message(chat_id, "**⚠️ | تم تنزيلي من الإشراف!**\n**سأتوقف عن العمل هنا حتى يتم ترقيتي وتفعيلي مرة أخرى.**")
     except Exception as e:
         logger.error(f"Error in demotion_handler for chat {update.channel_id}: {e}")
-
-# ===================================================================
-# | END OF NEW CODE | نهاية الكود الجديد                               |
-# ===================================================================
 
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
 async def toggle_bot_status(event):
@@ -208,3 +198,8 @@ async def main_menu_handler(event):
         return
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
+
+# --- (تمت الإضافة هنا) معالج أمر لوحة الصدارة ---
+@client.on(events.NewMessage(pattern="^(ملوك التفاعل|المتفاعلين)$"))
+async def leaderboard_command_handler(event):
+    await show_leaderboard(event)
