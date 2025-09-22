@@ -8,7 +8,7 @@ import config
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
-from sqlalchemy import func, delete, text # <-- (تمت إضافة text)
+from sqlalchemy import func, delete, text
 from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
@@ -22,6 +22,7 @@ def build_sudo_panel():
         [Button.inline("📊 الإحصائيات العامة", data="sudo_panel:stats")],
         [Button.inline("📢 قسم الإذاعة", data="sudo_panel:broadcast")],
         [Button.inline("🚫 الحظر العام", data="sudo_panel:gban"), Button.inline("🧑‍✈️ الترقيات العامة", data="sudo_panel:gadmin")],
+        [Button.inline("🏙️ إدارة المجموعات", data="sudo_panel:manage_groups")], # <-- تمت إضافة الزر الجديد هنا
         [Button.inline("🛠️ الصيانة", data="sudo_panel:db_maint"), Button.inline("🔍 فحص البيانات", data="sudo_panel:inspect")],
         [Button.inline("🌐 الإعدادات العامة", data="sudo_panel:global_settings")],
         [Button.inline("📝 الأوامر المخصصة", data="sudo_panel:custom_cmds")],
@@ -72,6 +73,72 @@ async def sudo_panel_callback(event):
 """
         await event.edit(stats_text, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
     
+    # ===================================================================
+    # | START OF NEW CODE | بداية الكود الجديد لإدارة المجموعات          |
+    # ===================================================================
+    elif action == "manage_groups":
+        groups_text = "**🏙️ | قسم إدارة المجموعات**\n\n**اختر الإجراء المطلوب:**"
+        groups_buttons = [
+            [Button.inline("📜 عرض كل المجموعات", data="sudo_panel:list_all_groups")],
+            [Button.inline("▶️ تفعيل بوت بمجموعة", data="sudo_panel:activate_group"), Button.inline("⏸️ إيقاف بوت بمجموعة", data="sudo_panel:deactivate_group")],
+            [Button.inline("🔙 رجوع", data="sudo_panel:main")]
+        ]
+        await event.edit(groups_text, buttons=groups_buttons)
+
+    elif action == "list_all_groups":
+        await event.answer("📜 | جاري جلب قائمة المجموعات...")
+        async with AsyncDBSession() as session:
+            all_chats = (await session.execute(select(Chat))).scalars().all()
+        
+        if not all_chats:
+            return await event.edit("**🗄️ | قاعدة البيانات فارغة، لا توجد مجموعات.**", buttons=[Button.inline("🔙 رجوع", data="sudo_panel:manage_groups")])
+            
+        report = "**📋 | قائمة بكل المجموعات المسجلة:**\n\n"
+        for chat in all_chats:
+            status = "نشط ✅" if chat.is_active else "غير نشط ⏸️"
+            try:
+                entity = await client.get_entity(chat.id)
+                chat_title = entity.title
+            except Exception:
+                chat_title = "اسم غير معروف (البوت مطرود)"
+            
+            report += f"**- الاسم:** {chat_title}\n"
+            report += f"** - ID:** `{chat.id}`\n"
+            report += f"** - الحالة:** {status}\n"
+            report += "-"*20 + "\n"
+
+        # إرسال التقرير كرسالة جديدة لأنه قد يكون طويلاً جداً
+        await client.send_message(event.chat_id, report)
+        await event.answer("✅ | تم إرسال القائمة.")
+
+    elif action in ["activate_group", "deactivate_group"]:
+        action_text = "تفعيله" if action == "activate_group" else "إيقافه"
+        target_state = True if action == "activate_group" else False
+        
+        try:
+            async with client.conversation(event.sender_id, timeout=300) as conv:
+                await conv.send_message(f"**أرسل الآن ID المجموعة التي تريد {action_text}.**")
+                response = await conv.get_response()
+                try:
+                    chat_id = int(response.text.strip())
+                except ValueError:
+                    return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
+                
+                async with AsyncDBSession() as session:
+                    chat_to_update = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
+                    if not chat_to_update:
+                        return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
+                    
+                    chat_to_update.is_active = target_state
+                    await session.commit()
+                    await conv.send_message(f"**✅ | تم {action_text} في المجموعة `{chat_id}` بنجاح.**")
+
+        except asyncio.TimeoutError:
+            await event.reply("**⏰ | انتهى الوقت.**")
+    # ===================================================================
+    # | END OF NEW CODE | نهاية الكود الجديد                               |
+    # ===================================================================
+        
     elif action == "broadcast":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
@@ -96,32 +163,26 @@ async def sudo_panel_callback(event):
         except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
         
-    # --- (تم الإصلاح) ---
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير ودمج بيانات القاعدة...")
         db_path = "surooj.db"
         
         if not os.path.exists(db_path):
-            # نستخدم .edit() هنا لأننا بدأنا بـ .answer() الذي لا يعرض رسالة مرئية
             return await client.send_message(event.chat_id, f"**❌ | خطأ: لم يتم العثور على الملف `{db_path}`!**")
         
         try:
-            # الخطوة 1: إجراء "نقطة تفتيش" لدمج ملفات wal في الملف الرئيسي
             async with AsyncDBSession() as session:
                 async with session.begin():
                     await session.execute(text("PRAGMA wal_checkpoint(FULL);"))
             
-            # الخطوة 2: إرسال الملف المكتمل والآمن
             await client.send_file(
                 event.chat_id, 
                 db_path, 
                 caption="**🗄️ | النسخة الاحتياطية المحدثة من قاعدة البيانات**"
             )
-            # يمكن حذف رسالة "جار التحضير..." بعد الإرسال بنجاح
             await event.delete()
 
         except Exception as e:
-            # في حال حدوث خطأ، نرسل رسالة للمطور
             await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء تحضير أو إرسال الملف:**\n`{e}`")
         return
 
