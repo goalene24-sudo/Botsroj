@@ -9,7 +9,7 @@ import config
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import func, delete, text
-from sqlalchemy.orm.attributes import flag_modified # <-- تمت الإضافة
+from sqlalchemy.orm.attributes import flag_modified
 from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
@@ -54,7 +54,8 @@ async def sudo_panel_callback(event):
 
     elif action == "restart":
         await event.edit("**🔄 | جاري إعادة تشغيل البوت...**")
-        os.execl(sys.executable, sys.executable, "-m", "main") # Adjusted for main.py
+        # Assuming your entry point is main.py at the root
+        os.execl(sys.executable, sys.executable, "main.py")
 
     elif action == "shutdown":
         await event.edit("**🛑 | جاري إيقاف تشغيل البوت... إلى اللقاء.**")
@@ -115,18 +116,14 @@ async def sudo_panel_callback(event):
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**أرسل الآن ID المجموعة التي تريد تفعيلها.**")
                 response = await conv.get_response()
-                try:
-                    chat_id = int(response.text.strip())
-                except ValueError:
-                    return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
+                try: chat_id = int(response.text.strip())
+                except ValueError: return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
                 
                 async with AsyncDBSession() as session:
                     chat_to_update = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
-                    if not chat_to_update:
-                        return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
+                    if not chat_to_update: return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
                     
                     chat_to_update.is_active = True
-                    # --- (تم التعديل هنا) إزالة قفل المطور ---
                     if chat_to_update.settings and 'dev_lock' in chat_to_update.settings:
                         new_settings = chat_to_update.settings.copy()
                         del new_settings['dev_lock']
@@ -135,29 +132,22 @@ async def sudo_panel_callback(event):
                     
                     await session.commit()
                     await conv.send_message(f"**✅ | تم تفعيل البوت وإزالة قفل المطور في المجموعة `{chat_id}` بنجاح.**")
-
-        except asyncio.TimeoutError:
-            await event.reply("**⏰ | انتهى الوقت.**")
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
             
     elif action == "deactivate_group":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
                 await conv.send_message("**أرسل الآن ID المجموعة التي تريد إيقافها.**")
                 response = await conv.get_response()
-                try:
-                    chat_id = int(response.text.strip())
-                except ValueError:
-                    return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
+                try: chat_id = int(response.text.strip())
+                except ValueError: return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
                 
                 async with AsyncDBSession() as session:
                     chat_to_update = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
-                    if not chat_to_update:
-                        return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
+                    if not chat_to_update: return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
                     
                     chat_to_update.is_active = False
-                    # --- (تم التعديل هنا) إضافة قفل المطور ---
-                    if chat_to_update.settings is None:
-                        chat_to_update.settings = {}
+                    if chat_to_update.settings is None: chat_to_update.settings = {}
                     new_settings = chat_to_update.settings.copy()
                     new_settings['dev_lock'] = True
                     chat_to_update.settings = new_settings
@@ -165,15 +155,24 @@ async def sudo_panel_callback(event):
 
                     await session.commit()
                     await conv.send_message(f"**✅ | تم إيقاف البوت ووضع قفل المطور في المجموعة `{chat_id}` بنجاح.**")
-
-        except asyncio.TimeoutError:
-            await event.reply("**⏰ | انتهى الوقت.**")
-            
-    # ... (بقية الكود يبقى كما هو) ...
+        except asyncio.TimeoutError: await event.reply("**⏰ | انتهى الوقت.**")
+    
+    # ===================================================================
+    # | START OF MODIFIED CODE | بداية الكود المعدل لقسم الإذاعة         |
+    # ===================================================================
     elif action == "broadcast":
+        broadcast_menu_text = "**📢 | قسم الإذاعة**\n\nاختر نوع الإذاعة التي تريد إرسالها:"
+        broadcast_menu_buttons = [
+            [Button.inline("📢 إذاعة للكل", data="sudo_panel:broadcast_all")],
+            [Button.inline("✉️ رسالة لمجموعة محددة", data="sudo_panel:broadcast_single")],
+            [Button.inline("🔙 رجوع", data="sudo_panel:main")]
+        ]
+        await event.edit(broadcast_menu_text, buttons=broadcast_menu_buttons)
+
+    elif action == "broadcast_all":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
-                await conv.send_message("**📢 | أرسل الآن رسالة الإذاعة...**\n**(للإلغاء، أرسل `الغاء`)**")
+                await conv.send_message("**📢 | أرسل الآن رسالة الإذاعة للجميع...**\n**(للإلغاء، أرسل `الغاء`)**")
                 response = await conv.get_response()
                 if not response.text or response.text.strip().lower() == "الغاء":    
                     return await conv.send_message("**☑️ | تم إلغاء الإذاعة.**")
@@ -181,7 +180,8 @@ async def sudo_panel_callback(event):
                 await conv.send_message("**⏳ | سأبدأ الآن ببث الرسالة...**")
                 successful, failed = 0, 0
                 async with AsyncDBSession() as session:
-                    result = await session.execute(select(Chat.id))
+                    # نرسل فقط للمجموعات النشطة
+                    result = await session.execute(select(Chat.id).where(Chat.is_active == True))
                     all_chat_ids = result.scalars().all()
 
                 for chat_id in all_chat_ids:
@@ -193,6 +193,35 @@ async def sudo_panel_callback(event):
                 await conv.send_message(f"**📡 | اكتملت الإذاعة!**\n**- ✅ نجح:** `{successful}`\n**- ❌ فشل:** `{failed}`")
         except asyncio.TimeoutError:    
             await event.reply("**⏰ | انتهى الوقت.**")
+
+    elif action == "broadcast_single":
+        try:
+            async with client.conversation(event.sender_id, timeout=300) as conv:
+                await conv.send_message("**✉️ | أرسل الآن ID المجموعة التي تريد مراسلتها...**\n**(للإلغاء، أرسل `الغاء`)**")
+                id_response = await conv.get_response()
+                if not id_response.text or id_response.text.strip().lower() == "الغاء":    
+                    return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
+                
+                try:
+                    target_chat_id = int(id_response.text.strip())
+                except ValueError:
+                    return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
+
+                await conv.send_message(f"**👍 | حسناً. الآن أرسل الرسالة التي تريد إرسالها إلى `{target_chat_id}`...**")
+                message_response = await conv.get_response()
+                if not message_response.text or message_response.text.strip().lower() == "الغاء":    
+                    return await conv.send_message("**☑️ | تم إلغاء الأمر.**")
+
+                try:
+                    await client.send_message(target_chat_id, message_response.message)
+                    await conv.send_message("✅ | تم إرسال الرسالة بنجاح!")
+                except Exception as e:
+                    await conv.send_message(f"**❌ | فشل إرسال الرسالة.**\n**الخطأ:** `{e}`")
+        except asyncio.TimeoutError:
+            await event.reply("⏰ | انتهى الوقت.")
+    # ===================================================================
+    # | END OF MODIFIED CODE | نهاية الكود المعدل                          |
+    # ===================================================================
         
     elif action == "get_db":
         await event.answer("📁 | جاري تحضير ودمج بيانات القاعدة...")
@@ -217,6 +246,8 @@ async def sudo_panel_callback(event):
             await client.send_message(event.chat_id, f"**❌ | حدث خطأ أثناء تحضير أو إرسال الملف:**\n`{e}`")
         return
 
+    # ... (بقية الكود يبقى كما هو) ...
+    
     elif action == "gban":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
