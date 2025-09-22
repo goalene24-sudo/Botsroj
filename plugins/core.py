@@ -64,19 +64,25 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
 
-    # --- (تم التصحيح الكامل هنا) ---
     # عند حدوث أي إجراء يخص البوت (مثل تغيير الصلاحيات)
     elif event.user_id == me.id:
         # نتجاهل أحداث الانضمام والمغادرة لأن لها معالجات خاصة بها
         if event.user_joined or event.user_left or event.user_kicked:
             return
+        
+        # --- (تمت إضافة رسائل التشخيص هنا) ---
+        print(f"DEBUG: ChatAction event detected for bot in chat {chat_id}.")
 
         try:
             is_bot_now_admin = await is_admin(client, chat_id, me.id)
             is_bot_supposed_to_be_active = await check_activation(chat_id)
+            
+            print(f"DEBUG: Is bot admin now? -> {is_bot_now_admin}")
+            print(f"DEBUG: Is bot supposed to be active in DB? -> {is_bot_supposed_to_be_active}")
 
             # الحالة 1: إذا كان البوت نشطاً ولكنه لم يعد مشرفاً (تم تنزيله)
             if is_bot_supposed_to_be_active and not is_bot_now_admin:
+                print("DEBUG: Demotion condition met. Deactivating...")
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, chat_id)
                     chat.is_active = False
@@ -86,6 +92,7 @@ async def chat_action_handler(event):
 
             # الحالة 2: إذا تمت ترقية البوت وهو غير نشط (تفعيل تلقائي)
             elif not is_bot_supposed_to_be_active and is_bot_now_admin:
+                print("DEBUG: Promotion condition met. Activating...")
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, chat_id)
                     if not (chat.settings or {}).get('dev_lock'):
@@ -93,6 +100,9 @@ async def chat_action_handler(event):
                         await session.commit()
                         logger.info(f"Bot was promoted in {chat_id}. Auto-activating.")
                         await client.send_message(chat_id, "**شكراً لترقيتي! ✅ تم تفعيل البوت تلقائياً وجاهز للعمل.**")
+            else:
+                print("DEBUG: Neither promotion nor demotion condition was met.")
+
         except Exception as e:
             logger.error(f"Error during permission change check in {chat_id}: {e}")
         return
