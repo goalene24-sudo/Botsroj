@@ -10,7 +10,7 @@ from sqlalchemy import delete
 from database import AsyncDBSession
 from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
 
-# --- (تم التصحيح) استيراد الدوال من أماكنها الصحيحة ---
+# --- استيراد الدوال من أماكنها الصحيحة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
     MAIN_MENU_MESSAGE, is_admin
@@ -67,7 +67,6 @@ async def chat_action_handler(event):
     # عند تغيير صلاحيات البوت (ترقيته لمشرف)
     elif event.user_id == me.id:
         try:
-            # --- تم التعديل هنا: إضافة client ---
             is_bot_now_admin = await is_admin(client, chat_id, me.id)
             if is_bot_now_admin:
                 async with AsyncDBSession() as session:
@@ -130,7 +129,6 @@ async def chat_action_handler(event):
 async def toggle_bot_status(event):
     if event.is_private: 
         return
-    # --- تم التعديل هنا: إضافة client ---
     if not await is_admin(client, event.chat_id, event.sender_id):
         return await event.reply("**ها وين رايح؟ هاي الشغلة بس للمشرفين يمعود. 😒**")
         
@@ -147,10 +145,13 @@ async def toggle_bot_status(event):
             await session.commit()
             await event.reply("**🔴 خوش، سكتت. لمن تريدني ارجع اشتغل، بس اكتب `تفعيل`.**")
         else:  # تفعيل
+            # --- (تمت الإضافة هنا) التحقق من وجود قفل المطور ---
+            if (chat.settings or {}).get('dev_lock'):
+                return await event.reply("**لا يمكن تفعيل البوت. تم إيقافه من قبل المطور الرئيسي.**")
+
             if chat.is_active:
                 return await event.reply("**تم تفعيلي سابقا طال عمرك استمتع بالمزايا😎🛠️**")
             
-            # --- تم التعديل هنا: إضافة client ---
             if not await is_admin(client, event.chat_id, me.id): 
                 return await event.reply("**يمعود ارفعني مشرف أول شي يله اگدر اشتغل! 🤷‍♂️**")
                 
