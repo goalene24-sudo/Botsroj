@@ -13,10 +13,10 @@ from models import Chat, User, GlobalSetting
 
 # --- استيراد الدوال المساعدة المحدثة ---
 from .utils import (
-    is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,   
+    is_admin, has_bot_permission, GEMINI_ENABLED, MAIN_MENU_MESSAGE,    
     build_main_menu_buttons, build_protection_menu, get_uptime_string,
     get_or_create_user, add_points, get_global_setting,
-    get_user_rank, Ranks  # <-- تم إضافة الدوال الجديدة
+    get_user_rank, Ranks
 )
 from .interactive_callbacks import handle_interactive_callback
 from .services import SEERAH_STAGES
@@ -30,7 +30,6 @@ from .games import CURRENT_QUIZZES
 
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
-    # --- نحصل على client من الـ event مباشرة ---
     client = event.client
     query_data = event.data.decode('utf-8')
     chat_id = event.chat_id
@@ -90,7 +89,6 @@ async def callback_handler(event):
                 await event.answer(f"⚠️ | خطأ في عرض الرد.", alert=True)
         return
 
-    # --- تم استبدال منطق التفعيل بالكامل بالمنطق الصحيح ---
     if query_data.startswith("activate_"):
         user_rank = await get_user_rank(client, user_id, chat_id)
         if user_rank < Ranks.MOD:
@@ -103,6 +101,11 @@ async def callback_handler(event):
 
         async with AsyncDBSession() as session:
             chat = await get_or_create_chat(session, chat_id)
+
+            # --- (تمت الإضافة هنا) التحقق من وجود قفل المطور ---
+            if (chat.settings or {}).get('dev_lock'):
+                return await event.answer("لا يمكن تفعيل البوت. تم إيقافه من قبل المطور الرئيسي.", alert=True)
+            
             if chat.is_active:
                 await event.answer("✅ | البوت مُفعّل أصلاً!", alert=True)
                 try:
@@ -142,7 +145,6 @@ async def callback_handler(event):
             except MessageNotModifiedError: pass
             return
         elif query_data == "protection_menu":
-            # --- تم التعديل هنا: إضافة client ---
             if not await has_bot_permission(client, event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
             menu_text, menu_buttons = "**🛡️ قائمة الحماية التفاعلية** 🛡️\n**دوس على أي دگمة حتى تغير حالتها.**", await build_protection_menu(event.chat_id)
             try:
@@ -202,7 +204,6 @@ async def callback_handler(event):
         return
         
     elif query_data.startswith("toggle_lock:"):
-        # --- تم التعديل هنا: إضافة client ---
         if not await has_bot_permission(client, event): return await event.answer("**قسم الحماية بس للمشرفين.**", alert=True)
         lock_key = query_data.split(":")[1]
         async with AsyncDBSession() as session:
