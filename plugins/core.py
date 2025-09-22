@@ -64,13 +64,17 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
 
-    # --- (تم التعديل هنا) تم استبدال الكود القديم بمنطق جديد أكثر ذكاءً ---
-    # عند تغيير صلاحيات البوت (ترقيته أو تنزيله)
-    elif event.changed_admin and event.user_id == me.id:
+    # --- (تم التصحيح الكامل هنا) ---
+    # عند حدوث أي إجراء يخص البوت (مثل تغيير الصلاحيات)
+    elif event.user_id == me.id:
+        # نتجاهل أحداث الانضمام والمغادرة لأن لها معالجات خاصة بها
+        if event.user_joined or event.user_left or event.user_kicked:
+            return
+
         try:
             is_bot_now_admin = await is_admin(client, chat_id, me.id)
             is_bot_supposed_to_be_active = await check_activation(chat_id)
-            
+
             # الحالة 1: إذا كان البوت نشطاً ولكنه لم يعد مشرفاً (تم تنزيله)
             if is_bot_supposed_to_be_active and not is_bot_now_admin:
                 async with AsyncDBSession() as session:
@@ -79,18 +83,16 @@ async def chat_action_handler(event):
                     await session.commit()
                 logger.info(f"Bot was demoted in {chat_id}. Auto-deactivating.")
                 await client.send_message(chat_id, "**⚠️ | تم تنزيلي من الإشراف!**\n**سأتوقف عن العمل هنا حتى يتم ترقيتي وتفعيلي مرة أخرى.**")
-            
+
             # الحالة 2: إذا تمت ترقية البوت وهو غير نشط (تفعيل تلقائي)
             elif not is_bot_supposed_to_be_active and is_bot_now_admin:
-                 async with AsyncDBSession() as session:
+                async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, chat_id)
-                    # نتأكد أولاً أنه لا يوجد قفل مطور على المجموعة
                     if not (chat.settings or {}).get('dev_lock'):
                         chat.is_active = True
                         await session.commit()
                         logger.info(f"Bot was promoted in {chat_id}. Auto-activating.")
                         await client.send_message(chat_id, "**شكراً لترقيتي! ✅ تم تفعيل البوت تلقائياً وجاهز للعمل.**")
-
         except Exception as e:
             logger.error(f"Error during permission change check in {chat_id}: {e}")
         return
