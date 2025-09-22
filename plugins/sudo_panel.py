@@ -9,6 +9,7 @@ import config
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
 from sqlalchemy import func, delete, text
+from sqlalchemy.orm.attributes import flag_modified # <-- تمت الإضافة
 from database import AsyncDBSession
 from models import Chat, User, GlobalSetting, BotAdmin
 
@@ -22,7 +23,7 @@ def build_sudo_panel():
         [Button.inline("📊 الإحصائيات العامة", data="sudo_panel:stats")],
         [Button.inline("📢 قسم الإذاعة", data="sudo_panel:broadcast")],
         [Button.inline("🚫 الحظر العام", data="sudo_panel:gban"), Button.inline("🧑‍✈️ الترقيات العامة", data="sudo_panel:gadmin")],
-        [Button.inline("🏙️ إدارة المجموعات", data="sudo_panel:manage_groups")], # <-- تمت إضافة الزر الجديد هنا
+        [Button.inline("🏙️ إدارة المجموعات", data="sudo_panel:manage_groups")],
         [Button.inline("🛠️ الصيانة", data="sudo_panel:db_maint"), Button.inline("🔍 فحص البيانات", data="sudo_panel:inspect")],
         [Button.inline("🌐 الإعدادات العامة", data="sudo_panel:global_settings")],
         [Button.inline("📝 الأوامر المخصصة", data="sudo_panel:custom_cmds")],
@@ -53,7 +54,7 @@ async def sudo_panel_callback(event):
 
     elif action == "restart":
         await event.edit("**🔄 | جاري إعادة تشغيل البوت...**")
-        os.execl(sys.executable, sys.executable, "-m", "bot")
+        os.execl(sys.executable, sys.executable, "-m", "main") # Adjusted for main.py
 
     elif action == "shutdown":
         await event.edit("**🛑 | جاري إيقاف تشغيل البوت... إلى اللقاء.**")
@@ -73,9 +74,6 @@ async def sudo_panel_callback(event):
 """
         await event.edit(stats_text, buttons=[Button.inline("🔙 رجوع", data="sudo_panel:main")])
     
-    # ===================================================================
-    # | START OF NEW CODE | بداية الكود الجديد لإدارة المجموعات          |
-    # ===================================================================
     elif action == "manage_groups":
         groups_text = "**🏙️ | قسم إدارة المجموعات**\n\n**اختر الإجراء المطلوب:**"
         groups_buttons = [
@@ -96,6 +94,8 @@ async def sudo_panel_callback(event):
         report = "**📋 | قائمة بكل المجموعات المسجلة:**\n\n"
         for chat in all_chats:
             status = "نشط ✅" if chat.is_active else "غير نشط ⏸️"
+            is_locked = " مقفول 🔒" if (chat.settings or {}).get('dev_lock') else ""
+            
             try:
                 entity = await client.get_entity(chat.id)
                 chat_title = entity.title
@@ -104,20 +104,16 @@ async def sudo_panel_callback(event):
             
             report += f"**- الاسم:** {chat_title}\n"
             report += f"** - ID:** `{chat.id}`\n"
-            report += f"** - الحالة:** {status}\n"
+            report += f"** - الحالة:** {status}{is_locked}\n"
             report += "-"*20 + "\n"
 
-        # إرسال التقرير كرسالة جديدة لأنه قد يكون طويلاً جداً
         await client.send_message(event.chat_id, report)
         await event.answer("✅ | تم إرسال القائمة.")
 
-    elif action in ["activate_group", "deactivate_group"]:
-        action_text = "تفعيله" if action == "activate_group" else "إيقافه"
-        target_state = True if action == "activate_group" else False
-        
+    elif action == "activate_group":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
-                await conv.send_message(f"**أرسل الآن ID المجموعة التي تريد {action_text}.**")
+                await conv.send_message("**أرسل الآن ID المجموعة التي تريد تفعيلها.**")
                 response = await conv.get_response()
                 try:
                     chat_id = int(response.text.strip())
@@ -129,16 +125,51 @@ async def sudo_panel_callback(event):
                     if not chat_to_update:
                         return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
                     
-                    chat_to_update.is_active = target_state
+                    chat_to_update.is_active = True
+                    # --- (تم التعديل هنا) إزالة قفل المطور ---
+                    if chat_to_update.settings and 'dev_lock' in chat_to_update.settings:
+                        new_settings = chat_to_update.settings.copy()
+                        del new_settings['dev_lock']
+                        chat_to_update.settings = new_settings
+                        flag_modified(chat_to_update, "settings")
+                    
                     await session.commit()
-                    await conv.send_message(f"**✅ | تم {action_text} في المجموعة `{chat_id}` بنجاح.**")
+                    await conv.send_message(f"**✅ | تم تفعيل البوت وإزالة قفل المطور في المجموعة `{chat_id}` بنجاح.**")
 
         except asyncio.TimeoutError:
             await event.reply("**⏰ | انتهى الوقت.**")
-    # ===================================================================
-    # | END OF NEW CODE | نهاية الكود الجديد                               |
-    # ===================================================================
-        
+            
+    elif action == "deactivate_group":
+        try:
+            async with client.conversation(event.sender_id, timeout=300) as conv:
+                await conv.send_message("**أرسل الآن ID المجموعة التي تريد إيقافها.**")
+                response = await conv.get_response()
+                try:
+                    chat_id = int(response.text.strip())
+                except ValueError:
+                    return await conv.send_message("**⚠️ | ID غير صالح. يجب أن يكون رقماً.**")
+                
+                async with AsyncDBSession() as session:
+                    chat_to_update = (await session.execute(select(Chat).where(Chat.id == chat_id))).scalar_one_or_none()
+                    if not chat_to_update:
+                        return await conv.send_message("**⚠️ | لم يتم العثور على مجموعة بهذا الـ ID.**")
+                    
+                    chat_to_update.is_active = False
+                    # --- (تم التعديل هنا) إضافة قفل المطور ---
+                    if chat_to_update.settings is None:
+                        chat_to_update.settings = {}
+                    new_settings = chat_to_update.settings.copy()
+                    new_settings['dev_lock'] = True
+                    chat_to_update.settings = new_settings
+                    flag_modified(chat_to_update, "settings")
+
+                    await session.commit()
+                    await conv.send_message(f"**✅ | تم إيقاف البوت ووضع قفل المطور في المجموعة `{chat_id}` بنجاح.**")
+
+        except asyncio.TimeoutError:
+            await event.reply("**⏰ | انتهى الوقت.**")
+            
+    # ... (بقية الكود يبقى كما هو) ...
     elif action == "broadcast":
         try:
             async with client.conversation(event.sender_id, timeout=300) as conv:
