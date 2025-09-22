@@ -41,4 +41,5 @@ ALL_MODULES = [
     "plugins.custom_commands",
     "plugins.admin_menus",
     "plugins.settings",
+    "plugins.leaderboard",
 ]
