@@ -73,6 +73,10 @@ async def kick_logic(event, command_text):
         if target_rank >= actor_rank:
             return await event.reply("**عيب تطرد واحد رتبته اعلى منك او بكدك 😒**")
 
+        # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+        if target_rank == Ranks.OWNER:
+            return await event.reply("**لا يمكنني طرد هذا المستخدم لأنه مالك المجموعة 👑**")
+
         await event.client.kick_participant(event.chat_id, user_to_manage.id)
         user_mention = f"[{user_to_manage.first_name}](tg://user?id={user_to_manage.id})"
         await event.reply(f"**✈️ | العضو {user_mention} تم طرده بواسطة {actor_mention}**\n\n**- يلا ليشوفنه وجهه بعد 👋**")
@@ -99,6 +103,10 @@ async def ban_logic(event, command_text):
     target_rank = await get_user_rank(event.client, user_to_manage.id, event.chat_id)
     if target_rank >= actor_rank:
         return await event.reply("**عيب تحظر واحد رتبته اعلى منك او بكدك 😒**")
+
+    # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+    if target_rank == Ranks.OWNER:
+        return await event.reply("**لا يمكنني حظر هذا المستخدم لأنه مالك المجموعة 👑**")
 
     try:
         await client.edit_permissions(event.chat_id, user_to_manage, view_messages=False)
@@ -143,6 +151,10 @@ async def mute_logic(event, command_text):
     if target_rank >= actor_rank:
         return await event.reply("**عيب تكتم واحد رتبته اعلى منك او بكدك 😒**")
 
+    # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+    if target_rank == Ranks.OWNER:
+        return await event.reply("**لا يمكنني كتم هذا المستخدم لأنه مالك المجموعة 👑**")
+
     buttons = [
         [Button.inline("ساعة 🕐", data=f"mute_{user_to_manage.id}_60"), Button.inline("يوم 🗓️", data=f"mute_{user_to_manage.id}_1440")],
         [Button.inline("كتم دائم ♾️", data=f"mute_{user_to_manage.id}_0")],
@@ -163,7 +175,7 @@ async def unmute_logic(event, command_text):
 
         await client.edit_permissions(event.chat_id, user_to_manage.id, send_messages=True)
 
-        async with AsyncDBSession() as session:
+        async with database.AsyncDBSession() as session:
             result = await session.execute(select(User).where(User.chat_id == event.chat_id, User.user_id == user_to_manage.id))
             user_obj = result.scalar_one_or_none()
             if user_obj:
@@ -199,7 +211,11 @@ async def warn_logic(event, command_text):
     if target_rank >= actor_rank:
         return await event.reply("**عيب تحذر واحد رتبته اعلى منك او بكدك 😒**")
 
-    async with AsyncDBSession() as session:
+    # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+    if target_rank == Ranks.OWNER:
+        return await event.reply("**لا يمكنني تحذير هذا المستخدم لأنه مالك المجموعة 👑**")
+
+    async with database.AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
         chat_obj = await get_or_create_chat(session, event.chat_id)
 
@@ -232,7 +248,7 @@ async def clear_warns_logic(event, command_text):
     if target_rank >= actor_rank:
         return await event.reply("**عيب تسوي هيج لواحد رتبته اعلى منك او بكدك 😒**")
 
-    async with AsyncDBSession() as session:
+    async with database.AsyncDBSession() as session:
         user_obj = await get_or_create_user(session, event.chat_id, user_to_manage.id)
         if user_obj.warns and user_obj.warns > 0:
             user_obj.warns = 0
@@ -255,6 +271,10 @@ async def timed_mute_logic(event, command_text):
     target_rank = await get_user_rank(event.client, user_to_mute.id, event.chat_id)
     if target_rank >= actor_rank:
         return await event.reply("**ما أگدر أطبق هذا الإجراء على شخص رتبته أعلى منك أو تساوي رتبتك!**")
+    
+    # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+    if target_rank == Ranks.OWNER:
+        return await event.reply("**لا يمكنني كتم هذا المستخدم لأنه مالك المجموعة 👑**")
 
     try:
         match = re.match(r"^كتم (\d+)\s*([ديس])$", command_text)
@@ -302,6 +322,11 @@ async def mute_callback_handler(event):
     target_rank = await get_user_rank(client, user_id_to_mute, event.chat_id)
     if target_rank >= actor_rank:
         return await event.answer("❌ | لا يمكنك كتم شخص رتبته أعلى منك أو تساوي رتبتك!", alert=True)
+
+    # --- (تمت الإضافة هنا) --- التحقق إذا كان المستهدف هو مالك المجموعة
+    if target_rank == Ranks.OWNER:
+        await event.edit("**لا يمكنني كتم هذا المستخدم لأنه مالك المجموعة 👑**")
+        return await event.answer("لا يمكن كتم المالك!", alert=True)
 
     until_date = None
     duration_text = "دائم"
