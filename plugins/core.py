@@ -1,5 +1,7 @@
 import asyncio
 from telethon import events, Button
+# --- (تمت الإضافة هنا) استيراد الأنواع اللازمة للحدث الجديد ---
+from telethon.tl import types
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 import logging
@@ -64,35 +66,13 @@ async def chat_action_handler(event):
             WELCOMED_RECENTLY.remove(chat_id)
         return
 
-    # عند حدوث أي إجراء يخص البوت (مثل تغيير الصلاحيات)
-    elif event.user_id == me.id:
-        # نتجاهل أحداث الانضمام والمغادرة لأن لها معالجات خاصة بها
-        if event.user_joined or event.user_left or event.user_kicked:
-            return
-        
-        # --- (تمت إضافة رسائل التشخيص هنا) ---
-        print(f"DEBUG: ChatAction event detected for bot in chat {chat_id}.")
-
+    # عند ترقية البوت لمشرف (تفعيل تلقائي)
+    elif event.user_id == me.id and not (event.user_joined or event.user_left or event.user_kicked):
         try:
             is_bot_now_admin = await is_admin(client, chat_id, me.id)
             is_bot_supposed_to_be_active = await check_activation(chat_id)
             
-            print(f"DEBUG: Is bot admin now? -> {is_bot_now_admin}")
-            print(f"DEBUG: Is bot supposed to be active in DB? -> {is_bot_supposed_to_be_active}")
-
-            # الحالة 1: إذا كان البوت نشطاً ولكنه لم يعد مشرفاً (تم تنزيله)
-            if is_bot_supposed_to_be_active and not is_bot_now_admin:
-                print("DEBUG: Demotion condition met. Deactivating...")
-                async with AsyncDBSession() as session:
-                    chat = await get_or_create_chat(session, chat_id)
-                    chat.is_active = False
-                    await session.commit()
-                logger.info(f"Bot was demoted in {chat_id}. Auto-deactivating.")
-                await client.send_message(chat_id, "**⚠️ | تم تنزيلي من الإشراف!**\n**سأتوقف عن العمل هنا حتى يتم ترقيتي وتفعيلي مرة أخرى.**")
-
-            # الحالة 2: إذا تمت ترقية البوت وهو غير نشط (تفعيل تلقائي)
-            elif not is_bot_supposed_to_be_active and is_bot_now_admin:
-                print("DEBUG: Promotion condition met. Activating...")
+            if not is_bot_supposed_to_be_active and is_bot_now_admin:
                 async with AsyncDBSession() as session:
                     chat = await get_or_create_chat(session, chat_id)
                     if not (chat.settings or {}).get('dev_lock'):
@@ -100,11 +80,8 @@ async def chat_action_handler(event):
                         await session.commit()
                         logger.info(f"Bot was promoted in {chat_id}. Auto-activating.")
                         await client.send_message(chat_id, "**شكراً لترقيتي! ✅ تم تفعيل البوت تلقائياً وجاهز للعمل.**")
-            else:
-                print("DEBUG: Neither promotion nor demotion condition was met.")
-
         except Exception as e:
-            logger.error(f"Error during permission change check in {chat_id}: {e}")
+            logger.error(f"Error during auto-activation check in {chat_id}: {e}")
         return
     
     # عند طرد البوت من المجموعة
@@ -151,6 +128,46 @@ async def chat_action_handler(event):
             await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
             await session.commit()
+
+# ===================================================================
+# | START OF NEW CODE | بداية الكود الجديد لاكتشاف تنزيل الرتبة      |
+# ===================================================================
+@client.on(events.Raw(types.UpdateChannelParticipant))
+async def demotion_handler(update):
+    me = await client.get_me()
+    
+    # التحقق إذا كان التحديث يخص البوت نفسه
+    if update.user_id != me.id:
+        return
+        
+    try:
+        chat_id = int(f"-100{update.channel_id}")
+        
+        # التحقق إذا كان البوت نشطاً في قاعدة البيانات
+        if not await check_activation(chat_id):
+            return
+
+        # التحقق من الحالة السابقة والحالية لصلاحيات البوت
+        prev_role = update.prev_participant
+        new_role = update.new_participant
+
+        was_admin = isinstance(prev_role, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
+        is_now_admin = isinstance(new_role, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
+
+        # إذا كان مشرفاً والآن لم يعد مشرفاً (تم تنزيله)
+        if was_admin and not is_now_admin:
+            async with AsyncDBSession() as session:
+                chat = await get_or_create_chat(session, chat_id)
+                chat.is_active = False
+                await session.commit()
+            logger.info(f"Bot was demoted in {chat_id} via Raw update. Auto-deactivating.")
+            await client.send_message(chat_id, "**⚠️ | تم تنزيلي من الإشراف!**\n**سأتوقف عن العمل هنا حتى يتم ترقيتي وتفعيلي مرة أخرى.**")
+    except Exception as e:
+        logger.error(f"Error in demotion_handler for chat {update.channel_id}: {e}")
+
+# ===================================================================
+# | END OF NEW CODE | نهاية الكود الجديد                               |
+# ===================================================================
 
 @client.on(events.NewMessage(pattern="^(تفعيل|ايقاف)$"))
 async def toggle_bot_status(event):
