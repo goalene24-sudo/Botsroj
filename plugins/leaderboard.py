@@ -56,7 +56,8 @@ async def show_leaderboard(event):
             lrm = "\u200e"
             emoji = rank_emojis.get(i, "")
             
-            leaderboard_text += f"{lrm}**{i}.** {user_name} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
+            # أضفنا LRM ثاني بعد الاسم لضمان ترتيب المحتوى الداخلي للسطر
+            leaderboard_text += f"{lrm}**{i}.** {user_name}{lrm} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
             # =========================================================
             # | END OF FINAL FIX | نهاية الإصلاح النهائي              |
             # =========================================================
