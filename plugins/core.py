@@ -20,8 +20,10 @@ from .utils import (
 from .admin import get_or_create_chat, get_chat_setting
 from .leaderboard import show_leaderboard
 from .analytics import generate_analytics_report
-# --- (تمت الإضافة هنا) استيراد دالة قفل/فتح الكل ---
 from .protection_settings import lock_unlock_all_logic
+# --- (تمت الإضافة هنا) استيراد دوال وضع الحماية ---
+from .raid_mode import is_raid_mode_active, handle_raid_mode_join
+
 
 logger = logging.getLogger(__name__)
 WELCOMED_RECENTLY = set()
@@ -106,8 +108,14 @@ async def chat_action_handler(event):
             logger.error(f"Error during data deletion for chat {chat_id}: {e}")
         return
 
+    # --- (تم التعديل هنا) ---
     # عند انضمام عضو جديد
     elif event.user_joined and event.user_id != me.id:
+        # أولاً، التحقق من وضع الحماية
+        if await is_raid_mode_active(event.chat_id):
+            return await handle_raid_mode_join(event)
+
+        # إذا كان وضع الحماية غير فعال، استمر في الترحيب العادي
         if not await check_activation(event.chat_id): return
         if not await is_command_enabled(event.chat_id, "welcome_enabled"): return
 
@@ -220,7 +228,6 @@ async def leaderboard_command_handler(event):
 async def analytics_command_handler(event):
     await generate_analytics_report(event)
 
-# --- (تمت الإضافة هنا) معالج أمر قفل/فتح الكل ---
 @client.on(events.NewMessage(pattern="^(قفل الكل|فتح الكل)$"))
 async def lock_unlock_all_command_handler(event):
     action = event.raw_text
