@@ -1,5 +1,6 @@
 # --- استدعاء الدوال والمتغيرات المشتركة من الملف المساعد ---
 from .protection_helpers import *
+# --- (تمت الإضافة هنا) استيراد الأدوات الصحيحة من تيليثون ---
 from telethon.tl.functions.messages import EditChatDefaultBannedRightsRequest
 from telethon.tl.types import ChatBannedRights
 
@@ -231,7 +232,6 @@ async def lock_unlock_all_logic(event, action):
     """
     يقوم بتغيير أذونات المجموعة مباشرة لعمل قفل أو فتح حقيقي.
     """
-    # --- (تم التعديل هنا) استخدام التحقق من مشرفي تيليجرام الحقيقيين ---
     if not await is_admin(event.client, event.chat_id, event.sender_id):
         return await event.reply("**هذا الأمر حصراً للمشرفين وملاك المجموعة الحقيقيين.**")
 
@@ -241,6 +241,7 @@ async def lock_unlock_all_logic(event, action):
         
         if action == "قفل الكل":
             # كائن الصلاحيات الممنوعة
+            # True = ممنوع, False = مسموح
             locked_rights = ChatBannedRights(
                 until_date=None, send_messages=True, send_media=True,
                 send_stickers=True, send_gifs=True, send_games=True,
@@ -254,7 +255,7 @@ async def lock_unlock_all_logic(event, action):
             reply_msg = f"**🔒 | تم قفل الدردشة بالكامل بواسطة {actor_mention}.**\n\n**- لن يتمكن الأعضاء من إرسال أي شيء.**"
         
         else: # فتح الكل
-            # كائن الصلاحيات المسموحة
+            # كائن الصلاحيات المسموحة (لا يوجد أي منع)
             unlocked_rights = ChatBannedRights(
                 until_date=None, send_messages=False, send_media=False,
                 send_stickers=False, send_gifs=False, send_games=False,
@@ -271,5 +272,4 @@ async def lock_unlock_all_logic(event, action):
 
     except Exception as e:
         logger.error(f"Error in lock_unlock_all_logic: {e}", exc_info=True)
-        # تم تغيير رسالة الخطأ لتكون أوضح
         await event.reply("**حدث خطأ. تأكد من أنني مشرف وأمتلك صلاحية `إضافة مشرفين جدد`.**")
