@@ -65,8 +65,6 @@ class User(Base):
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
 
-# --- بقية النماذج تبقى كما هي ---
-
 class Alias(Base):
     __tablename__ = "aliases"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -75,9 +73,6 @@ class Alias(Base):
     command_name = Column(String, nullable=False)
     chat = relationship("Chat", back_populates="aliases")
 
-# =========================================================
-# | START OF MODIFIED CODE | بداية الكود المعدل            |
-# =========================================================
 class MessageHistory(Base):
     __tablename__ = "message_history"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -85,14 +80,13 @@ class MessageHistory(Base):
     user_id = Column(BigInteger, nullable=False)
     msg_id = Column(BigInteger, nullable=False)
     
-    # --- تمت إضافة هذين الحقلين ---
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    message_text = Column(String, nullable=True) # nullable=True لأنه قد تكون رسالة غير نصية
+    message_text = Column(String, nullable=True)
+    
+    # --- (تمت إعادة الإضافة هنا) ---
+    msg_type = Column(String, nullable=True)
     
     chat = relationship("Chat", back_populates="message_history")
-# =========================================================
-# | END OF MODIFIED CODE | نهاية الكود المعدل              |
-# =========================================================
 
 class Vip(Base):
     __tablename__ = "vips"
