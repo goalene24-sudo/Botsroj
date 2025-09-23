@@ -1,6 +1,8 @@
 # --- استدعاء الدوال والمتغيرات المشتركة من الملف المساعد ---
 from .protection_helpers import *
-from telethon.tl.types import ChatBannedRights # <-- إضافة مهمة
+# --- (تمت الإضافة هنا) استيراد الأدوات الصحيحة من تيليثون ---
+from telethon.tl.functions.messages import EditChatDefaultBannedRightsRequest
+from telethon.tl.types import ChatBannedRights
 
 # --- قسم أوامر الإعدادات ---
 
@@ -226,6 +228,9 @@ async def list_filters_logic(event, command_text):
     message = "**🚫 قائمة الكلمات الممنوعة:**\n\n" + "\n".join(f"- `{word}`" for word in words)
     await event.reply(message)
 
+# ===================================================================
+# | START OF REWRITTEN CODE | بداية الكود المعاد كتابته بالكامل       |
+# ===================================================================
 async def lock_unlock_all_logic(event, action):
     """
     يقوم بتغيير أذونات المجموعة مباشرة لعمل قفل أو فتح حقيقي.
@@ -237,32 +242,32 @@ async def lock_unlock_all_logic(event, action):
         actor = await event.get_sender()
         actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
         
-        # كائن الصلاحيات الفارغة (كل شيء ممنوع)
-        LOCKED_PERMS = ChatBannedRights(
-            until_date=None,
-            send_messages=True, # تبقى True لمنع إزالة المستخدم من الدردشة
-            send_media=True,
-            send_stickers=True,
-            send_gifs=True,
-            send_games=True,
-            send_inline=True,
-            send_polls=True,
-            change_info=True,
-            invite_users=True,
-            pin_messages=True
-        )
-
-        # كائن الصلاحيات الكاملة (كل شيء مسموح)
-        UNLOCKED_PERMS = ChatBannedRights(
-            until_date=None,
-            # كل شيء False يعني لا توجد قيود
-        )
-
         if action == "قفل الكل":
-            await client.edit_default_permissions(event.chat_id, UNLOCKED_PERMS, LOCKED_PERMS)
+            # كائن الصلاحيات الممنوعة (كل شيء ممنوع)
+            locked_rights = ChatBannedRights(
+                until_date=None, send_messages=True, send_media=True,
+                send_stickers=True, send_gifs=True, send_games=True,
+                send_inline=True, send_polls=True, change_info=False,
+                invite_users=False, pin_messages=False
+            )
+            await client(EditChatDefaultBannedRightsRequest(
+                peer=event.chat_id,
+                banned_rights=locked_rights
+            ))
             reply_msg = f"**🔒 | تم قفل الدردشة بالكامل بواسطة {actor_mention}.**\n\n**- لن يتمكن الأعضاء من إرسال أي شيء.**"
+        
         else: # فتح الكل
-            await client.edit_default_permissions(event.chat_id, LOCKED_PERMS, UNLOCKED_PERMS)
+            # كائن الصلاحيات المسموحة (لا يوجد أي منع)
+            unlocked_rights = ChatBannedRights(
+                until_date=None, send_messages=False, send_media=False,
+                send_stickers=False, send_gifs=False, send_games=False,
+                send_inline=False, send_polls=False, change_info=False,
+                invite_users=False, pin_messages=False
+            )
+            await client(EditChatDefaultBannedRightsRequest(
+                peer=event.chat_id,
+                banned_rights=unlocked_rights
+            ))
             reply_msg = f"**🔓 | تم فتح الدردشة بالكامل بواسطة {actor_mention}.**\n\n**- أصبح بإمكان الأعضاء المشاركة مجدداً.**"
             
         await event.reply(reply_msg)
@@ -270,3 +275,6 @@ async def lock_unlock_all_logic(event, action):
     except Exception as e:
         logger.error(f"Error in lock_unlock_all_logic: {e}", exc_info=True)
         await event.reply("**حدث خطأ. تأكد من أنني مشرف وأمتلك صلاحية `تغيير معلومات المجموعة`.**")
+# ===================================================================
+# | END OF REWRITTEN CODE | نهاية الكود المعاد كتابته               |
+# ===================================================================
