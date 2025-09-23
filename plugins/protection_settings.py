@@ -1,6 +1,5 @@
 # --- استدعاء الدوال والمتغيرات المشتركة من الملف المساعد ---
 from .protection_helpers import *
-# --- (تمت الإضافة هنا) استيراد الأدوات الصحيحة من تيليثون ---
 from telethon.tl.functions.messages import EditChatDefaultBannedRightsRequest
 from telethon.tl.types import ChatBannedRights
 
@@ -228,22 +227,20 @@ async def list_filters_logic(event, command_text):
     message = "**🚫 قائمة الكلمات الممنوعة:**\n\n" + "\n".join(f"- `{word}`" for word in words)
     await event.reply(message)
 
-# ===================================================================
-# | START OF REWRITTEN CODE | بداية الكود المعاد كتابته بالكامل       |
-# ===================================================================
 async def lock_unlock_all_logic(event, action):
     """
     يقوم بتغيير أذونات المجموعة مباشرة لعمل قفل أو فتح حقيقي.
     """
-    if not await has_bot_permission(event.client, event):
-        return await event.reply("**هذا الأمر حصراً للمشرفين وطاقم الإدارة.**")
+    # --- (تم التعديل هنا) استخدام التحقق من مشرفي تيليجرام الحقيقيين ---
+    if not await is_admin(event.client, event.chat_id, event.sender_id):
+        return await event.reply("**هذا الأمر حصراً للمشرفين وملاك المجموعة الحقيقيين.**")
 
     try:
         actor = await event.get_sender()
         actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
         
         if action == "قفل الكل":
-            # كائن الصلاحيات الممنوعة (كل شيء ممنوع)
+            # كائن الصلاحيات الممنوعة
             locked_rights = ChatBannedRights(
                 until_date=None, send_messages=True, send_media=True,
                 send_stickers=True, send_gifs=True, send_games=True,
@@ -257,7 +254,7 @@ async def lock_unlock_all_logic(event, action):
             reply_msg = f"**🔒 | تم قفل الدردشة بالكامل بواسطة {actor_mention}.**\n\n**- لن يتمكن الأعضاء من إرسال أي شيء.**"
         
         else: # فتح الكل
-            # كائن الصلاحيات المسموحة (لا يوجد أي منع)
+            # كائن الصلاحيات المسموحة
             unlocked_rights = ChatBannedRights(
                 until_date=None, send_messages=False, send_media=False,
                 send_stickers=False, send_gifs=False, send_games=False,
@@ -274,7 +271,5 @@ async def lock_unlock_all_logic(event, action):
 
     except Exception as e:
         logger.error(f"Error in lock_unlock_all_logic: {e}", exc_info=True)
-        await event.reply("**حدث خطأ. تأكد من أنني مشرف وأمتلك صلاحية `تغيير معلومات المجموعة`.**")
-# ===================================================================
-# | END OF REWRITTEN CODE | نهاية الكود المعاد كتابته               |
-# ===================================================================
+        # تم تغيير رسالة الخطأ لتكون أوضح
+        await event.reply("**حدث خطأ. تأكد من أنني مشرف وأمتلك صلاحية `إضافة مشرفين جدد`.**")
