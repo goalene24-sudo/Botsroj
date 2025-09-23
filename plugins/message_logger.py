@@ -1,5 +1,6 @@
 import logging
 from telethon import events
+from telethon.tl.types import MessageEntityUrl
 
 from bot import client
 from database import AsyncDBSession
@@ -10,32 +11,52 @@ from .utils import check_activation
 
 logger = logging.getLogger(__name__)
 
+def get_message_type(event):
+    """تحدد نوع الرسالة لتحزينها في قاعدة البيانات."""
+    if event.photo: return "photo"
+    if event.video or event.video_note: return "video"
+    if event.sticker: return "sticker"
+    if event.gif: return "gif"
+    if event.fwd_from: return "forward"
+    if event.entities:
+        for entity in event.entities:
+            if isinstance(entity, MessageEntityUrl):
+                return "url"
+    if event.document: return "document"
+    if event.audio: return "audio"
+    if event.voice: return "voice"
+    if event.text and len(event.text) > 200:
+        return "long_text"
+    if event.text: return "text"
+    return "unknown"
+
 @client.on(events.NewMessage(func=lambda e: e.is_private == False))
 async def message_history_logger(event):
     """
     هذا المعالج يستمع لكل الرسائل الجديدة في المجموعات
-    ويقوم بتسجيلها في قاعدة البيانات لميزة التحليلات.
+    ويقوم بتسجيلها في قاعدة البيانات لميزة التحليلات والمسح.
     """
-    # لا تقم بتسجيل الرسائل من المجموعات غير المفعلة
     if not await check_activation(event.chat_id):
         return
 
-    # لا تقم بتسجيل الرسائل من البوتات الأخرى
     try:
         if await event.get_sender() and (await event.get_sender()).bot:
             return
     except Exception:
-        # تجاهل الأخطاء المحتملة في جلب المرسل (مثلاً في القنوات المجهولة)
         return
 
     try:
-        # إنشاء سجل جديد للرسالة
-        # يتم إضافة الوقت تلقائياً من قبل قاعدة البيانات
+        # --- (تم التعديل هنا) ---
+        # تحديد نوع الرسالة قبل تسجيلها
+        msg_type = get_message_type(event)
+        
+        # إنشاء سجل جديد للرسالة مع النوع
         new_log = MessageHistory(
             chat_id=event.chat_id,
             user_id=event.sender_id,
             msg_id=event.id,
-            message_text=event.text # سيكون فارغاً للصور والملصقات، وهذا طبيعي
+            message_text=event.text,
+            msg_type=msg_type
         )
 
         async with AsyncDBSession() as session:
@@ -43,5 +64,4 @@ async def message_history_logger(event):
             await session.commit()
 
     except Exception as e:
-        # تسجيل أي خطأ يحدث بصمت دون إيقاف البوت
         logger.error(f"Failed to log message to history for chat {event.chat_id}: {e}")
