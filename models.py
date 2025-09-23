@@ -75,13 +75,24 @@ class Alias(Base):
     command_name = Column(String, nullable=False)
     chat = relationship("Chat", back_populates="aliases")
 
+# =========================================================
+# | START OF MODIFIED CODE | بداية الكود المعدل            |
+# =========================================================
 class MessageHistory(Base):
     __tablename__ = "message_history"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    chat_id = Column(BigInteger, ForeignKey("chats.id"), nullable=False)
+    chat_id = Column(BigInteger, ForeignKey("chats.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False)
     msg_id = Column(BigInteger, nullable=False)
-    msg_type = Column(String)
+    
+    # --- تمت إضافة هذين الحقلين ---
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    message_text = Column(String, nullable=True) # nullable=True لأنه قد تكون رسالة غير نصية
+    
     chat = relationship("Chat", back_populates="message_history")
+# =========================================================
+# | END OF MODIFIED CODE | نهاية الكود المعدل              |
+# =========================================================
 
 class Vip(Base):
     __tablename__ = "vips"
