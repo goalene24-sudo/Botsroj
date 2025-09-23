@@ -18,8 +18,8 @@ async def is_raid_mode_active(chat_id):
         chat = await get_or_create_chat(session, chat_id)
         return (chat.settings or {}).get("raid_mode_enabled", False)
 
-# --- معالج أمر تفعيل/إيقاف وضع الحماية ---
-@client.on(events.NewMessage(pattern=r"^[!/](وضع الحماية|الوضع الامن) (تفعيل|ايقاف)$"))
+# --- (تم التعديل هنا) تعديل النمط والمنطق ليكون أكثر مرونة ---
+@client.on(events.NewMessage(pattern=r"^[!/]?((وضع الحماية|الوضع الامن) (تفعيل|ايقاف)|(تفعيل|ايقاف) (وضع الحماية|الوضع الامن))$"))
 async def toggle_raid_mode(event):
     if event.is_private:
         return
@@ -27,7 +27,10 @@ async def toggle_raid_mode(event):
     if not await is_admin(client, event.chat_id, event.sender_id):
         return await event.reply("**🔒 | هذا الأمر للمشرفين فقط.**")
 
-    action = event.pattern_match.group(2)
+    # تحديد الإجراء بناءً على أي من الصيغتين تم استخدامها
+    match = event.pattern_match
+    action = match.group(3) or match.group(4) # group(3) هو "تفعيل|ايقاف" من الصيغة الأولى, group(4) من الثانية
+    
     new_state = True if action == "تفعيل" else False
 
     async with AsyncDBSession() as session:
