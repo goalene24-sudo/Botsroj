@@ -18,7 +18,6 @@ from .utils import (
 )
 from .admin import get_or_create_chat, get_chat_setting
 from .leaderboard import show_leaderboard
-# --- (تمت الإضافة هنا) استيراد دالة التحليلات ---
 from .analytics import generate_analytics_report
 
 logger = logging.getLogger(__name__)
@@ -204,7 +203,7 @@ async def main_menu_handler(event):
 async def leaderboard_command_handler(event):
     await show_leaderboard(event)
 
-# --- (تمت الإضافة هنا) معالج أمر تحليل المجموعة ---
-@client.on(events.NewMessage(pattern=r"^[!/](تحليل|التحليل)$"))
+# --- (تم التعديل هنا) معالج أمر تحليل المجموعة ---
+@client.on(events.NewMessage(pattern="^(تحليل|التحليل)$"))
 async def analytics_command_handler(event):
     await generate_analytics_report(event)
