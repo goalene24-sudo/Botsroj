@@ -52,7 +52,6 @@ async def generate_analytics_report(event):
 
             # 2. حساب الساعات الأكثر نشاطاً
             hourly_activity_result = await session.execute(
-                # --- (تم التعديل هنا) إضافة 3 ساعات لتعديل التوقيت إلى UTC+3 ---
                 select(func.strftime('%H', MessageHistory.timestamp, '+3 hours'), func.count(MessageHistory.id))
                 .where(MessageHistory.chat_id == chat_id, MessageHistory.timestamp >= start_date)
                 .group_by(func.strftime('%H', MessageHistory.timestamp, '+3 hours'))
@@ -80,6 +79,14 @@ async def generate_analytics_report(event):
                 .where(User.chat_id == chat_id, User.join_date >= start_date.strftime('%Y-%m-%d'))
             )
             new_members_count = new_members_count_result.scalar_one()
+            
+            # --- (تمت الإضافة هنا) 5. حساب الأعضاء المغادرين ---
+            left_members_count_result = await session.execute(
+                select(func.count(User.id))
+                .where(User.chat_id == chat_id, User.leave_date >= start_date)
+            )
+            left_members_count = left_members_count_result.scalar_one()
+
 
         # --- بناء التقرير النهائي ---
         report = f"**📊 | تقرير أداء المجموعة لآخر 7 أيام**\n\n"
@@ -110,7 +117,10 @@ async def generate_analytics_report(event):
         else:
             report += "لا توجد كلمات مسجلة.\n"
             
-        report += f"\n**👋 | الأعضاء الجدد:** انضم **{new_members_count}** عضو جديد هذا الأسبوع."
+        # --- (تم التعديل هنا) إضافة الإحصائية الجديدة للتقرير ---
+        report += f"\n**📈 | حركة الأعضاء:**\n"
+        report += f"**- 👋 انضم:** **{new_members_count}** عضو جديد هذا الأسبوع.\n"
+        report += f"**- 🚶 غادر:** **{left_members_count}** عضو هذا الأسبوع."
         
         await processing_message.edit(report)
 
