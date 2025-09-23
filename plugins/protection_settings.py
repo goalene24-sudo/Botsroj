@@ -224,3 +224,47 @@ async def list_filters_logic(event, command_text):
 
     message = "**🚫 قائمة الكلمات الممنوعة:**\n\n" + "\n".join(f"- `{word}`" for word in words)
     await event.reply(message)
+
+# ===================================================================
+# | START OF NEW CODE | بداية الكود الجديد لأمر قفل/فتح الكل          |
+# ===================================================================
+async def lock_unlock_all_logic(event, action):
+    """
+    تقوم بقفل أو فتح جميع أنواع الوسائط والرسائل في المجموعة.
+    """
+    if not await has_bot_permission(event.client, event):
+        return await event.reply("**هذا الأمر حصراً للمشرفين وطاقم الإدارة.**")
+
+    try:
+        actor = await event.get_sender()
+        actor_mention = f"[{actor.first_name}](tg://user?id={actor.id})"
+        
+        lock_state = True if action == "قفل الكل" else False
+        
+        async with AsyncDBSession() as session:
+            chat = await get_or_create_chat(session, event.chat_id)
+            if chat.lock_settings is None:
+                chat.lock_settings = {}
+            
+            new_lock_settings = chat.lock_settings.copy()
+            # المرور على كل أنواع القفل وتعيين حالتها
+            for lock_key in LOCK_TYPES_MAP.values():
+                new_lock_settings[lock_key] = lock_state
+            
+            chat.lock_settings = new_lock_settings
+            flag_modified(chat, "lock_settings")
+            await session.commit()
+
+        if lock_state:
+            reply_msg = f"**🔒 | تم قفل كل شيء في المجموعة بواسطة {actor_mention}.**\n\n**- تم إيقاف جميع أنواع الرسائل والوسائط.**"
+        else:
+            reply_msg = f"**🔓 | تم فتح كل شيء في المجموعة بواسطة {actor_mention}.**\n\n**- أصبح الآن بإمكان الأعضاء إرسال الرسائل والوسائط.**"
+            
+        await event.reply(reply_msg)
+
+    except Exception as e:
+        logger.error(f"Error in lock_unlock_all_logic: {e}", exc_info=True)
+        await event.reply("**حدث خطأ أثناء تنفيذ الأمر.**")
+# ===================================================================
+# | END OF NEW CODE | نهاية الكود الجديد                             |
+# ===================================================================
