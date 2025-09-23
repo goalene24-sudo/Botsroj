@@ -61,6 +61,10 @@ class User(Base):
     achievements = Column(JSON, default=[]) 
     inventory = Column(JSON, default={})
     
+    # --- (تمت الإضافة هنا) ---
+    status = Column(String, default="active", nullable=False) # الحالات الممكنة: active, left, kicked
+    leave_date = Column(DateTime, nullable=True)
+    
     chat = relationship("Chat", back_populates="users")
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
@@ -82,8 +86,6 @@ class MessageHistory(Base):
     
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     message_text = Column(String, nullable=True)
-    
-    # --- (تمت إعادة الإضافة هنا) ---
     msg_type = Column(String, nullable=True)
     
     chat = relationship("Chat", back_populates="message_history")
