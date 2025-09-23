@@ -43,18 +43,19 @@ async def generate_analytics_report(event):
         async with AsyncDBSession() as session:
             # 1. حساب الرسائل اليومية
             daily_messages_result = await session.execute(
-                select(func.date(MessageHistory.timestamp), func.count(MessageHistory.id))
+                select(func.date(MessageHistory.timestamp, '+3 hours'), func.count(MessageHistory.id))
                 .where(MessageHistory.chat_id == chat_id, MessageHistory.timestamp >= start_date)
-                .group_by(func.date(MessageHistory.timestamp))
-                .order_by(func.date(MessageHistory.timestamp))
+                .group_by(func.date(MessageHistory.timestamp, '+3 hours'))
+                .order_by(func.date(MessageHistory.timestamp, '+3 hours'))
             )
             daily_messages = {datetime.strptime(date, '%Y-%m-%d').strftime('%A'): count for date, count in daily_messages_result.all()}
 
             # 2. حساب الساعات الأكثر نشاطاً
             hourly_activity_result = await session.execute(
-                select(func.strftime('%H', MessageHistory.timestamp), func.count(MessageHistory.id))
+                # --- (تم التعديل هنا) إضافة 3 ساعات لتعديل التوقيت إلى UTC+3 ---
+                select(func.strftime('%H', MessageHistory.timestamp, '+3 hours'), func.count(MessageHistory.id))
                 .where(MessageHistory.chat_id == chat_id, MessageHistory.timestamp >= start_date)
-                .group_by(func.strftime('%H', MessageHistory.timestamp))
+                .group_by(func.strftime('%H', MessageHistory.timestamp, '+3 hours'))
                 .order_by(func.count(MessageHistory.id).desc())
                 .limit(3)
             )
@@ -68,7 +69,6 @@ async def generate_analytics_report(event):
             all_words = []
             for (text,) in all_messages_text_result.all():
                 if text:
-                    # إزالة علامات الترقيم البسيطة وتقسيم الكلمات
                     words = text.replace('.', '').replace(',', '').replace('?', '').replace('!', '').split()
                     all_words.extend([word for word in words if word.lower() not in ARABIC_STOP_WORDS and len(word) > 2])
             
