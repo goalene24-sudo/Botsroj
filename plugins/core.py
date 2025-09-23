@@ -219,6 +219,6 @@ async def main_menu_handler(event):
 async def leaderboard_command_handler(event):
     await show_leaderboard(event)
 
-@client.on(events.NewMessage(pattern=r"^[!/](تحليل|التحليل)$"))
+@client.on(events.NewMessage(pattern=r"^(تحليل|التحليل)$"))
 async def analytics_command_handler(event):
     await generate_analytics_report(event)
