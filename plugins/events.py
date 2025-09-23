@@ -12,11 +12,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from bot import client
 import config
-# --- استيراد مكونات قاعدة البيانات الجديدة ---
 from database import AsyncDBSession
 from models import Alias, MessageHistory, User, Chat
 
-# --- استيراد الأدوات المحدثة ---
 from .utils import (
     check_activation,
     FLOOD_TRACKER, get_user_rank, Ranks, get_or_create_chat, get_or_create_user,
@@ -25,7 +23,6 @@ from .utils import (
 from .default_replies import DEFAULT_REPLIES
 from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
-# --- استيراد كل الدوال المنطقية الجديدة ---
 from .commands_logic import (
     set_rank_logic, 
     my_stats_logic, my_rank_logic, id_logic,
@@ -41,10 +38,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 async def handle_filtered_words(event):
-    """
-    تقوم هذه الدالة بالتحقق من الرسائل النصية وحذفها إذا كانت تحتوي على كلمات ممنوعة،
-    ثم ترسل تنبيهاً للمستخدم.
-    """
     sender_rank = await get_user_rank(client, event.sender_id, event.chat_id)
     if sender_rank >= Ranks.MOD:
         return False
@@ -64,16 +57,14 @@ async def handle_filtered_words(event):
         for word in filtered_words:
             if word.lower() in message_text_lower:
                 try:
-                    # أولاً، نحذف الرسالة
                     await event.delete()
-                    # ثانياً، نرسل التنبيه
                     sender = await event.get_sender()
                     user_mention = f"[{sender.first_name}](tg://user?id={sender.id})"
                     await event.respond(f"**عزيزي {user_mention}، هذه الكلمة ممنوعة من قبل الإدارة.**")
                 except Exception as e:
                     logger.warning(f"Failed to handle filtered message for user {event.sender_id}: {e}")
                 
-                return True # نوقف التنفيذ بعد العثور على أول كلمة ممنوعة
+                return True
                 
     return False
 
@@ -125,17 +116,21 @@ async def handle_message_locks(event):
         if sender_rank >= Ranks.MOD: return False
         locks, settings = chat.lock_settings or {}, chat.settings or {}
         max_warns, mute_hours = settings.get("max_warns", 3), settings.get("mute_duration_hours", 6)
+        
         violation_type = None
-        if locks.get("photo") and event.photo: violation_type = "الصور"
+        # --- (تم التعديل هنا) إضافة التحقق من قفل الدردشة ---
+        if locks.get("text") and event.text and not event.text.startswith(('/', '!')):
+            violation_type = "الدردشة"
+        elif locks.get("photo") and event.photo: violation_type = "الصور"
         elif locks.get("video") and event.video: violation_type = "الفيديو"
         elif locks.get("sticker") and event.sticker: violation_type = "الملصقات"
         elif locks.get("gif") and event.gif: violation_type = "المتحركات"
         elif locks.get("url") and any(isinstance(e, MessageEntityUrl) for e in (event.entities or [])): violation_type = "الروابط"
         elif locks.get("forward") and event.fwd_from: violation_type = "التوجيه"
         elif locks.get("long_text") and event.text and len(event.text) > 200: violation_type = "الكلايش الطويلة"
+        
         if violation_type:
-            try:
-                await event.delete()
+            try: await event.delete()
             except Exception as e: logger.warning(f"Failed to delete locked message: {e}")
             user.warns = (user.warns or 0) + 1
             sender = await event.get_sender()
@@ -174,7 +169,10 @@ async def general_message_handler(event):
             if command_to_process in disabled_cmds or base_cmd in disabled_cmds:
                 await event.reply("-هذا الامر تحت الصيانه حاليا تواصل مع المطور اذا اردت شيئا @tit_50-")
                 return
-            if command_to_process.startswith(("قفل", "فتح")): await lock_unlock_logic(event, command_to_process)
+            
+            # --- (تم التعديل هنا) لتجاهل "قفل/فتح الكل" وحل التعارض ---
+            if command_to_process.startswith(("قفل ", "فتح ")) and command_to_process not in ["قفل الكل", "فتح الكل"]:
+                await lock_unlock_logic(event, command_to_process)
             elif command_to_process.startswith("ضع قوانين"): await set_rules_logic(event, command_to_process)
             elif command_to_process == "مسح القوانين": await clear_rules_logic(event, command_to_process)
             elif command_to_process == "الادمنيه": await list_bot_admins_logic(event, command_to_process)
@@ -184,7 +182,7 @@ async def general_message_handler(event):
             elif command_to_process == "المنشئين": await list_creators_logic(event, command_to_process)
             elif command_to_process == "مسح المنشئين": await clear_all_creators_logic(event, command_to_process)
             elif command_to_process == "طرد": await kick_logic(event, command_to_process)
-            elif command_to_process == "طرد البوتات": await kick_all_bots_logic(event, command_to_process) # <-- تمت إضافة الأمر الجديد هنا
+            elif command_to_process == "طرد البوتات": await kick_all_bots_logic(event, command_to_process)
             elif command_to_process == "الغاء الكتم": await unmute_logic(event, command_to_process)
             elif command_to_process.startswith("ضع عدد التحذيرات"): await set_warns_limit_logic(event, command_to_process)
             elif command_to_process.startswith("ضع وقت الكتم"): await set_mute_duration_logic(event, command_to_process)
@@ -217,11 +215,9 @@ async def general_message_handler(event):
                             current_rank = await get_user_rank(client, event.sender_id, event.chat_id)
                             chat_settings = chat.settings or {}
                             if current_rank >= Ranks.MAIN_DEV and chat_settings.get("dev_reply"):
-                                await event.reply(chat_settings["dev_reply"])
-                                return await session.commit()
+                                await event.reply(chat_settings["dev_reply"]); return await session.commit()
                             if chat_settings.get("call_reply"):
-                                await event.reply(chat_settings["call_reply"])
-                                return await session.commit()
+                                await event.reply(chat_settings["call_reply"]); return await session.commit()
                         all_replies = {**DEFAULT_REPLIES, **{k.lower(): v for k, v in (chat.custom_replies or {}).items()}}
                         reply_data = all_replies.get(trigger)
                         if reply_data:
@@ -237,10 +233,8 @@ async def general_message_handler(event):
                                 if reply_list: reply_template = random.choice(reply_list)
                             if reply_template:
                                 sender = await event.get_sender()
-                                try:
-                                    await event.reply(reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name))
-                                except KeyError:
-                                    await event.reply(reply_template)
+                                try: await event.reply(reply_template.format(user_mention=f"[{sender.first_name}](tg://user?id={sender.id})", user_first_name=sender.first_name))
+                                except KeyError: await event.reply(reply_template)
                     await session.commit()
     except Exception as e:
         logger.error(f"استثناء غير معالج في general_message_handler: {e}", exc_info=True)
@@ -263,30 +257,24 @@ async def handle_chat_action(event):
                 logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
                 await session.rollback()
 
-# --- (جديد ومُصحح) دالة إرسال الأذكار الدورية ---
 async def start_dhikr_task():
-    """تعمل هذه الدالة في الخلفية لإرسال ذكر كل ساعة."""
     while True:
-        await asyncio.sleep(3600) # انتظار لمدة ساعة
+        await asyncio.sleep(3600)
         try:
             async with AsyncDBSession() as session:
                 result = await session.execute(select(Chat).where(Chat.is_active == True))
                 active_chats = result.scalars().all()
-
             if not active_chats:
                 logger.info("مهمة الأذكار: لم يتم العثور على مجموعات مفعلة.")
                 continue
-
             dhikr_message = random.choice(DHIKR_LIST)
-            
             for chat in active_chats:
                 try:
                     await client.send_message(chat.id, f"**{dhikr_message}**")
-                    await asyncio.sleep(1) # استراحة بسيطة بين الرسائل
+                    await asyncio.sleep(1)
                 except ChatWriteForbiddenError:
-                    logger.warning(f"مهمة الأذكار: لا يمكن الإرسال إلى المجموعة {chat.id}. قد يكون البوت مطرودًا أو مكتومًا.")
+                    logger.warning(f"مهمة الأذكار: لا يمكن الإرسال إلى المجموعة {chat.id}.")
                 except Exception as e:
                     logger.error(f"مهمة الأذكار: فشل الإرسال إلى المجموعة {chat.id}: {e}")
-        
         except Exception as e:
             logger.error(f"مهمة الأذكار: حدث خطأ في الحلقة الرئيسية: {e}")
