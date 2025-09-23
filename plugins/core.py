@@ -4,6 +4,7 @@ from telethon.tl import types
 from telethon.tl.types import ChannelParticipantsAdmins
 from bot import client
 import logging
+from datetime import datetime # <-- تمت الإضافة هنا
 
 # --- استيراد مكونات قاعدة البيانات الجديدة ---
 from sqlalchemy.future import select
@@ -120,14 +121,29 @@ async def chat_action_handler(event):
         buttons = Button.inline("📜 عرض القوانين", data="show_rules")
         await client.send_message(event.chat_id, f"**{welcome_text}**", buttons=buttons)
     
+    # --- (تم التعديل هنا) ---
     # عند مغادرة/طرد/حظر عضو
     elif (event.user_kicked or event.user_left) and event.user_id and event.user_id != me.id:
         user_id_to_clear = event.user_id
         async with AsyncDBSession() as session:
+            # --- بداية الكود المضاف ---
+            # جلب المستخدم لتحديث حالته
+            user_result = await session.execute(
+                select(User).where(User.chat_id == event.chat_id, User.user_id == user_id_to_clear)
+            )
+            user_to_update = user_result.scalar_one_or_none()
+
+            if user_to_update:
+                user_to_update.status = "kicked" if event.user_kicked else "left"
+                user_to_update.leave_date = datetime.now()
+            # --- نهاية الكود المضاف ---
+
+            # مسح الرتب الخاصة (الكود القديم)
             await session.execute(delete(Vip).where(Vip.chat_id == event.chat_id, Vip.user_id == user_id_to_clear))
             await session.execute(delete(BotAdmin).where(BotAdmin.chat_id == event.chat_id, BotAdmin.user_id == user_id_to_clear))
             await session.execute(delete(Creator).where(Creator.chat_id == event.chat_id, Creator.user_id == user_id_to_clear))
             await session.execute(delete(SecondaryDev).where(SecondaryDev.chat_id == event.chat_id, SecondaryDev.user_id == user_id_to_clear))
+            
             await session.commit()
 
 @client.on(events.Raw(types.UpdateChannelParticipant))
@@ -203,7 +219,6 @@ async def main_menu_handler(event):
 async def leaderboard_command_handler(event):
     await show_leaderboard(event)
 
-# --- (تم التعديل هنا) معالج أمر تحليل المجموعة ---
-@client.on(events.NewMessage(pattern="^(تحليل|التحليل)$"))
+@client.on(events.NewMessage(pattern=r"^[!/](تحليل|التحليل)$"))
 async def analytics_command_handler(event):
     await generate_analytics_report(event)
