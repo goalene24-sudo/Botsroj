@@ -13,50 +13,9 @@ from models import MessageHistory
 
 logger = logging.getLogger(__name__)
 
-# --- دالة مساعدة لتحديد نوع الرسالة ---
-def get_message_type(event):
-    """تحدد نوع الرسالة لتحزينها في قاعدة البيانات."""
-    if event.photo: return "photo"
-    if event.video or event.video_note: return "video"
-    if event.sticker: return "sticker"
-    if event.gif: return "gif"
-    if event.fwd_from: return "forward"
-    if event.entities:
-        for entity in event.entities:
-            if isinstance(entity, MessageEntityUrl):
-                return "url"
-    # يمكنك إضافة المزيد من الأنواع هنا مثل audio, voice, document
-    if event.text and len(event.text) > 200: # افتراض أن الكليشة أكثر من 200 حرف
-        return "long_text"
-    if event.text: return "text"
-    return "unknown"
+# --- تم حذف دالة get_message_type والمعالج message_recorder_handler من هنا ---
+# --- لأنه تم نقل وظيفتهما إلى ملف message_logger.py الجديد ---
 
-# --- معالج جديد لتسجيل الرسائل في قاعدة البيانات ---
-@client.on(events.NewMessage(func=lambda e: e.is_group and not e.is_private))
-async def message_recorder_handler(event):
-    """يسجل معرف ونوع كل رسالة جديدة في قاعدة البيانات."""
-    if not await check_activation(event.chat_id):
-        return
-    
-    # تجاهل رسائل البوتات
-    if event.sender and event.sender.bot:
-        return
-
-    msg_type = get_message_type(event)
-    if msg_type == "unknown":
-        return
-
-    try:
-        async with AsyncDBSession() as session:
-            new_msg_record = MessageHistory(
-                chat_id=event.chat_id,
-                msg_id=event.id,
-                msg_type=msg_type
-            )
-            session.add(new_msg_record)
-            await session.commit()
-    except Exception as e:
-        logger.error(f"Failed to record message {event.id} in chat {event.chat_id}: {e}")
 
 # --- دالة المسح المركزية والمحسنة ---
 async def purge_messages_by_type(event, target_types, count_to_delete, command_text):
@@ -100,7 +59,6 @@ async def purge_messages_by_type(event, target_types, count_to_delete, command_t
 
 @client.on(events.NewMessage(pattern=r"^(مسح الصور|مسح صور)(?: (\d+))?$"))
 async def purge_photos(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
@@ -108,7 +66,6 @@ async def purge_photos(event):
 
 @client.on(events.NewMessage(pattern=r"^(مسح الميديا)(?: (\d+))?$"))
 async def purge_media(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
@@ -117,7 +74,6 @@ async def purge_media(event):
 
 @client.on(events.NewMessage(pattern=r"^(مسح الكلايش|مسح كلايش)(?: (\d+))?$"))
 async def purge_long_texts(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
@@ -125,7 +81,6 @@ async def purge_long_texts(event):
 
 @client.on(events.NewMessage(pattern=r"^(مسح الروابط|مسح روابط)(?: (\d+))?$"))
 async def purge_links(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
@@ -133,7 +88,6 @@ async def purge_links(event):
 
 @client.on(events.NewMessage(pattern=r"^(مسح التوجيه|مسح توجيه)(?: (\d+))?$"))
 async def purge_forwards(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 100
@@ -143,7 +97,6 @@ async def purge_forwards(event):
 
 @client.on(events.NewMessage(pattern=r"^مسح (\d+)$"))
 async def delete_messages_by_count(event):
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
     count = int(event.pattern_match.group(1))
@@ -156,7 +109,6 @@ async def delete_messages_by_reply(event):
     if not event.is_reply:
         return await event.reply("⚠️ يرجى الرد على الرسالة التي تريد بدء الحذف منها.")
     
-    # --- تم التعديل هنا ---
     user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.MOD: return
 
