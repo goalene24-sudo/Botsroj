@@ -43,24 +43,24 @@ async def show_leaderboard(event):
 
         for i, user_record in enumerate(top_users_records, 1):
             
+            # =========================================================
+            # | START OF MODIFIED CODE | بداية الكود المعدل            |
+            # =========================================================
             try:
                 user_entity = await client.get_entity(user_record.user_id)
-                user_name = user_entity.first_name
+                # بناء "منشن" قابل للضغط باستخدام اسم المستخدم والـ ID
+                user_display_name = f"[{user_entity.first_name}](tg://user?id={user_record.user_id})"
             except Exception:
-                user_name = "عضو غادر"
+                # في حال لم يتم العثور على المستخدم، نعرض نصاً عادياً
+                user_display_name = "عضو غادر"
+            # =========================================================
+            # | END OF MODIFIED CODE | نهاية الكود المعدل              |
+            # =========================================================
 
-            # =========================================================
-            # | START OF FINAL FIX | بداية الإصلاح النهائي            |
-            # =========================================================
-            # LRM هو محرف خفي يجبر اتجاه النص ليكون من اليسار لليمين
             lrm = "\u200e"
             emoji = rank_emojis.get(i, "")
             
-            # أضفنا LRM ثاني بعد الاسم لضمان ترتيب المحتوى الداخلي للسطر
-            leaderboard_text += f"{lrm}**{i}.** {user_name}{lrm} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
-            # =========================================================
-            # | END OF FINAL FIX | نهاية الإصلاح النهائي              |
-            # =========================================================
+            leaderboard_text += f"{lrm}**{i}.** {user_display_name}{lrm} ~ (`{user_record.msg_count}` رسالة){f' {emoji}' if emoji else ''}\n"
 
         await processing_message.edit(leaderboard_text)
 
