@@ -42,6 +42,6 @@ ALL_MODULES = [
     "plugins.admin_menus",
     "plugins.settings",
     "plugins.leaderboard",
-    "message_logger.py",
-    "analytics.py",
+    "plugins.message_logger",
+    "plugins.analytics",
 ]
