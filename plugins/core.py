@@ -17,8 +17,9 @@ from .utils import (
     MAIN_MENU_MESSAGE, is_admin
 )
 from .admin import get_or_create_chat, get_chat_setting
-# --- (تمت الإضافة هنا) استيراد دالة لوحة الصدارة ---
 from .leaderboard import show_leaderboard
+# --- (تمت الإضافة هنا) استيراد دالة التحليلات ---
+from .analytics import generate_analytics_report
 
 logger = logging.getLogger(__name__)
 WELCOMED_RECENTLY = set()
@@ -199,7 +200,11 @@ async def main_menu_handler(event):
     buttons = await build_main_menu_buttons()
     await event.reply(f"**{MAIN_MENU_MESSAGE}**", buttons=buttons)
 
-# --- (تمت الإضافة هنا) معالج أمر لوحة الصدارة ---
 @client.on(events.NewMessage(pattern="^(ملوك التفاعل|المتفاعلين)$"))
 async def leaderboard_command_handler(event):
     await show_leaderboard(event)
+
+# --- (تمت الإضافة هنا) معالج أمر تحليل المجموعة ---
+@client.on(events.NewMessage(pattern=r"^[!/](تحليل|التحليل)$"))
+async def analytics_command_handler(event):
+    await generate_analytics_report(event)
