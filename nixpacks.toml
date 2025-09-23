@@ -1,3 +1,0 @@
-# nixpacks.toml (الطريقة البديلة)
-[phases.setup]
-nixPkgs = ["ffmpeg"]
