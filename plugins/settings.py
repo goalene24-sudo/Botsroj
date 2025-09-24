@@ -35,6 +35,7 @@ async def get_chat_setting(chat_id, key, default=None):
 
 async def set_chat_setting(chat_id, key, value):
     """تُعيّن إعدادًا معينًا في حقل الإعدادات للمجموعة."""
+    from sqlalchemy.orm.attributes import flag_modified
     async with AsyncDBSession() as session:
         result = await session.execute(select(Chat).where(Chat.id == chat_id))
         chat = result.scalar_one_or_none()
@@ -48,6 +49,7 @@ async def set_chat_setting(chat_id, key, value):
         new_settings = dict(chat.settings) if chat.settings else {}
         new_settings[key] = value
         chat.settings = new_settings # تحديث الإعدادات
+        flag_modified(chat, "settings")
         
         await session.commit()
 
@@ -83,8 +85,8 @@ async def build_settings_menu(chat_id):
 async def settings_hub_handler(event):
     if not await check_activation(event.chat_id): return
     
-    # تم تصحيح استدعاء الدالة وتصحيح الرتبة
-    user_rank = await get_user_rank(event.sender_id, event.chat_id)
+    # --- (تم الإصلاح هنا) إضافة 'event.client' الناقص ---
+    user_rank = await get_user_rank(event.client, event.sender_id, event.chat_id)
     if user_rank < Ranks.ADMIN:
         return await event.answer("🚫 | **هذا القسم مخصص للادمنية فما فوق.**", alert=True)
 
