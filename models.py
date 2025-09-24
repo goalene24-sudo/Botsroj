@@ -61,14 +61,18 @@ class User(Base):
     achievements = Column(JSON, default=[]) 
     inventory = Column(JSON, default={})
     
-    # --- (تمت الإضافة هنا) ---
-    status = Column(String, default="active", nullable=False) # الحالات الممكنة: active, left, kicked
+    status = Column(String, default="active", nullable=False)
     leave_date = Column(DateTime, nullable=True)
+    
+    # --- (تمت الإضافة هنا) ---
+    instagram_username = Column(String, nullable=True)
+    twitter_username = Column(String, nullable=True)
     
     chat = relationship("Chat", back_populates="users")
     
     __table_args__ = (UniqueConstraint('user_id', 'chat_id', name='_user_chat_uc'),)
 
+# --- بقية الكلاسات تبقى كما هي ---
 class Alias(Base):
     __tablename__ = "aliases"
     id = Column(Integer, primary_key=True, autoincrement=True)
