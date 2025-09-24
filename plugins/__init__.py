@@ -45,4 +45,5 @@ ALL_MODULES = [
     "plugins.message_logger",
     "plugins.analytics",
     "plugins.raid_mode",
+    "plugins.afk",
 ]
