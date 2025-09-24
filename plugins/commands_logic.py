@@ -7,6 +7,7 @@ from datetime import timedelta
 from sqlalchemy.future import select
 from sqlalchemy.orm.attributes import flag_modified
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
+from telethon import events
 
 from bot import client
 import config
@@ -33,6 +34,7 @@ async def set_chat_setting(chat_id, key, value):
         new_settings = chat.settings.copy()
         new_settings[key] = value
         chat.settings = new_settings
+        flag_modified(chat, "settings") # Note: flag_modified might not be needed depending on session config
         await session.commit()
 
 # --- قسم منطق الأوامر ---
@@ -181,18 +183,15 @@ async def id_logic(event, command_text):
             user_achievements_keys = user_obj.achievements or []
             inventory = user_obj.inventory or {}
 
-        # --- بداية الكود المعدل ---
         title_line = ""
         vip_item = inventory.get("لقب vip")
         if vip_item and time.time() - vip_item.get("purchase_time", 0) < vip_item.get("duration_days", 0) * 86400:
             title_line = "**🎖️ | من كبار الشخصيات - VIP**"
 
         name_decoration_emoji = ""
-        # تم تصحيح اسم العنصر هنا
         decoration_item = inventory.get("زخرفة") 
         if decoration_item and time.time() - decoration_item.get("purchase_time", 0) < decoration_item.get("duration_days", 0) * 86400:
             name_decoration_emoji = "✨"
-        # --- نهاية الكود المعدل ---
 
         rank_int = await get_user_rank(client, target_user.id, event.chat_id)
         rank_map = {
@@ -212,7 +211,6 @@ async def id_logic(event, command_text):
         caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**\n"
         caption += f"**- آيدي:** `{target_user.id}`\n"
         caption += f"**- يوزرك:** @{target_user.username or 'ما عنده'}\n"
-        # --- تم التعديل هنا لوضع الزخرفة بعد الاسم ---
         caption += f"**- اسمك:** [{target_user.first_name}](tg://user?id={target_user.id}){name_decoration_emoji}\n"
         caption += f"**- رتبتك:** {rank}\n"
         caption += f"**- نبذتك:** {custom_bio}\n"
@@ -222,7 +220,23 @@ async def id_logic(event, command_text):
         caption += f"**- نقاطك:** `{points}`\n"
         if badges_str: 
             caption += f"**- أوسمتك:** {badges_str}\n"
-        caption += f"**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**"
+
+        # =========================================================
+        # | START OF ADDED CODE | بداية الكود المضاف               |
+        # =========================================================
+        socials_text = ""
+        if user_obj.instagram_username:
+            socials_text += f"\n**- انستا:** [{user_obj.instagram_username}](https://instagram.com/{user_obj.instagram_username})"
+        if user_obj.twitter_username:
+            socials_text += f"\n**- تويتر:** [{user_obj.twitter_username}](https://twitter.com/{user_obj.twitter_username})"
+
+        if socials_text:
+            caption += f"**- حساباته:**{socials_text}"
+        # =========================================================
+        # | END OF ADDED CODE | نهاية الكود المضاف                 |
+        # =========================================================
+            
+        caption += f"\n**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**"
         
         pfp = None
         if id_photo_enabled: 
