@@ -1,4 +1,3 @@
-# plugins/media_search.py
 import os
 import random
 import asyncio
@@ -9,6 +8,9 @@ from bot import client
 import config  # --- (مهم) استيراد ملف الإعدادات ---
 from .utils import check_activation
 import yt_dlp
+import logging # <-- تمت الإضافة هنا
+
+logger = logging.getLogger(__name__) # <-- تمت الإضافة هنا
 
 # --- (مُعدل بالكامل) دالة البحث عن الصور باستخدام Google API ---
 @client.on(events.NewMessage(pattern=r"^صورة(?: (\d+))? (.+)"))
@@ -91,8 +93,13 @@ async def youtube_search_handler(event):
         return await msg.edit("**❌ | خطأ إعداد!**\n\n**ملف `cookies.txt` غير موجود. يرجى رفعه إلى ملفات البوت لحل مشكلة التحميل من يوتيوب.**")
 
     try:
+        # =========================================================
+        # | START OF MODIFIED CODE | بداية الكود المعدل            |
+        # =========================================================
         ydl_opts_search = {
-            'quiet': True,
+            'quiet': True,       # <-- لجعل yt-dlp هادئة
+            'noprogress': True,  # <-- لإخفاء شريط التقدم
+            'logger': logger,    # <-- لتوجيه رسائل yt-dlp إلى سجلنا الخاص
             'default_search': 'ytsearch1',
             'extract_flat': 'in_playlist',
             'cookiefile': cookies_file
@@ -119,13 +126,18 @@ async def youtube_search_handler(event):
             'format': 'bestaudio/best',
             'outtmpl': 'downloads/audio',
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            'quiet': True,
+            'quiet': True,       # <-- لجعل yt-dlp هادئة
+            'noprogress': True,  # <-- لإخفاء شريط التقدم
+            'logger': logger,    # <-- لتوجيه رسائل yt-dlp إلى سجلنا الخاص
             'noplaylist': True,
             'cookiefile': cookies_file
         }
 
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.download([video_url])
+        # =========================================================
+        # | END OF MODIFIED CODE | نهاية الكود المعدل              |
+        # =========================================================
         
         if not os.path.exists(output_path):
             return await msg.edit("**❌ | فشلت عملية معالجة الملف بعد تحميله.**")
