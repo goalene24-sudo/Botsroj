@@ -1,6 +1,6 @@
 # Dockerfile
 # استخدام صورة بايثون رسمية وخفيفة
-FROM python:3.11-slim
+FROM ghcr.io/docker/library/python:3.11-slim
 
 # تعيين مجلد العمل داخل الحاوية
 WORKDIR /app
