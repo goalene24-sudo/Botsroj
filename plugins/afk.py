@@ -11,15 +11,16 @@ logger = logging.getLogger(__name__)
 # قاموس لتخزين حالة المستخدمين غير المتواجدين
 AFK_USERS = {}
 
-# --- معالج أمر !afk ---
-@client.on(events.NewMessage(pattern=r"^[!/]afk(?:$| (.+))"))
+# --- (تم التعديل هنا) تغيير نمط الأمر ---
+@client.on(events.NewMessage(pattern=r"^[!/]?((حالتي)|(تعيين حالتي)) (.+)"))
 async def set_afk_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
 
     chat_id = event.chat_id
     user_id = event.sender_id
-    reason = event.pattern_match.group(1)
+    # السبب الآن هو المجموعة الرابعة في النمط
+    reason = event.pattern_match.group(4)
 
     if chat_id not in AFK_USERS:
         AFK_USERS[chat_id] = {}
@@ -38,8 +39,8 @@ async def afk_checker_handler(event):
     if not await check_activation(event.chat_id):
         return
         
-    # --- (تمت الإضافة هنا) تجاهل أمر afk نفسه ---
-    if event.text and event.text.lower().startswith(("!afk", "/afk")):
+    # --- (تم التعديل هنا) تجاهل أوامر الحالة الجديدة ---
+    if event.text and event.text.lower().startswith(("!حالتي", "/حالتي", "تعيين حالتي")):
         return
 
     chat_id = event.chat_id
@@ -68,14 +69,12 @@ async def afk_checker_handler(event):
     mentioned_users_ids = []
     if event.message.entities:
         for entity, text in event.get_entities_text():
-            # Corresponds to a plain @username mention
             if entity.type == 'mention':
                 try:
                     mentioned_user = await client.get_entity(text)
                     mentioned_users_ids.append(mentioned_user.id)
                 except Exception:
                     pass
-            # Corresponds to a mention via a user's first name (a link)
             elif entity.type == 'mention_user':
                 mentioned_users_ids.append(entity.user_id)
 
