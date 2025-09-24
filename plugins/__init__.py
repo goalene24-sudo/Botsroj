@@ -46,4 +46,5 @@ ALL_MODULES = [
     "plugins.analytics",
     "plugins.raid_mode",
     "plugins.afk",
+    "plugins.socials",
 ]
