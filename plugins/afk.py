@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 # قاموس لتخزين حالة المستخدمين غير المتواجدين
 AFK_USERS = {}
 
-# --- (تم التعديل هنا) تغيير نمط الأمر ---
 @client.on(events.NewMessage(pattern=r"^[!/]?((حالتي)|(تعيين حالتي)) (.+)"))
 async def set_afk_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
@@ -19,7 +18,6 @@ async def set_afk_handler(event):
 
     chat_id = event.chat_id
     user_id = event.sender_id
-    # السبب الآن هو المجموعة الرابعة في النمط
     reason = event.pattern_match.group(4)
 
     if chat_id not in AFK_USERS:
@@ -39,8 +37,8 @@ async def afk_checker_handler(event):
     if not await check_activation(event.chat_id):
         return
         
-    # --- (تم التعديل هنا) تجاهل أوامر الحالة الجديدة ---
-    if event.text and event.text.lower().startswith(("!حالتي", "/حالتي", "تعيين حالتي")):
+    # --- (تم التعديل هنا) إضافة "حالتي" إلى قائمة التجاهل ---
+    if event.text and event.text.lower().startswith(("!حالتي", "/حالتي", "تعيين حالتي", "حالتي")):
         return
 
     chat_id = event.chat_id
