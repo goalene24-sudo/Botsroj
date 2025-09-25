@@ -21,7 +21,7 @@ def clean_username(username: str) -> str:
     return None
 
 
-@client.on(events.NewMessage(pattern=r"^[!/]ربط_(انستا|تويتر) (.+)"))
+@client.on(events.NewMessage(pattern=r"^ربط_(انستا|تويتر) (.+)"))
 async def link_socials_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
@@ -50,3 +50,43 @@ async def link_socials_handler(event):
         await session.commit()
 
     await event.reply(f"**{icon} | تم ربط حسابك في {platform_name} بنجاح.**\n**اسم المستخدم:** `{username}`")
+
+# =========================================================
+# | START OF NEW CODE | بداية الكود الجديد لأمر الحذف      |
+# =========================================================
+@client.on(events.NewMessage(pattern=r"^حذف_حساب (انستا|تويتر)$"))
+async def unlink_socials_handler(event):
+    if event.is_private or not await check_activation(event.chat_id):
+        return
+
+    platform = event.pattern_match.group(1)
+
+    async with AsyncDBSession() as session:
+        user_result = await session.execute(
+            select(User).where(User.chat_id == event.chat_id, User.user_id == event.sender_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if not user:
+            # هذا الشرط احتياطي، لأن المستخدم يتم إنشاؤه تلقائياً
+            return await event.reply("**حدث خطأ، لم يتم العثور على ملفك الشخصي.**")
+
+        if platform == "انستا":
+            if not user.instagram_username:
+                return await event.reply("**⚠️ | لم تقم بربط حساب انستغرام أصلاً.**")
+            user.instagram_username = None
+            platform_name = "انستغرام"
+            icon = "📸"
+        else: # تويتر
+            if not user.twitter_username:
+                return await event.reply("**⚠️ | لم تقم بربط حساب تويتر أصلاً.**")
+            user.twitter_username = None
+            platform_name = "تويتر"
+            icon = "🐦"
+            
+        await session.commit()
+
+    await event.reply(f"**🗑️ | تم حذف ربط حسابك في {platform_name} بنجاح.**")
+# =========================================================
+# | END OF NEW CODE | نهاية الكود الجديد                   |
+# =========================================================
