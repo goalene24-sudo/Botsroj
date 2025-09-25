@@ -37,7 +37,6 @@ async def afk_checker_handler(event):
     if not await check_activation(event.chat_id):
         return
         
-    # --- (تم التعديل هنا) إضافة "حالتي" إلى قائمة التجاهل ---
     if event.text and event.text.lower().startswith(("!حالتي", "/حالتي", "تعيين حالتي", "حالتي")):
         return
 
@@ -67,6 +66,11 @@ async def afk_checker_handler(event):
     mentioned_users_ids = []
     if event.message.entities:
         for entity, text in event.get_entities_text():
+            
+            # --- (تمت الإضافة هنا) فحص أمان للتأكد من أن التنسيق هو منشن ---
+            if not hasattr(entity, 'type'):
+                continue
+
             if entity.type == 'mention':
                 try:
                     mentioned_user = await client.get_entity(text)
