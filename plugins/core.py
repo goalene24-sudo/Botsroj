@@ -15,13 +15,12 @@ from models import Chat, Vip, BotAdmin, Creator, SecondaryDev, User
 # --- استيراد الدوال من أماكنها الصحيحة ---
 from .utils import (
     check_activation, is_command_enabled, build_main_menu_buttons, 
-    MAIN_MENU_MESSAGE, is_admin
+    MAIN_MENU_MESSAGE, is_admin, get_or_create_user
 )
 from .admin import get_or_create_chat, get_chat_setting
 from .leaderboard import show_leaderboard
 from .analytics import generate_analytics_report
 from .protection_settings import lock_unlock_all_logic
-# --- (تمت الإضافة هنا) استيراد دوال وضع الحماية ---
 from .raid_mode import is_raid_mode_active, handle_raid_mode_join
 
 
@@ -108,14 +107,11 @@ async def chat_action_handler(event):
             logger.error(f"Error during data deletion for chat {chat_id}: {e}")
         return
 
-    # --- (تم التعديل هنا) ---
     # عند انضمام عضو جديد
     elif event.user_joined and event.user_id != me.id:
-        # أولاً، التحقق من وضع الحماية
         if await is_raid_mode_active(event.chat_id):
             return await handle_raid_mode_join(event)
 
-        # إذا كان وضع الحماية غير فعال، استمر في الترحيب العادي
         if not await check_activation(event.chat_id): return
         if not await is_command_enabled(event.chat_id, "welcome_enabled"): return
 
@@ -232,3 +228,37 @@ async def analytics_command_handler(event):
 async def lock_unlock_all_command_handler(event):
     action = event.raw_text
     await lock_unlock_all_logic(event, action)
+
+# ===================================================================
+# | START OF NEW CODE | بداية الكود الجديد لعداد السحكات            |
+# ===================================================================
+@client.on(events.MessageEdited(func=lambda e: e.is_group and not e.is_private))
+async def edited_message_handler(event):
+    """
+    يستمع هذا المعالج لأي رسالة يتم تعديلها ويزيد عداد السحكات للمستخدم.
+    """
+    # لا تقم بالعد في المجموعات غير المفعلة
+    if not await check_activation(event.chat_id):
+        return
+
+    # تجاهل تعديلات البوتات
+    try:
+        sender = await event.get_sender()
+        if sender and sender.bot:
+            return
+    except Exception:
+        return # تجاهل إذا لم يتم العثور على المرسل
+
+    try:
+        async with AsyncDBSession() as session:
+            # جلب المستخدم أو إنشاؤه
+            user = await get_or_create_user(session, event.chat_id, event.sender_id)
+            # زيادة عداد السحكات
+            user.sahaqat = (user.sahaqat or 0) + 1
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to update sahaqat for user {event.sender_id} in chat {event.chat_id}: {e}")
+
+# ===================================================================
+# | END OF NEW CODE | نهاية الكود الجديد                             |
+# ===================================================================
