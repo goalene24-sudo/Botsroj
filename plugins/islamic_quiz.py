@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # قاموس لتخزين الكويزات النشطة حالياً
 CURRENT_ISLAMIC_QUIZZES = {}
 
-@client.on(events.NewMessage(pattern=r"^[!/](كويز اسلامي|كويز ديني)$"))
+@client.on(events.NewMessage(pattern=r"^(كويز اسلامي|كويز ديني)$"))
 async def islamic_quiz_handler(event):
     if event.is_private or not await check_activation(event.chat_id):
         return
