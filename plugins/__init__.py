@@ -47,4 +47,6 @@ ALL_MODULES = [
     "plugins.raid_mode",
     "plugins.afk",
     "plugins.socials",
+    "plugins.islamic_quiz_data",
+    "plugins.islamic_quiz",
 ]
