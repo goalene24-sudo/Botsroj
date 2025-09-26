@@ -10,5 +10,5 @@ google-generativeai
 yt-dlp
 aiohttp
 SQLAlchemy
-aiosqlite
 telethon
+asyncpg
