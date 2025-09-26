@@ -3,17 +3,32 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 
-# --- إعدادات قاعدة البيانات ---
-DB_NAME = "surooj.db"
-# استخدام محرك aiosqlite للعمل الغير متزامن
-DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
+# ===================================================================
+# | START OF MODIFIED CODE | بداية الكود المعدل                      |
+# ===================================================================
 
-# --- تهيئة SQLAlchemy (بطريقة غير متزامنة) ---
-# (تم التعديل) تغيير echo إلى False لإيقاف طباعة كل استعلام
-engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
+# --- البحث عن رابط قاعدة البيانات الخارجية (من Koyeb) ---
+db_url = os.environ.get("DATABASE_URL")
+
+# التحقق إذا كان الرابط موجوداً وخاص بـ PostgreSQL
+if db_url and db_url.startswith("postgresql://"):
+    # تحويل الرابط ليتوافق مع مكتبة asyncpg
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    print(">> تم العثور على قاعدة بيانات PostgreSQL. جاري الاتصال... <<")
+    # إنشاء المحرك بدون poolclass لأنه غير ضروري مع PostgreSQL في هذه الحالة
+    engine = create_async_engine(db_url, echo=False)
+else:
+    # --- في حال عدم وجود رابط خارجي، العودة لاستخدام الملف المحلي SQLite ---
+    print(">> لم يتم العثور على قاعدة بيانات خارجية. سيتم استخدام ملف SQLite المحلي. <<")
+    DB_NAME = "surooj.db"
+    DB_URI = f"sqlite+aiosqlite:///{DB_NAME}?check_same_thread=False"
+    engine = create_async_engine(DB_URI, echo=False, poolclass=NullPool)
+
+# ===================================================================
+# | END OF MODIFIED CODE | نهاية الكود المعدل                        |
+# ===================================================================
 
 # إنشاء مُصنِّع جلسات غير متزامن
-# expire_on_commit=False مهم للتعامل مع البوتات لتجنب أخطاء الوصول للكائنات بعد إغلاق الجلسة
 AsyncDBSession = async_sessionmaker(
     bind=engine, expire_on_commit=False, class_=AsyncSession
 )
