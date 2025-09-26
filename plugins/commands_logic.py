@@ -5,13 +5,15 @@ import random
 import asyncio
 from datetime import timedelta
 from sqlalchemy.future import select
+from sqlalchemy import func # <-- تمت الإضافة هنا
 from sqlalchemy.orm.attributes import flag_modified
 from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin, ChannelParticipantsAdmins
 from telethon import events
 
 from bot import client
 import config
-from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled
+# --- (تم التعديل هنا) استيراد الدالة الجديدة ---
+from .utils import has_bot_permission, get_user_rank, Ranks, get_rank_name, get_or_create_user, is_command_enabled, get_dynamic_tafaul
 from database import AsyncDBSession
 from models import Chat, BotAdmin, Creator, Vip, User, SecondaryDev
 from .achievements import ACHIEVEMENTS
@@ -34,7 +36,7 @@ async def set_chat_setting(chat_id, key, value):
         new_settings = chat.settings.copy()
         new_settings[key] = value
         chat.settings = new_settings
-        flag_modified(chat, "settings") # Note: flag_modified might not be needed depending on session config
+        flag_modified(chat, "settings")
         await session.commit()
 
 # --- قسم منطق الأوامر ---
@@ -147,7 +149,7 @@ async def my_rank_logic(event, command_text):
         await event.reply("**صارت مشكلة وماعرف شنو السبب 😢، حاول مرة لخ.**")
 
 RANDOM_HEADERS = ["شــوف الحــلو؟ 🧐", "تــعال اشــوفك 🫣", "بــاوع الجــمال 🫠", "تــحبني؟ 🤔", "احــبك ❤️", "هــايروحي 🥹"]
-RANDOM_TAFA3UL = ["سايق مخده 🛌", "ياكل تبن 🐐", "نايم بالكروب 😴", "متفاعل نار 🔥", "أسطورة المجموعة 👑", "مدري شيسوي 🤷‍♂️", "يخابر حبيبتة 👩‍❤️‍💋‍👨", "زعطوط الكروب 👶"]
+# --- (تم حذف القائمة العشوائية القديمة) ---
 
 async def id_logic(event, command_text):
     try:
@@ -175,6 +177,11 @@ async def id_logic(event, command_text):
         async with AsyncDBSession() as session:
             user_obj = await get_or_create_user(session, event.chat_id, target_user.id)
             chat = await get_or_create_chat(session, event.chat_id)
+            
+            # --- (تم التعديل هنا) جلب الإحصائيات اللازمة ---
+            total_members = await session.scalar(select(func.count(User.id)).where(User.chat_id == event.chat_id))
+            total_msgs = chat.total_msgs or 0
+            
             id_photo_enabled = (chat.settings or {}).get("show_id_photo", True)
             msg_count = user_obj.msg_count or 0
             points = user_obj.points or 0
@@ -203,7 +210,8 @@ async def id_logic(event, command_text):
         badges_str = "".join(ACHIEVEMENTS[key]["icon"] for key in user_achievements_keys if key in ACHIEVEMENTS)
         
         header = random.choice(RANDOM_HEADERS)
-        tafa3ul = random.choice(RANDOM_TAFA3UL)
+        # --- (تم التعديل هنا) استدعاء الدالة الذكية بدلاً من العشوائية ---
+        tafa3ul = get_dynamic_tafaul(msg_count, total_msgs, total_members)
         
         caption = f"**{header}**\n\n"
         if title_line:
@@ -221,9 +229,6 @@ async def id_logic(event, command_text):
         if badges_str: 
             caption += f"**- أوسمتك:** {badges_str}\n"
 
-        # =========================================================
-        # | START OF ADDED CODE | بداية الكود المضاف               |
-        # =========================================================
         socials_text = ""
         if user_obj.instagram_username:
             socials_text += f"\n**- انستا:** [{user_obj.instagram_username}](https://instagram.com/{user_obj.instagram_username})"
@@ -232,9 +237,6 @@ async def id_logic(event, command_text):
 
         if socials_text:
             caption += f"**- حساباته:**{socials_text}"
-        # =========================================================
-        # | END OF ADDED CODE | نهاية الكود المضاف                 |
-        # =========================================================
             
         caption += f"\n**⚜️ ᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐᚐ ⚜️**"
         
