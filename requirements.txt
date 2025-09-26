@@ -11,4 +11,5 @@ yt-dlp
 aiohttp
 SQLAlchemy
 telethon
+aiosqlite
 asyncpg
