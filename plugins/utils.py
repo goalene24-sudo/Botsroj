@@ -273,3 +273,37 @@ def check_xo_winner(board):
     for a, b, c in lines:
         if board[a] == board[b] == board[c] != '-': return board[a]
     return 'draw' if '-' not in board else None
+#تم وضع داله الجديده هنا 
+import random
+
+def get_dynamic_tafaul(user_msg_count, total_group_msgs, total_group_members):
+    """
+    تقوم بحساب حالة تفاعل ديناميكية للمستخدم ثم تعطيها وصفاً فكاهياً.
+    """
+    # قوائم الحالات الفكاهية لكل مستوى
+    TAFAUL_LOW = ["سايق مخده🛌", "نايم بالكروب😴", "ياكل تبن🐐", "زعطوط الكروب👶"]
+    TAFAUL_MID = ["مدري شيسوي 🤷‍♂️", "يخابر حبيبتة 👩‍❤️‍💋‍👨"]
+    TAFAUL_HIGH = ["متفاعل نار🔥", "اسطوره المجموعه👑"]
+
+    # التعامل مع المجموعات الجديدة أو الأعضاء الجدد جداً
+    if not total_group_members or not total_group_msgs:
+        return "عضو جديد 🐣"
+    if user_msg_count is None or user_msg_count < 2:
+        return "عضو جديد 🐣"
+
+    # حساب متوسط الرسائل لكل عضو
+    average_msgs_per_member = total_group_msgs / total_group_members
+
+    # حساب نسبة نشاط المستخدم مقارنة بالمتوسط
+    try:
+        activity_ratio = user_msg_count / average_msgs_per_member
+    except ZeroDivisionError:
+        return random.choice(TAFAUL_MID) # حالة افتراضية إذا كان المتوسط صفراً
+
+    # تحديد المستوى واختيار حالة فكاهية عشوائية منه
+    if activity_ratio < 0.5: # إذا كان تفاعله أقل من 50% من المتوسط (ضعيف)
+        return random.choice(TAFAUL_LOW)
+    elif activity_ratio < 2.0: # إذا كان تفاعله بين 50% و 200% من المتوسط (طبيعي)
+        return random.choice(TAFAUL_MID)
+    else: # إذا كان تفاعله أكثر من ضعف المتوسط (عالي)
+        return random.choice(TAFAUL_HIGH)
