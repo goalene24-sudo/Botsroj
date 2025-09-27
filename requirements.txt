@@ -13,3 +13,4 @@ SQLAlchemy
 telethon
 aiosqlite
 asyncpg
+Flask
