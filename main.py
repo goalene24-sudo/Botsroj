@@ -3,9 +3,11 @@ import importlib
 import sys
 from datetime import datetime
 import asyncio
+# --- (جديد) استيراد المكتبات اللازمة للخادم الوهمي ---
+import threading
+import http.server
+import socketserver
 import os
-from threading import Thread
-from flask import Flask
 
 from plugins.events import start_dhikr_task
 
@@ -23,23 +25,28 @@ from database import init_db
 # --- الإعدادات الأساسية ---
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s', level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
-
-# --- تعديل مستوى تسجيل sqlalchemy لتقليل الرسائل ---
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
-
-# --- (جديد) إعداد خادم الويب المصغر لخطة Koyeb المجانية ---
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return "Bot is running successfully!"
-
-def run_web_server():
-    # Koyeb تقوم بتعيين متغير PORT تلقائيًا
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
-
+# =========================================================
+# | START OF NEW CODE | بداية الكود الجديد (الباب الوهمي)   |
+# =========================================================
+def start_health_check_server():
+    """
+    تقوم ببدء خادم ويب بسيط جداً في الخلفية للرد على فحص الصحة الخاص بـ Koyeb.
+    """
+    # Koyeb توفر البورت في متغير البيئة PORT، وإذا لم يكن موجوداً نستخدم 8000
+    PORT = int(os.environ.get("PORT", 8000))
+    Handler = http.server.SimpleHTTPRequestHandler
+    
+    try:
+        with socketserver.TCPServer(("", PORT), Handler) as httpd:
+            LOGGER.info(f"✅ | الخادم الوهمي (Health Check) يعمل على البورت {PORT}")
+            httpd.serve_forever()
+    except Exception as e:
+        LOGGER.error(f"!! فشل تشغيل الخادم الوهمي: {e}", exc_info=True)
+# =========================================================
+# | END OF NEW CODE | نهاية الكود الجديد                    |
+# =========================================================
 
 # --- تحميل كل الإضافات ---
 LOGGER.info(">> يتم الآن تحميل كل الوحدات... <<")
@@ -54,6 +61,11 @@ for module in ALL_MODULES:
 # --- دالة التشغيل الرئيسية ---
 async def main():
     try:
+        # --- (جديد) بدء تشغيل الخادم الوهمي في thread منفصل ---
+        LOGGER.info(">> يتم الآن بدء تشغيل خادم فحص الصحة في الخلفية... <<")
+        health_thread = threading.Thread(target=start_health_check_server, daemon=True)
+        health_thread.start()
+
         # --- تهيئة قاعدة البيانات وإنشاء الجداول ---
         LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
         await init_db()
@@ -63,7 +75,7 @@ async def main():
         me = await client.get_me()
         LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
         
-        # --- (جديد) بدء مهمة الأذكار الدورية في الخلفية ---
+        # --- بدء مهمة الأذكار الدورية في الخلفية ---
         LOGGER.info(">> يتم الآن بدء مهمة الأذكار الدورية... <<")
         asyncio.create_task(start_dhikr_task())
         
@@ -75,12 +87,4 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    # --- (جديد) بدء تشغيل خادم الويب في خيط منفصل ---
-    LOGGER.info(">> يتم الآن بدء تشغيل خادم الويب (Health Check)... <<")
-    web_thread = Thread(target=run_web_server)
-    web_thread.daemon = True
-    web_thread.start()
-    LOGGER.info(">> خادم الويب يعمل الآن في الخلفية. <<")
-
-    # --- بدء تشغيل البوت نفسه ---
     client.loop.run_until_complete(main())
