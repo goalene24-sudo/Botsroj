@@ -2,8 +2,12 @@ import logging
 import importlib
 import sys
 from datetime import datetime
-import asyncio  # <-- تمت الإضافة
-from plugins.events import start_dhikr_task  # <-- تمت الإضافة
+import asyncio
+import os
+from threading import Thread
+from flask import Flask
+
+from plugins.events import start_dhikr_task
 
 # --- علامة اختبار حاسمة ---
 print("="*50)
@@ -22,6 +26,19 @@ LOGGER = logging.getLogger(__name__)
 
 # --- تعديل مستوى تسجيل sqlalchemy لتقليل الرسائل ---
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
+
+
+# --- (جديد) إعداد خادم الويب المصغر لخطة Koyeb المجانية ---
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot is running successfully!"
+
+def run_web_server():
+    # Koyeb تقوم بتعيين متغير PORT تلقائيًا
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
 
 
 # --- تحميل كل الإضافات ---
@@ -58,4 +75,12 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
+    # --- (جديد) بدء تشغيل خادم الويب في خيط منفصل ---
+    LOGGER.info(">> يتم الآن بدء تشغيل خادم الويب (Health Check)... <<")
+    web_thread = Thread(target=run_web_server)
+    web_thread.daemon = True
+    web_thread.start()
+    LOGGER.info(">> خادم الويب يعمل الآن في الخلفية. <<")
+
+    # --- بدء تشغيل البوت نفسه ---
     client.loop.run_until_complete(main())
