@@ -9,7 +9,7 @@ import http.server
 import socketserver
 import os
 
-# --- (تم التعديل هنا) استيراد المهمة الجديدة وحذف القديمة ---
+# --- استيراد المهمة الجديدة ---
 from plugins.auto_messages import scheduler_task
 
 # --- علامة اختبار حاسمة ---
@@ -33,9 +33,9 @@ logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 # =========================================================
 def start_health_check_server():
     """
-    تقوم ببدء خادم ويب بسيط جداً في الخلفية للرد على فحص الصحة الخاص بـ Koyeb.
+    تقوم ببدء خادم ويب بسيط جداً في الخلفية للرد على فحص الصحة الخاص بالمنصات.
     """
-    # Koyeb توفر البورت في متغير البيئة PORT، وإذا لم يكن موجوداً نستخدم 8000
+    # المنصات توفر البورت في متغير البيئة PORT، وإذا لم يكن موجوداً نستخدم 8000
     PORT = int(os.environ.get("PORT", 8000))
     Handler = http.server.SimpleHTTPRequestHandler
     
@@ -72,18 +72,17 @@ async def main():
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        # --- (تم التعديل هنا) بدء تشغيل البوت باستخدام async with ---
-        async with client:
-            await client.start()
-            me = await client.get_me()
-            LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
-            
-            # --- (تم التعديل هنا) بدء المهمة الدورية الجديدة ---
-            LOGGER.info(">> يتم الآن بدء مهمة الرسائل الدورية (الجدولة)... <<")
-            asyncio.create_task(scheduler_task(client))
-            
-            LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
-            await client.run_until_disconnected()
+        # --- بدء تشغيل البوت والاتصال ---
+        await client.start(bot_token=config.BOT_TOKEN)
+        me = await client.get_me()
+        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
+        
+        # --- (تم التعديل هنا) بدء المهمة الدورية الجديدة ---
+        LOGGER.info(">> يتم الآن بدء مهمة الرسائل الدورية (الجدولة)... <<")
+        asyncio.create_task(scheduler_task())
+        
+        LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
+        await client.run_until_disconnected()
 
     except Exception as e:
         LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
@@ -91,5 +90,5 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    # تم تبسيط هذا الجزء ليعتمد على async with في pyrogram الحديثة
-    asyncio.run(main())
+    # هذا السطر يشغل الحلقة الرئيسية غير المتزامنة
+    client.loop.run_until_complete(main())
