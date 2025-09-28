@@ -7,7 +7,9 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors.rpcerrorlist import ChatWriteForbiddenError
 
 # استيرادات محلية
-from bot import client, OWNER_ID
+# --- (تم التعديل هنا) ---
+from bot import client
+from config import OWNER_ID
 from database import AsyncDBSession
 from models import Chat
 
@@ -117,7 +119,7 @@ async def scheduler_task():
                     random_dhikr = random.choice(DHIKR_MESSAGES)
                     for chat_id in dhikr_chat_ids:
                         try:
-                            await client.send_message(chat_id, random_dhikr)
+                            await client.send_message(chat_id, f"**{random_dhikr}**")
                             await asyncio.sleep(0.5)
                         except (ChatWriteForbiddenError, ValueError):
                              print(f"[Scheduler] لا يمكن الإرسال إلى {chat_id} (محظور أو لم يعد موجودًا).")
@@ -136,7 +138,7 @@ async def scheduler_task():
                     random_quote = random.choice(QUOTES_MESSAGES)
                     for chat_id in quotes_chat_ids:
                         try:
-                            await client.send_message(chat_id, random_quote)
+                            await client.send_message(chat_id, f"**{random_quote}**")
                             await asyncio.sleep(0.5)
                         except (ChatWriteForbiddenError, ValueError):
                              print(f"[Scheduler] لا يمكن الإرسال إلى {chat_id} (محظور أو لم يعد موجودًا).")
