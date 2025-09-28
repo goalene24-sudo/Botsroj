@@ -7,9 +7,9 @@ from telethon.tl.types import ChannelParticipantCreator, ChannelParticipantAdmin
 from telethon.errors.rpcerrorlist import ChatWriteForbiddenError
 
 # استيرادات محلية
-# --- (تم التعديل هنا) ---
+# --- (تم التعديل النهائي هنا) ---
 from bot import client
-from config import OWNER_ID
+from config import SUDO_USERS
 from database import AsyncDBSession
 from models import Chat
 
@@ -32,7 +32,8 @@ QUOTES_MESSAGES = [
 # --- دالة للتحقق من صلاحيات المشرف ---
 
 async def is_admin_or_owner(event) -> bool:
-    if event.sender_id == OWNER_ID:
+    # --- (تم التعديل النهائي هنا) ---
+    if event.sender_id in SUDO_USERS:
         return True
     try:
         participant = await client.get_participant(event.chat_id, event.sender_id)
