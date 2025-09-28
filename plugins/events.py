@@ -21,7 +21,6 @@ from .utils import (
     get_global_setting
 )
 from .default_replies import DEFAULT_REPLIES
-from .dhikr_data import DHIKR_LIST
 from .aliases import FIXED_ALIASES
 from .commands_logic import (
     set_rank_logic, 
@@ -256,25 +255,3 @@ async def handle_chat_action(event):
             except Exception as e:
                 logger.error(f"خطأ في معالج انضمام الأعضاء: {e}", exc_info=True)
                 await session.rollback()
-
-async def start_dhikr_task():
-    while True:
-        await asyncio.sleep(3600)
-        try:
-            async with AsyncDBSession() as session:
-                result = await session.execute(select(Chat).where(Chat.is_active == True))
-                active_chats = result.scalars().all()
-            if not active_chats:
-                logger.info("مهمة الأذكار: لم يتم العثور على مجموعات مفعلة.")
-                continue
-            dhikr_message = random.choice(DHIKR_LIST)
-            for chat in active_chats:
-                try:
-                    await client.send_message(chat.id, f"**{dhikr_message}**")
-                    await asyncio.sleep(1)
-                except ChatWriteForbiddenError:
-                    logger.warning(f"مهمة الأذكار: لا يمكن الإرسال إلى المجموعة {chat.id}.")
-                except Exception as e:
-                    logger.error(f"مهمة الأذكار: فشل الإرسال إلى المجموعة {chat.id}: {e}")
-        except Exception as e:
-            logger.error(f"مهمة الأذكار: حدث خطأ في الحلقة الرئيسية: {e}")
