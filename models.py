@@ -26,6 +26,11 @@ class Chat(Base):
     
     id = Column(BigInteger, primary_key=True, index=True)
     is_active = Column(Boolean, default=False, nullable=False)
+    
+    # --- (تمت الإضافة هنا) إعدادات الرسائل التلقائية ---
+    dhikr_enabled = Column(Boolean, default=False, nullable=False)
+    quotes_enabled = Column(Boolean, default=False, nullable=False)
+    
     total_msgs = Column(Integer, default=0)
     
     settings = Column(JSON, default={})
