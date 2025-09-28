@@ -9,7 +9,8 @@ import http.server
 import socketserver
 import os
 
-from plugins.events import start_dhikr_task
+# --- (تم التعديل هنا) استيراد المهمة الجديدة وحذف القديمة ---
+from plugins.auto_messages import scheduler_task
 
 # --- علامة اختبار حاسمة ---
 print("="*50)
@@ -45,7 +46,7 @@ def start_health_check_server():
     except Exception as e:
         LOGGER.error(f"!! فشل تشغيل الخادم الوهمي: {e}", exc_info=True)
 # =========================================================
-# | END OF NEW CODE | نهاية الكود الجديد                    |
+# | END OF NEW CODE | نهاية الكود الجديد                      |
 # =========================================================
 
 # --- تحميل كل الإضافات ---
@@ -71,20 +72,24 @@ async def main():
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        await client.start(bot_token=config.BOT_TOKEN)
-        me = await client.get_me()
-        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
-        
-        # --- بدء مهمة الأذكار الدورية في الخلفية ---
-        LOGGER.info(">> يتم الآن بدء مهمة الأذكار الدورية... <<")
-        asyncio.create_task(start_dhikr_task())
-        
-        LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
-        await client.run_until_disconnected()
+        # --- (تم التعديل هنا) بدء تشغيل البوت باستخدام async with ---
+        async with client:
+            await client.start()
+            me = await client.get_me()
+            LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
+            
+            # --- (تم التعديل هنا) بدء المهمة الدورية الجديدة ---
+            LOGGER.info(">> يتم الآن بدء مهمة الرسائل الدورية (الجدولة)... <<")
+            asyncio.create_task(scheduler_task(client))
+            
+            LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
+            await client.run_until_disconnected()
+
     except Exception as e:
         LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
         sys.exit(1)
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    client.loop.run_until_complete(main())
+    # تم تبسيط هذا الجزء ليعتمد على async with في pyrogram الحديثة
+    asyncio.run(main())
