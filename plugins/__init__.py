@@ -3,6 +3,7 @@ ALL_MODULES = [
     "plugins.utils",
     "plugins.core",
     "plugins.events",
+    "plugins.auto_messages", # <-- تمت الإضافة هنا
     "plugins.callbacks",
     "plugins.interactive_callbacks",
     "plugins.cleaning",
