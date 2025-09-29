@@ -5,6 +5,7 @@ import os
 import asyncio
 import secrets
 from aiohttp import web
+import aiohttp # <-- التأكد من استيراد المكتبة للطلبات اليدوية
 
 # استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
@@ -59,8 +60,6 @@ async def main():
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        # **(تم التعديل هنا)**
-        # تم حذف 'update_workers=0' ليتوافق مع نسختك من Telethon
         await client.start(bot_token=config.BOT_TOKEN)
         me = await client.get_me()
         
@@ -74,12 +73,23 @@ async def main():
                 LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN أو RAILWAY_SERVICE_NAME.")
                 sys.exit(1)
         
+        # المسار يجب أن يكون فريداً لمنع الوصول غير المصرح به
         webhook_path = f"/{config.BOT_TOKEN}"
-        webhook_url = f"https"
-        
-        LOGGER.info(f">> يتم الآن إعداد رابط الويب هوك: {webhook_url} <<")
-        await client.set_bot_webhook(url=webhook_url, secret_token=SECRET_TOKEN)
-        LOGGER.info(">> تم إعداد رابط الويب هوك بنجاح. <<")
+        webhook_url = f"https://{public_domain}{webhook_path}"
+
+        # **(تم التعديل هنا)**
+        # العودة إلى طريقة إعداد الويب هوك اليدوية باستخدام aiohttp
+        LOGGER.info(f">> يتم الآن إعداد Webhook عبر طلب مباشر إلى تيليجرام... <<")
+        api_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/setWebhook"
+        params = {'url': webhook_url, 'secret_token': SECRET_TOKEN}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, data=params) as response:
+                result = await response.json()
+                if result.get("ok"):
+                    LOGGER.info(f">> تم إعداد Webhook بنجاح: {result.get('description')} <<")
+                else:
+                    LOGGER.error(f"!! فشل فادح في إعداد Webhook: {result.get('description')}")
+                    sys.exit(1)
         
         asyncio.create_task(scheduler_task())
         
