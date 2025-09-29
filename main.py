@@ -28,7 +28,7 @@ def start_health_check_server():
     # المنصات توفر البورت في متغير البيئة PORT، وإذا لم يكن موجوداً نستخدم 8000
     PORT = int(os.environ.get("PORT", 8000))
     Handler = http.server.SimpleHTTPRequestHandler
-    
+
     try:
         with socketserver.TCPServer(("", PORT), Handler) as httpd:
             LOGGER.info(f"✅ | الخادم الوهمي (Health Check) يعمل على البورت {PORT}")
