@@ -5,7 +5,7 @@ import os
 import asyncio
 import secrets
 from aiohttp import web
-import aiohttp # <-- التأكد من استيراد المكتبة للطلبات اليدوية
+import aiohttp
 
 # استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
@@ -35,18 +35,20 @@ for module in ALL_MODULES:
     except Exception as e:
         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
 
-# --- معالج طلبات Webhook ---
+# --- معالج طلبات Webhook (تم إرجاعه للطريقة القديمة جداً) ---
 async def webhook_handler(request):
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET_TOKEN:
         return web.Response(status=403)
     
     try:
-        update = await request.json()
-        await client.handle_update(update)
+        # **(هنا التعديل)**
+        # تم إرجاع هذه الطريقة لأنها الوحيدة المتوافقة مع نسختك القديمة
+        data = await request.read()
+        update = await client._updates_processor.reader.read_update(data)
+        await client._updates_processor.process_update(update, None)
         
     except Exception as e:
         LOGGER.error(f"!! فشل في معالجة تحديث Webhook: {e}", exc_info=True)
-        return web.Response(status=500)
     
     return web.Response(status=200)
 
@@ -68,18 +70,13 @@ async def main():
             service_name = os.environ.get("RAILWAY_SERVICE_NAME")
             if service_name:
                  public_domain = f"{service_name}-production.up.railway.app"
-                 LOGGER.warning(f"RAILWAY_PUBLIC_DOMAIN غير موجود، تم استخدام الرابط البديل: {public_domain}")
             else:
                 LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN أو RAILWAY_SERVICE_NAME.")
                 sys.exit(1)
         
-        # المسار يجب أن يكون فريداً لمنع الوصول غير المصرح به
         webhook_path = f"/{config.BOT_TOKEN}"
         webhook_url = f"https://{public_domain}{webhook_path}"
 
-        # **(تم التعديل هنا)**
-        # العودة إلى طريقة إعداد الويب هوك اليدوية باستخدام aiohttp
-        LOGGER.info(f">> يتم الآن إعداد Webhook عبر طلب مباشر إلى تيليجرام... <<")
         api_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/setWebhook"
         params = {'url': webhook_url, 'secret_token': SECRET_TOKEN}
         async with aiohttp.ClientSession() as session:
