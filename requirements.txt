@@ -10,6 +10,6 @@ google-generativeai
 yt-dlp
 aiohttp
 SQLAlchemy
-Telethon~=1.34.0
+telethon
 aiosqlite
 asyncpg
