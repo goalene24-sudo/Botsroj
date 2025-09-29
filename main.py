@@ -8,7 +8,6 @@ from aiohttp import web
 
 # استيراد الأدوات اللازمة من تيليثون لمعالجة التحديثات
 from telethon.tl import types, functions
-from telethon.helpers import _bytes_to_string, _entity_cache
 
 # استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
@@ -24,10 +23,8 @@ logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 # --- إعدادات Webhook ---
 PORT = int(os.environ.get("PORT", 8000))
-# تأكد من إضافة هذا المتغير في Railway
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN")
 if not SECRET_TOKEN:
-    # إنشاء رمز عشوائي إذا لم يكن موجودًا (للأمان)
     SECRET_TOKEN = secrets.token_hex(32)
     LOGGER.warning("لم يتم العثور على SECRET_TOKEN! تم إنشاء رمز مؤقت. يرجى إضافته في Variables.")
 
@@ -45,14 +42,11 @@ async def webhook_handler(request):
     """
     هذه الدالة تستقبل التحديثات من تيليجرام على شكل طلبات ويب.
     """
-    # التحقق من الرمز السري
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET_TOKEN:
         return web.Response(status=403) # ممنوع الوصول
 
     try:
-        # قراءة البيانات الخام من تيليجرام
         data = await request.read()
-        # تحويل البيانات إلى تحديث يفهمه تيليثون ومعالجته
         await client._updates_processor.process_update(
             await client._updates_processor.reader.read_update(data),
             None # لا يوجد ملفات مرفقة بهذا الشكل
@@ -60,7 +54,6 @@ async def webhook_handler(request):
     except Exception as e:
         LOGGER.error(f"!! فشل في معالجة تحديث Webhook: {e}", exc_info=True)
     
-    # إرسال رد ناجح إلى تيليجرام
     return web.Response(status=200)
 
 # --- معالج فحص الصحة ---
@@ -83,7 +76,6 @@ async def main():
         me = await client.get_me()
         
         # الحصول على رابط النشر العام من Railway
-        # تأكد من أن خدمتك لديها Public Domain
         public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
         if not public_domain:
             LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN. تأكد من أن خدمتك لديها رابط عام.")
