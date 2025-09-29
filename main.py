@@ -5,10 +5,6 @@ import os
 import asyncio
 import secrets
 from aiohttp import web
-import aiohttp # <-- إضافة للتأكد من وجودها
-
-# استيراد الأدوات اللازمة من تيليثون لمعالجة التحديثات
-from telethon.tl import types, functions
 
 # استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
@@ -23,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 # --- إعدادات Webhook ---
-PORT = int(os.environ.get("PORT", 8000))
+PORT = int(os.environ.get("PORT", 8080)) # تم تغيير البورت الافتراضي إلى 8080 الشائع
 SECRET_TOKEN = os.environ.get("SECRET_TOKEN")
 if not SECRET_TOKEN:
     SECRET_TOKEN = secrets.token_hex(32)
@@ -38,60 +34,69 @@ for module in ALL_MODULES:
     except Exception as e:
         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
 
-# --- معالج طلبات Webhook ---
+# --- معالج طلبات Webhook (تم التعديل هنا) ---
 async def webhook_handler(request):
+    # التحقق من الرمز السري لضمان أن الطلب قادم من تيليجرام
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET_TOKEN:
-        return web.Response(status=403)
+        return web.Response(status=403) # Forbidden
+    
     try:
-        data = await request.read()
-        await client._updates_processor.process_update(
-            await client._updates_processor.reader.read_update(data), None
-        )
+        # **(هنا التعديل الرئيسي)**
+        # قراءة التحديث كـ JSON وتمريره مباشرة إلى الدالة الرسمية في Telethon
+        update = await request.json()
+        await client.handle_update(update)
+        
     except Exception as e:
         LOGGER.error(f"!! فشل في معالجة تحديث Webhook: {e}", exc_info=True)
+        # في حالة حدوث خطأ، نرد بخطأ داخلي في الخادم
+        return web.Response(status=500)
+    
+    # نرد على تيليجرام بأننا استلمنا التحديث بنجاح
     return web.Response(status=200)
 
-# --- معالج فحص الصحة ---
+# --- معالج فحص الصحة (للتأكد من أن البوت يعمل) ---
 async def health_check_handler(request):
     return web.Response(text="Bot is running via Webhook.")
 
-# --- دالة التشغيل الرئيسية الجديدة ---
+# --- دالة التشغيل الرئيسية الجديدة (تم تعديلها وتحسينها) ---
 async def main():
     try:
         # تهيئة قاعدة البيانات
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        # تسجيل الدخول إلى تيليجرام
-        await client.start(bot_token=config.BOT_TOKEN)
+        # **(تحسين)** تسجيل الدخول مع إيقاف جلب التحديثات التلقائي
+        await client.start(bot_token=config.BOT_TOKEN, update_workers=0)
         me = await client.get_me()
         
         # الحصول على رابط النشر العام من Railway
         public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
         if not public_domain:
-            LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN. تأكد من أن خدمتك لديها رابط عام.")
-            sys.exit(1)
-        webhook_url = f"https://{public_domain}/webhook"
-
-        # --- (تم التعديل هنا) إعداد Webhook عبر طلب HTTP مباشر ---
-        LOGGER.info(f">> يتم الآن إعداد Webhook عبر طلب مباشر إلى تيليجرام... <<")
-        api_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/setWebhook"
-        params = {'url': webhook_url, 'secret_token': SECRET_TOKEN}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(api_url, data=params) as response:
-                result = await response.json()
-                if result.get("ok"):
-                    LOGGER.info(f">> تم إعداد Webhook بنجاح: {result.get('description')} <<")
-                else:
-                    LOGGER.error(f"!! فشل فادح في إعداد Webhook: {result.get('description')}")
-                    sys.exit(1) # إيقاف البوت إذا فشل إعداد Webhook
+            # في حال عدم وجود الرابط، نحاول استخدام اسم الخدمة كبديل
+            service_name = os.environ.get("RAILWAY_SERVICE_NAME")
+            if service_name:
+                 public_domain = f"{service_name}-production.up.railway.app"
+                 LOGGER.warning(f"RAILWAY_PUBLIC_DOMAIN غير موجود، تم استخدام الرابط البديل: {public_domain}")
+            else:
+                LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN أو RAILWAY_SERVICE_NAME.")
+                sys.exit(1)
         
-        # بدء المهمة الدورية
+        # المسار الذي سيستمع إليه البوت، يمكن أن يكون أي شيء
+        # لكن من الأفضل أن يكون سرياً مثل توكن البوت
+        webhook_path = f"/{config.BOT_TOKEN}"
+        webhook_url = f"https://{public_domain}{webhook_path}"
+
+        # **(تحسين)** استخدام دالة Telethon المدمجة لإعداد الـ Webhook
+        LOGGER.info(f">> يتم الآن إعداد رابط الويب هوك: {webhook_url} <<")
+        await client.set_bot_webhook(url=webhook_url, secret_token=SECRET_TOKEN)
+        LOGGER.info(">> تم إعداد رابط الويب هوك بنجاح. <<")
+        
+        # بدء المهمة الدورية للرسائل التلقائية
         asyncio.create_task(scheduler_task())
         
         # إعداد وتشغيل خادم الويب AIOHTTP
         app = web.Application()
-        app.router.add_post("/webhook", webhook_handler)
+        app.router.add_post(webhook_path, webhook_handler) # استخدام نفس المسار السري
         app.router.add_get("/", health_check_handler)
         
         runner = web.AppRunner(app)
@@ -102,15 +107,14 @@ async def main():
         LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
         LOGGER.info(f">> البوت يعمل الآن بنظام Webhook على المنفذ {PORT}... <<")
         
-        await asyncio.Event().wait()
+        # إبقاء البرنامج يعمل إلى الأبد
+        await client.run_until_disconnected()
 
     except Exception as e:
         LOGGER.critical(f"!! فشل فادح أثناء تشغيل البوت: {e}", exc_info=True)
         sys.exit(1)
-    finally:
-        LOGGER.info(">> يتم الآن إيقاف تشغيل البوت... <<")
-        await client.disconnect()
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
-    asyncio.run(main())
+    # استخدام client.loop.run_until_complete لضمان التوافق مع Telethon
+    client.loop.run_until_complete(main())
