@@ -5,7 +5,6 @@ import os
 import asyncio
 import secrets
 from aiohttp import web
-import aiohttp
 
 # استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
@@ -35,20 +34,17 @@ for module in ALL_MODULES:
     except Exception as e:
         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
 
-# --- معالج طلبات Webhook (تم إرجاعه للطريقة القديمة جداً) ---
+# --- معالج طلبات Webhook (بالطريقة الحديثة) ---
 async def webhook_handler(request):
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET_TOKEN:
         return web.Response(status=403)
     
     try:
-        # **(هنا التعديل)**
-        # تم إرجاع هذه الطريقة لأنها الوحيدة المتوافقة مع نسختك القديمة
-        data = await request.read()
-        update = await client._updates_processor.reader.read_update(data)
-        await client._updates_processor.process_update(update, None)
-        
+        update = await request.json()
+        await client.handle_update(update)
     except Exception as e:
         LOGGER.error(f"!! فشل في معالجة تحديث Webhook: {e}", exc_info=True)
+        return web.Response(status=500)
     
     return web.Response(status=200)
 
@@ -56,13 +52,14 @@ async def webhook_handler(request):
 async def health_check_handler(request):
     return web.Response(text="Bot is running via Webhook.")
 
-# --- دالة التشغيل الرئيسية ---
+# --- دالة التشغيل الرئيسية (بالطريقة الحديثة) ---
 async def main():
     try:
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        await client.start(bot_token=config.BOT_TOKEN)
+        # استخدام الإعدادات الحديثة المتوافقة مع المكتبة المحدثة
+        await client.start(bot_token=config.BOT_TOKEN, update_workers=0)
         me = await client.get_me()
         
         public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
@@ -77,16 +74,10 @@ async def main():
         webhook_path = f"/{config.BOT_TOKEN}"
         webhook_url = f"https://{public_domain}{webhook_path}"
 
-        api_url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/setWebhook"
-        params = {'url': webhook_url, 'secret_token': SECRET_TOKEN}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(api_url, data=params) as response:
-                result = await response.json()
-                if result.get("ok"):
-                    LOGGER.info(f">> تم إعداد Webhook بنجاح: {result.get('description')} <<")
-                else:
-                    LOGGER.error(f"!! فشل فادح في إعداد Webhook: {result.get('description')}")
-                    sys.exit(1)
+        # استخدام دالة Telethon المدمجة لإعداد الـ Webhook
+        LOGGER.info(f">> يتم الآن إعداد رابط الويب هوك: {webhook_url} <<")
+        await client.set_bot_webhook(url=webhook_url, secret_token=SECRET_TOKEN)
+        LOGGER.info(">> تم إعداد رابط الويب هوك بنجاح. <<")
         
         asyncio.create_task(scheduler_task())
         
