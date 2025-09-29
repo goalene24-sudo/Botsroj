@@ -85,7 +85,8 @@ async def main():
 
         # إعداد Webhook مع تيليجرام
         LOGGER.info(f">> يتم الآن إعداد Webhook على الرابط: {webhook_url} <<")
-        await client(functions.bots.SetBotWebhookRequest(
+        # --- (تم التصحيح هنا) ---
+        await client(functions.bots.SetBotWebhook(
             url=webhook_url,
             secret_token=SECRET_TOKEN
         ))
