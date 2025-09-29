@@ -1,12 +1,13 @@
 import logging
 import importlib
 import sys
-import os
+from datetime import datetime
 import asyncio
-import secrets
-from aiohttp import web
+import threading
+import http.server
+import socketserver
+import os
 
-# استيرادات البوت الأساسية
 from plugins.auto_messages import scheduler_task
 from bot import client
 from plugins import ALL_MODULES
@@ -18,12 +19,23 @@ logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s'
 LOGGER = logging.getLogger(__name__)
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
-# --- إعدادات Webhook ---
-PORT = int(os.environ.get("PORT", 8080))
-SECRET_TOKEN = os.environ.get("SECRET_TOKEN")
-if not SECRET_TOKEN:
-    SECRET_TOKEN = secrets.token_hex(32)
-    LOGGER.warning("لم يتم العثور على SECRET_TOKEN! تم إنشاء رمز مؤقت. يرجى إضافته في Variables.")
+
+# --- دالة الخادم الوهمي ---
+def start_health_check_server():
+    """
+    تقوم ببدء خادم ويب بسيط جداً في الخلفية للرد على فحص الصحة الخاص بالمنصات.
+    """
+    # المنصات توفر البورت في متغير البيئة PORT، وإذا لم يكن موجوداً نستخدم 8000
+    PORT = int(os.environ.get("PORT", 8000))
+    Handler = http.server.SimpleHTTPRequestHandler
+
+    try:
+        with socketserver.TCPServer(("", PORT), Handler) as httpd:
+            LOGGER.info(f"✅ | الخادم الوهمي (Health Check) يعمل على البورت {PORT}")
+            httpd.serve_forever()
+    except Exception as e:
+        LOGGER.error(f"!! فشل تشغيل الخادم الوهمي: {e}", exc_info=True)
+
 
 # --- تحميل كل الإضافات ---
 LOGGER.info(">> يتم الآن تحميل كل الوحدات... <<")
@@ -34,65 +46,30 @@ for module in ALL_MODULES:
     except Exception as e:
         LOGGER.error(f"!! فشل تحميل الوحدة {module}: {e}", exc_info=True)
 
-# --- معالج طلبات Webhook (بالطريقة الحديثة) ---
-async def webhook_handler(request):
-    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET_TOKEN:
-        return web.Response(status=403)
-    
-    try:
-        update = await request.json()
-        await client.handle_update(update)
-    except Exception as e:
-        LOGGER.error(f"!! فشل في معالجة تحديث Webhook: {e}", exc_info=True)
-        return web.Response(status=500)
-    
-    return web.Response(status=200)
 
-# --- معالج فحص الصحة ---
-async def health_check_handler(request):
-    return web.Response(text="Bot is running via Webhook.")
-
-# --- دالة التشغيل الرئيسية (بالطريقة الحديثة) ---
+# --- دالة التشغيل الرئيسية ---
 async def main():
     try:
+        # بدء تشغيل الخادم الوهمي في thread منفصل
+        LOGGER.info(">> يتم الآن بدء تشغيل خادم فحص الصحة في الخلفية... <<")
+        health_thread = threading.Thread(target=start_health_check_server, daemon=True)
+        health_thread.start()
+
+        # تهيئة قاعدة البيانات وإنشاء الجداول
+        LOGGER.info(">> يتم الآن تهيئة قاعدة البيانات (إنشاء الجداول إذا لم تكن موجودة)... <<")
         await init_db()
         LOGGER.info(">> اكتملت تهيئة قاعدة البيانات بنجاح. <<")
 
-        # استخدام الإعدادات الحديثة المتوافقة مع المكتبة المحدثة
-        await client.start(bot_token=config.BOT_TOKEN, update_workers=0)
+        # بدء تشغيل البوت والاتصال
+        await client.start(bot_token=config.BOT_TOKEN)
         me = await client.get_me()
+        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
         
-        public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
-        if not public_domain:
-            service_name = os.environ.get("RAILWAY_SERVICE_NAME")
-            if service_name:
-                 public_domain = f"{service_name}-production.up.railway.app"
-            else:
-                LOGGER.critical("لم يتم العثور على RAILWAY_PUBLIC_DOMAIN أو RAILWAY_SERVICE_NAME.")
-                sys.exit(1)
-        
-        webhook_path = f"/{config.BOT_TOKEN}"
-        webhook_url = f"https://{public_domain}{webhook_path}"
-
-        # استخدام دالة Telethon المدمجة لإعداد الـ Webhook
-        LOGGER.info(f">> يتم الآن إعداد رابط الويب هوك: {webhook_url} <<")
-        await client.set_bot_webhook(url=webhook_url, secret_token=SECRET_TOKEN)
-        LOGGER.info(">> تم إعداد رابط الويب هوك بنجاح. <<")
-        
+        # بدء المهمة الدورية الجديدة
+        LOGGER.info(">> يتم الآن بدء مهمة الرسائل الدورية (الجدولة)... <<")
         asyncio.create_task(scheduler_task())
         
-        app = web.Application()
-        app.router.add_post(webhook_path, webhook_handler)
-        app.router.add_get("/", health_check_handler)
-        
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', PORT)
-        await site.start()
-        
-        LOGGER.info(f">> تم تسجيل الدخول بنجاح كـ {me.first_name} <<")
-        LOGGER.info(f">> البوت يعمل الآن بنظام Webhook على المنفذ {PORT}... <<")
-        
+        LOGGER.info(">> البوت جاهز الآن لاستقبال الأوامر... <<")
         await client.run_until_disconnected()
 
     except Exception as e:
@@ -101,4 +78,5 @@ async def main():
 
 # --- بدء تشغيل البوت ---
 if __name__ == "__main__":
+    # هذا السطر يشغل الحلقة الرئيسية غير المتزامنة
     client.loop.run_until_complete(main())
