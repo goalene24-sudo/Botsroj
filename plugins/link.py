@@ -1,5 +1,8 @@
 import logging
 from telethon import events
+# --- (تمت الإضافة هنا) استيراد الدالة الصحيحة لإنشاء الروابط ---
+from telethon.tl.functions.messages import ExportChatInviteRequest
+
 from bot import client
 
 # --- استيراد الدوال المساعدة ---
@@ -7,7 +10,7 @@ from .utils import check_activation, is_admin
 
 logger = logging.getLogger(__name__)
 
-@client.on(events.NewMessage(pattern=r"^[!/]الرابط$"))
+@client.on(events.NewMessage(pattern=r"^الرابط$"))
 async def link_handler(event):
     """
     يقوم بإنشاء رابط دعوة للمجموعة ويرسله.
@@ -24,7 +27,10 @@ async def link_handler(event):
         if not bot_perms.invite_users:
             return await event.reply("**ليس لدي صلاحية إنشاء روابط دعوة في هذه المجموعة.**")
 
-        link = await client.export_chat_invite(event.chat_id)
+        # --- (تم التعديل هنا) استخدام الطريقة الصحيحة لإنشاء الرابط ---
+        result = await client(ExportChatInviteRequest(peer=event.chat_id))
+        link = result.link
+        
         await event.reply(f"**تفضل، هذا هو رابط الدعوة للمجموعة:**\n`{link}`")
 
     except Exception as e:
