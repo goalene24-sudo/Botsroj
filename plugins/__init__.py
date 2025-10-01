@@ -51,4 +51,5 @@ ALL_MODULES = [
     "plugins.islamic_quiz_data",
     "plugins.islamic_quiz",
     "plugins.user_info",
+    "plugins.link",
 ]
