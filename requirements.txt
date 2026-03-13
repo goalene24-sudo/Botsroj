@@ -13,3 +13,5 @@ SQLAlchemy
 telethon
 aiosqlite
 asyncpg
+Quart
+
