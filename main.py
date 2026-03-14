@@ -3,34 +3,42 @@ import asyncio
 import threading
 import http.server
 import socketserver
-from bot import client  # استدعاء العميل كما هو بملفاتك الأصلية
-from plugins import load_plugins # استدعاء المحرك كما هو
 import logging
 
+# إعداد السجلات
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# خادم الصحة (Health Check) لكي لا يغلق Koyeb البوت
+# 1. تشغيل خادم الصحة فوراً (لضمان بقاء Koyeb سعيداً)
 def run_health_server():
     PORT = int(os.environ.get("PORT", 8000))
     Handler = http.server.SimpleHTTPRequestHandler
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         httpd.serve_forever()
 
+threading.Thread(target=run_health_server, daemon=True).start()
+
+# 2. استيراد المكونات (بعد تشغيل الخادم)
+from bot import client 
+from plugins import load_plugins
+
 async def start_suruj():
-    # تشغيل العميل (Telethon)
-    await client.start()
-    logger.info("🚀 بوت سُرُوج بدأ العمل!")
+    # تحميل الإضافات أولاً لضمان ربط المستمعات (Events) قبل الاتصال
+    logger.info("⏳ يتم الآن تحميل الإضافات...")
+    load_plugins(client)
     
-    # تحميل الإضافات بنظامك الأصلي (بدون أي تعديل بالأسماء)
-    load_plugins(client) 
+    # الآن نبدأ البوت
+    logger.info("📡 جاري الاتصال بتلجرام...")
+    await client.start()
+    
+    me = await client.get_me()
+    logger.info(f"🚀 بوت سُرُوج (@{me.username}) يعمل الآن وبأقصى سرعة!")
     
     # البقاء في وضع الاستماع
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    # تشغيل خادم الصحة في Thread معزول تماماً عن البوت
-    threading.Thread(target=run_health_server, daemon=True).start()
-    
-    # تشغيل الحلقة الرئيسية للبوت
-    asyncio.run(start_suruj())
+    try:
+        asyncio.run(start_suruj())
+    except Exception as e:
+        logger.error(f"❌ حدث خطأ غير متوقع: {e}")
