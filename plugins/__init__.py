@@ -1,9 +1,14 @@
-# plugins/__init__.py
+import importlib
+import logging
+
+logger = logging.getLogger(__name__)
+
+# قائمة الإضافات التي يتم تحميلها
 ALL_MODULES = [
     "plugins.utils",
     "plugins.core",
     "plugins.events",
-    "plugins.auto_messages", # <-- تمت الإضافة هنا
+    "plugins.auto_messages",
     "plugins.callbacks",
     "plugins.interactive_callbacks",
     "plugins.cleaning",
@@ -53,3 +58,19 @@ ALL_MODULES = [
     "plugins.user_info",
     "plugins.link",
 ]
+
+def load_plugins(client):
+    """
+    تحميل الإضافات الموجودة في قائمة ALL_MODULES لمكتبة Telethon
+    """
+    loaded_count = 0
+    for module_name in ALL_MODULES:
+        try:
+            # استيراد الوحدة بناءً على الاسم الموجود في القائمة
+            importlib.import_module(module_name)
+            logger.info(f"✅ تم تحميل الإضافة: {module_name}")
+            loaded_count += 1
+        except Exception as e:
+            logger.error(f"❌ فشل تحميل الإضافة {module_name}: {e}")
+    
+    logger.info(f"📊 إجمالي الإضافات المحملة بنجاح: {loaded_count}")
