@@ -30,7 +30,8 @@ async def start_suruj():
     # الآن نبدأ البوت
     logger.info("📡 جاري الاتصال بتلجرام...")
     await client.start()
-    
+    await client.send_message('me', '✅ أنا اشتغلت يا عبودي!')
+
     me = await client.get_me()
     logger.info(f"🚀 بوت سُرُوج (@{me.username}) يعمل الآن وبأقصى سرعة!")
     
