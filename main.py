@@ -1,66 +1,36 @@
 import os
 import asyncio
-import logging
 import threading
 import http.server
 import socketserver
-from telethon import TelegramClient
-# استيراد ملفات البوت الأصلية (تأكد من مطابقة الأسماء لمشروعك)
-from database import init_db
-from plugins import load_plugins
-import config
+from bot import client  # استدعاء العميل كما هو بملفاتك الأصلية
+from plugins import load_plugins # استدعاء المحرك كما هو
+import logging
 
-# إعداد السجلات (Logs)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- خادم فحص الصحة (Health Check) المدمج ---
-# هذا الخادم لا يحتاج مكتبة Quart ولا يسبب أي بطء
+# خادم الصحة (Health Check) لكي لا يغلق Koyeb البوت
 def run_health_server():
     PORT = int(os.environ.get("PORT", 8000))
     Handler = http.server.SimpleHTTPRequestHandler
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        logger.info(f"✅ Health Check Server Running on Port {PORT}")
         httpd.serve_forever()
 
-async def start_bot():
-    """تشغيل بوت سُرُوج الأصلي (Telethon)"""
+async def start_suruj():
+    # تشغيل العميل (Telethon)
+    await client.start()
+    logger.info("🚀 بوت سُرُوج بدأ العمل!")
     
-    # 1. تهيئة قاعدة البيانات
-    try:
-        await init_db()
-        logger.info("✅ تم تهيئة قاعدة البيانات.")
-    except Exception as e:
-        logger.error(f"❌ خطأ في قاعدة البيانات: {e}")
-
-    # 2. إعداد وتشغيل Telethon
-    client = TelegramClient('suruj_session', config.API_ID, config.API_HASH)
+    # تحميل الإضافات بنظامك الأصلي (بدون أي تعديل بالأسماء)
+    load_plugins(client) 
     
-    await client.start(bot_token=config.BOT_TOKEN)
-    logger.info("🚀 بوت سُرُوج (Telethon) بدأ العمل الآن!")
-
-    # 3. تحميل الإضافات
-    try:
-        load_plugins(client)
-        logger.info("✅ تم تحميل الإضافات.")
-    except Exception as e:
-        logger.error(f"❌ خطأ أثناء تحميل الإضافات: {e}")
-        
-    @client.on(events.NewMessage)
-async def test_handler(event):
-    print(f"📩 وصلت رسالة جديدة: {event.raw_text}")
-    if event.raw_text == "فحص":
-        await event.respond("✅ أنا أسمعك الآن!")
-        
-    # 4. البقاء في وضع الاستماع
+    # البقاء في وضع الاستماع
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    # تشغيل خادم الصحة في الخلفية
+    # تشغيل خادم الصحة في Thread معزول تماماً عن البوت
     threading.Thread(target=run_health_server, daemon=True).start()
     
-    # تشغيل البوت في الحلقة الرئيسية
-    try:
-        asyncio.run(start_bot())
-    except KeyboardInterrupt:
-        pass
+    # تشغيل الحلقة الرئيسية للبوت
+    asyncio.run(start_suruj())
