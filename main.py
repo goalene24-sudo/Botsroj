@@ -28,7 +28,7 @@ async def start_bot():
     
     # 1. تهيئة قاعدة البيانات
     try:
-        init_db()
+        await init_db()
         logger.info("✅ تم تهيئة قاعدة البيانات.")
     except Exception as e:
         logger.error(f"❌ خطأ في قاعدة البيانات: {e}")
