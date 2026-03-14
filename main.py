@@ -45,7 +45,13 @@ async def start_bot():
         logger.info("✅ تم تحميل الإضافات.")
     except Exception as e:
         logger.error(f"❌ خطأ أثناء تحميل الإضافات: {e}")
-    
+        
+    @client.on(events.NewMessage)
+async def test_handler(event):
+    print(f"📩 وصلت رسالة جديدة: {event.raw_text}")
+    if event.raw_text == "فحص":
+        await event.respond("✅ أنا أسمعك الآن!")
+        
     # 4. البقاء في وضع الاستماع
     await client.run_until_disconnected()
 
